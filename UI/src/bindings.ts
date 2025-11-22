@@ -1,6 +1,5 @@
 import { bindValue } from "cs2/api";
 
-// We create the binding object once. 
-// "trafficExplorer" is the group name we defined in TrafficUISystem.cs
-export const toolActive = bindValue<boolean>("trafficExplorer", "toolActive");
-export const segmentActivity = bindValue<string>("trafficExplorer", "segmentActivity");
+// Add fallback values (false for boolean, empty JSON for string)
+export const toolActive = bindValue<boolean>("TrafficSpy", "toolActive", false);
+export const segmentActivity = bindValue<string>("TrafficSpy", "segmentActivity", "{}");

@@ -5,7 +5,7 @@ import { toolActive } from "./bindings";
 
 export default class TrafficButton extends Component {
     state = {
-        active: toolActive.value,
+        active: toolActive.value, // This will now be 'false' by default instead of crashing
         hovering: false
     };
 
@@ -15,8 +15,6 @@ export default class TrafficButton extends Component {
         const subscription = toolActive.subscribe((val: boolean) => {
             this.setState({ active: val });
         });
-        
-        // Store the cleanup function
         this.unsubscribe = () => subscription.dispose();
     }
 
@@ -30,11 +28,10 @@ export default class TrafficButton extends Component {
         return (
             <Tooltip tooltip="Traffic Explorer Tool (Ctrl+T)">
                 <FloatingButton 
-                    src="coui://uil/Standard/Cars.svg" 
+                    src="coui://uil/Standard/GenericVehicles.svg" 
                     selected={this.state.active} 
-                    // FIXED: Changed 'onSelect' to 'onClick' to match your types.d.ts
-                    onClick={() => { 
-                        trigger("trafficExplorer", "setToolActive", !this.state.active); 
+                    onSelect={() => { 
+                        trigger("TrafficSpy", "setToolActive", !this.state.active); 
                     }}
                 />
             </Tooltip>

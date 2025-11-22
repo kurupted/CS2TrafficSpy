@@ -32,14 +32,14 @@ namespace Traffic_Explorer.Systems
             this.toolSystem = World.GetExistingSystemManaged<ToolSystem>();
 
             // 1. Create Bindings
-            this.activityDataBinding = new ValueBinding<string>("trafficExplorer", "segmentActivity", "{}");
-            this.toolActiveBinding = new ValueBinding<bool>("trafficExplorer", "toolActive", false);
+            this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "segmentActivity", "{}");
+            this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
 
             // 2. Create Trigger to receive clicks from UI
-            AddBinding(new TriggerBinding<bool>("trafficExplorer", "setToolActive", (active) => {
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
 
