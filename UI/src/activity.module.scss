@@ -1,0 +1,29 @@
+/* Remove the background/floating box styles to make it blend into the game panel */
+.activityPanel {
+    display: flex;
+    flex-direction: column;
+    color: rgba(255, 255, 255, 0.9);
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1); /* Subtle separator */
+}
+
+.title {
+    text-transform: uppercase;
+    font-size: 14rem; /* Standard game header size */
+    color: rgba(255, 255, 255, 0.5); /* Muted header color */
+    margin-bottom: 4rem;
+    letter-spacing: 1rem;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    font-size: 16rem;
+}
+
+.count {
+    font-weight: 600;
+    color: #65D8E8; /* Keep the cyan for numbers */
+}
