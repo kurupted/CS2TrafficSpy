@@ -11,7 +11,7 @@ namespace TrafficSpy
     {
         public const string Name        = "TrafficSpy";
         public const string Version     = "1.0.0";
-        public const string Title       = "";
+        public const string Title       = "Traffic Spy";
         public const string Description = "";
     }
 }
