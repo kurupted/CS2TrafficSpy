@@ -34,6 +34,8 @@ namespace TrafficSpy.Systems
 
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
         private HashSet<Entity> highlightedEntities = new HashSet<Entity>();
+
+        // NEW: Track selection to prevent spamming updates
         private Entity lastSelectedEntity = Entity.Null;
 
         protected override void OnCreate()
@@ -57,7 +59,7 @@ namespace TrafficSpy.Systems
                     {
                         this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
                         this.defaultToolSystem.debugSelect = true;
-                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED - Debug Select ON");
+                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED");
                     }
                 }
                 else
@@ -78,21 +80,21 @@ namespace TrafficSpy.Systems
 
             Entity selected = this.toolSystem.selected;
 
-            // Optimization: Only run if selection CHANGED or we haven't analyzed it yet
+            // FIX: Only run logic if selection CHANGED
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
 
-                if (selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected))
+                // Check if it's a road
+                bool isRoad = selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected);
+
+                if (isRoad)
                 {
-                    UnityEngine.Debug.Log($"[TrafficSpy] New Road Selected: {selected.Index}. Running Analysis...");
+                    UnityEngine.Debug.Log($"[TrafficSpy] Selection Changed: {selected.Index}. Running Analysis.");
                     RunAnalysis(selected);
                 }
                 else
                 {
-                    if (selected != Entity.Null)
-                        UnityEngine.Debug.Log($"[TrafficSpy] Selected {selected.Index} is not a road (No SubLanes). Clearing data.");
-
                     ClearData();
                 }
             }
@@ -110,58 +112,34 @@ namespace TrafficSpy.Systems
 
         private void ClearHighlights()
         {
-            int count = 0;
             foreach (var entity in highlightedEntities)
             {
                 if (EntityManager.Exists(entity))
                 {
                     EntityManager.RemoveComponent<Highlighted>(entity);
                     EntityManager.AddComponent<BatchesUpdated>(entity);
-                    count++;
                 }
             }
             highlightedEntities.Clear();
-            if (count > 0) UnityEngine.Debug.Log($"[TrafficSpy] Cleared {count} highlights.");
         }
 
-        private void AddHighlight(Entity entity, string debugLabel)
+        private void AddHighlight(Entity entity)
         {
-            if (!EntityManager.Exists(entity))
-            {
-                UnityEngine.Debug.LogWarning($"[TrafficSpy] Cannot highlight {debugLabel}: Entity does not exist.");
-                return;
-            }
+            if (!EntityManager.Exists(entity)) return;
 
             Entity target = entity;
 
-            // RESOLUTION DEBUGGING
-            bool isRenter = false;
             if (EntityManager.HasComponent<PropertyRenter>(entity))
             {
                 PropertyRenter renter = EntityManager.GetComponentData<PropertyRenter>(entity);
                 target = renter.m_Property;
-                isRenter = true;
             }
 
-            if (EntityManager.Exists(target))
+            if (EntityManager.Exists(target) && !highlightedEntities.Contains(target))
             {
-                if (!highlightedEntities.Contains(target))
-                {
-                    EntityManager.AddComponent<Highlighted>(target);
-                    EntityManager.AddComponent<BatchesUpdated>(target); // Force visual refresh
-                    highlightedEntities.Add(target);
-
-                    // Detailed log for the first few to avoid spam
-                    if (highlightedEntities.Count <= 5)
-                    {
-                        string type = isRenter ? $"Virtual(Renter) -> Physical(Building {target.Index})" : "Physical(Building)";
-                        UnityEngine.Debug.Log($"[TrafficSpy] Highlighting {debugLabel}: {type}");
-                    }
-                }
-            }
-            else
-            {
-                UnityEngine.Debug.LogWarning($"[TrafficSpy] Failed to highlight {debugLabel}: Target building {target.Index} does not exist.");
+                EntityManager.AddComponent<Highlighted>(target);
+                EntityManager.AddComponent<BatchesUpdated>(target);
+                highlightedEntities.Add(target);
             }
         }
 
@@ -206,16 +184,12 @@ namespace TrafficSpy.Systems
 
             job.Run();
 
-            CurrentRenderList.Clear();
+            // Update Highlights only once per selection change
             ClearHighlights();
-
-            UnityEngine.Debug.Log($"[TrafficSpy] Analysis Complete. Processing {results.Length} results for highlighting...");
 
             for (int i = 0; i < results.Length; i++)
             {
-                CurrentRenderList.Add(results[i]);
-                // Add Highlight with debug label
-                AddHighlight(results[i].entity, $"Item #{i} ({results[i].purpose})");
+                AddHighlight(results[i].entity);
             }
 
             int totalOther = other.Count + noPurpose.Count;
@@ -230,7 +204,10 @@ namespace TrafficSpy.Systems
 
             this.activityDataBinding.Update(json);
 
-            UnityEngine.Debug.Log($"[TrafficSpy] Stats: Work:{workers.Count} School:{students.Count} Shop:{shoppers.Count} Home:{goingHome.Count} Other:{totalOther}");
+            if (results.Length > 0)
+            {
+                UnityEngine.Debug.Log($"[TrafficSpy] Highlighting {results.Length} buildings (Cyan Glow).");
+            }
 
             workers.Dispose();
             students.Dispose();
