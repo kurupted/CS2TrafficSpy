@@ -1,13 +1,14 @@
-using Game.Buildings;
 using Game.Common;
-using Game.Objects;
 using Game.Rendering;
-using TrafficSpy.Jobs;
-using Unity.Collections;
+using Game.Buildings;
+using Game.Objects;
+using Game.Prefabs;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Collections;
+using TrafficSpy.Jobs;
+using TrafficSpy.Systems; // Needed to see TrafficUISystem & TrafficRenderData
 
-// FIX: Match the namespace of TrafficUISystem
 namespace TrafficSpy.Systems
 {
     public partial class OriginDestRenderSystem : SystemBase
@@ -17,38 +18,34 @@ namespace TrafficSpy.Systems
         protected override void OnCreate()
         {
             base.OnCreate();
-            this.overlayRenderSystem = World.GetExistingSystemManaged<OverlayRenderSystem>();
+            this.overlayRenderSystem = World.GetOrCreateSystemManaged<OverlayRenderSystem>();
         }
 
         protected override void OnUpdate()
         {
-            // Now this will find TrafficUISystem because they are in the same namespace
-            var originList = TrafficUISystem.CurrentOrigins;
-            var destList = TrafficUISystem.CurrentDestinations;
+            if (this.overlayRenderSystem == null) return;
 
-            if (originList.Count == 0 && destList.Count == 0) return;
+            // ACCESSING THE STATIC LIST HERE
+            var renderList = TrafficUISystem.CurrentRenderList;
+            if (renderList == null || renderList.Count == 0) return;
 
             OverlayRenderSystem.Buffer buffer = this.overlayRenderSystem.GetBuffer(out JobHandle dependencies);
 
-            NativeList<Entity> nativeOrigins = new NativeList<Entity>(originList.Count, Allocator.TempJob);
-            NativeList<Entity> nativeDestinations = new NativeList<Entity>(destList.Count, Allocator.TempJob);
-
-            foreach (var e in originList) nativeOrigins.Add(e);
-            foreach (var e in destList) nativeDestinations.Add(e);
+            NativeList<TrafficRenderData> nativeList = new NativeList<TrafficRenderData>(renderList.Count, Allocator.TempJob);
+            foreach (var item in renderList) nativeList.Add(item);
 
             RenderOverlaysJob job = new RenderOverlaysJob
             {
                 overlayBuffer = buffer,
-                origins = nativeOrigins,
-                destinations = nativeDestinations,
+                renderList = nativeList,
                 transformLookup = SystemAPI.GetComponentLookup<Game.Objects.Transform>(true),
-                renterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true)
+                prefabRefLookup = SystemAPI.GetComponentLookup<PrefabRef>(true),
+                objectGeometryDataLookup = SystemAPI.GetComponentLookup<ObjectGeometryData>(true)
             };
 
             JobHandle jobHandle = job.Schedule(dependencies);
 
-            nativeOrigins.Dispose(jobHandle);
-            nativeDestinations.Dispose(jobHandle);
+            nativeList.Dispose(jobHandle);
 
             this.overlayRenderSystem.AddBufferWriter(jobHandle);
         }

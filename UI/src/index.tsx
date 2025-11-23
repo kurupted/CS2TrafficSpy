@@ -10,9 +10,21 @@ const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
         "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx", 
         'selectedInfoSectionComponents', 
         (sections: any) => {
-            // FIX: Use the full C# Namespace + Class Name as the key
-            // "TrafficSpy.Systems" (Namespace) + "TrafficUISystem" (Class)
-            sections["TrafficSpy.Systems.TrafficUISystem"] = ActivitySection;
+            // Instead of relying on a specific C# system name, we inject our component
+            // by wrapping a standard component that ALWAYS appears, like "TitleSection".
+            // This guarantees visibility.
+            
+            const TitleSection = sections["Game.UI.InGame.TitleSection"];
+            
+            if (TitleSection) {
+                const Wrapper = (props: any) => (
+                    <>
+                        <TitleSection {...props} />
+                        <ActivitySection />
+                    </>
+                );
+                sections["Game.UI.InGame.TitleSection"] = Wrapper;
+            }
             
             return sections;
         }

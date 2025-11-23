@@ -49,7 +49,9 @@ namespace TrafficSpy
 
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
+            // In OnLoad
             updateSystem.UpdateAt<Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
+            //updateSystem.UpdateAt<Systems.OriginDestRenderSystem>(SystemUpdatePhase.Rendering); // Register the renderer too!
         }
 
         public void OnDispose()
