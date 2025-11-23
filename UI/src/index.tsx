@@ -6,18 +6,19 @@ const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
     
     moduleRegistry.append("GameTopLeft", TrafficButton);
 
-    // Register the Info Section using the Dictionary method
     moduleRegistry.extend(
         "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx", 
         'selectedInfoSectionComponents', 
         (sections: any) => {
-            // "TrafficSpy" must match the 'group' string in TrafficUISystem.cs
-            sections["TrafficSpy"] = ActivitySection;
+            // FIX: Use the full C# Namespace + Class Name as the key
+            // "TrafficSpy.Systems" (Namespace) + "TrafficUISystem" (Class)
+            sections["TrafficSpy.Systems.TrafficUISystem"] = ActivitySection;
+            
             return sections;
         }
     );
     
-    console.log("Traffic Spy UI Registered");
+    console.log("Traffic Explorer UI Registered");
 }
 
 export default register;

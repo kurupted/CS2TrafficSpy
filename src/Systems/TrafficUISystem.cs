@@ -1,15 +1,15 @@
-using Colossal;
-using Colossal.Collections; // Required for NativeCounter
+using Colossal.Collections;
 using Colossal.UI.Binding;
 using Game.Common;
 using Game.Net;
 using Game.Tools;
 using Game.UI.InGame;
-using System.Collections.Generic; // Required for List<T>
+using System.Collections.Generic;
 using Unity.Jobs;
-using TrafficSpy.Jobs; // Required for SegmentActivityJob (Namespace from your other file)
-using Unity.Collections;    // Required for Allocator
+using TrafficSpy.Jobs;
+using Unity.Collections;
 using Unity.Entities;
+using Colossal;
 
 namespace TrafficSpy.Systems
 {
@@ -20,7 +20,6 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> toolActiveBinding;
         private bool isToolActive = false;
 
-        // RESTORED: These static lists are required by OriginDestRenderSystem
         public static List<Entity> CurrentOrigins = new List<Entity>();
         public static List<Entity> CurrentDestinations = new List<Entity>();
 
@@ -40,25 +39,23 @@ namespace TrafficSpy.Systems
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
-                if (!active) ClearData();
+                // We no longer clear data here, so the panel stays open if you toggle the button while looking at a road
             }));
         }
 
         protected override void OnUpdate()
         {
-            if (visible && this.isToolActive)
-            {
-                if (this.toolSystem == null) return;
+            Entity selected = this.toolSystem.selected;
 
-                Entity selected = this.toolSystem.selected;
-                if (selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected))
-                {
-                    RunAnalysis(selected);
-                }
-                else
-                {
-                    ClearData();
-                }
+            // Check if the selected entity is a road (has lanes)
+            bool isRoad = selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected);
+
+            // CHANGED: The panel is visible if it's a road, regardless of the button state
+            this.visible = isRoad;
+
+            if (this.visible)
+            {
+                RunAnalysis(selected);
             }
             else
             {
@@ -68,18 +65,24 @@ namespace TrafficSpy.Systems
 
         protected override void Reset() { }
         protected override void OnProcess() { }
-        public override void OnWriteProperties(Colossal.UI.Binding.IJsonWriter writer) { }
+        public override void OnWriteProperties(Colossal.UI.Binding.IJsonWriter writer)
+        {
+            writer.PropertyName("group");
+            writer.Write(this.group);
+        }
 
         private void ClearData()
         {
-            this.activityDataBinding.Update("{}");
-            CurrentOrigins.Clear();
-            CurrentDestinations.Clear();
+            if (this.activityDataBinding.value != "{}")
+            {
+                this.activityDataBinding.Update("{}");
+                CurrentOrigins.Clear();
+                CurrentDestinations.Clear();
+            }
         }
 
         private void RunAnalysis(Entity selectedSegment)
         {
-            // Using Allocator.TempJob as these need to exist for the duration of the job
             NativeCounter workers = new NativeCounter(Allocator.TempJob);
             NativeCounter students = new NativeCounter(Allocator.TempJob);
             NativeCounter shoppers = new NativeCounter(Allocator.TempJob);
