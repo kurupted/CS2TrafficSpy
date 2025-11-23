@@ -7,7 +7,7 @@ using Game.Creatures;
 using Game.Net;
 using Game.Pathfind;
 using Game.Vehicles;
-using TrafficSpy.Systems; // Needed for TrafficRenderData
+using TrafficSpy.Systems;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -39,6 +39,7 @@ namespace TrafficSpy.Jobs
         public NativeCounter shoppers;
         public NativeCounter goingHome;
         public NativeCounter healthcare;
+        public NativeCounter delivery; // NEW
         public NativeCounter other;
         public NativeCounter noPurpose;
 
@@ -84,13 +85,19 @@ namespace TrafficSpy.Jobs
 
         private void ProcessVehicle(Entity vehicleEntity)
         {
-            if (!passengerLookup.HasBuffer(vehicleEntity)) return;
-
-            DynamicBuffer<Passenger> passengers = passengerLookup[vehicleEntity];
-            for (int i = 0; i < passengers.Length; i++)
+            // 1. Analyze Passengers
+            if (passengerLookup.HasBuffer(vehicleEntity))
             {
-                AnalyzeEntity(passengers[i].m_Passenger);
+                DynamicBuffer<Passenger> passengers = passengerLookup[vehicleEntity];
+                for (int i = 0; i < passengers.Length; i++)
+                {
+                    AnalyzeEntity(passengers[i].m_Passenger);
+                }
             }
+
+            // 2. FIX: Analyze the Vehicle Itself (for Cargo Trucks / Delivery Vans)
+            // They have targets but no passengers
+            AnalyzeEntity(vehicleEntity);
         }
 
         private Entity ResolvePhysicalEntity(Entity target)
@@ -104,32 +111,50 @@ namespace TrafficSpy.Jobs
 
         private void AnalyzeEntity(Entity entity)
         {
+            Purpose currentPurpose = Purpose.None;
+
+            // Try to get Citizen purpose
             Entity citizenEntity = entity;
             if (creatureResidentLookup.TryGetComponent(entity, out Game.Creatures.Resident resident))
             {
                 citizenEntity = resident.m_Citizen;
             }
 
-            Purpose currentPurpose = Purpose.None;
-
             if (travelPurposeLookup.TryGetComponent(citizenEntity, out TravelPurpose purpose))
             {
                 currentPurpose = purpose.m_Purpose;
-                switch (currentPurpose)
-                {
-                    case Purpose.GoingToWork:
-                    case Purpose.Working: workers.Increment(); break;
-                    case Purpose.GoingToSchool:
-                    case Purpose.Studying: students.Increment(); break;
-                    case Purpose.GoingHome: goingHome.Increment(); break;
-                    case Purpose.Shopping:
-                    case Purpose.VisitAttractions:
-                    case Purpose.Leisure: shoppers.Increment(); break;
-                    case Purpose.Hospital:
-                    case Purpose.InHospital: healthcare.Increment(); break;
-                    default: other.Increment(); break;
-                }
+            }
+            // FIX: Infer purpose for vehicles without citizen data (e.g. Delivery Trucks)
+            else if (targetLookup.HasComponent(entity))
+            {
+                // If it has a target but no Citizen purpose, we assume it's a Service/Delivery/Cargo vehicle
+                // Ideally we check for Game.Vehicles.DeliveryTruck, but for now, let's assume Delivery
+                // if it has a Target.
+                currentPurpose = Purpose.Delivery;
+            }
 
+            // Count stats
+            switch (currentPurpose)
+            {
+                case Purpose.GoingToWork:
+                case Purpose.Working: workers.Increment(); break;
+                case Purpose.GoingToSchool:
+                case Purpose.Studying: students.Increment(); break;
+                case Purpose.GoingHome: goingHome.Increment(); break;
+                case Purpose.Shopping:
+                case Purpose.VisitAttractions:
+                case Purpose.Leisure: shoppers.Increment(); break;
+                case Purpose.Hospital:
+                case Purpose.InHospital: healthcare.Increment(); break;
+                case Purpose.Delivery: // Catch-all for trucks
+                case Purpose.UpkeepDelivery: delivery.Increment(); break;
+                case Purpose.None: noPurpose.Increment(); break;
+                default: other.Increment(); break;
+            }
+
+            // 1. Origin Logic (Only for Citizens)
+            if (currentPurpose != Purpose.None && currentPurpose != Purpose.Delivery)
+            {
                 Entity originEntity = Entity.Null;
                 if (currentPurpose == Purpose.GoingHome)
                 {
@@ -150,11 +175,8 @@ namespace TrafficSpy.Jobs
                     results.Add(new TrafficRenderData { entity = physicalOrigin, purpose = currentPurpose, isOrigin = true });
                 }
             }
-            else
-            {
-                noPurpose.Increment();
-            }
 
+            // 2. Destination Logic (Works for Citizens AND Trucks)
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
             {

@@ -34,8 +34,6 @@ namespace TrafficSpy.Systems
 
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
         private HashSet<Entity> highlightedEntities = new HashSet<Entity>();
-
-        // NEW: Track selection to prevent spamming updates
         private Entity lastSelectedEntity = Entity.Null;
 
         protected override void OnCreate()
@@ -59,7 +57,7 @@ namespace TrafficSpy.Systems
                     {
                         this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
                         this.defaultToolSystem.debugSelect = true;
-                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED");
+                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED - Debug Select ON");
                     }
                 }
                 else
@@ -80,21 +78,21 @@ namespace TrafficSpy.Systems
 
             Entity selected = this.toolSystem.selected;
 
-            // FIX: Only run logic if selection CHANGED
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
 
-                // Check if it's a road
-                bool isRoad = selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected);
-
-                if (isRoad)
+                if (selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected))
                 {
-                    UnityEngine.Debug.Log($"[TrafficSpy] Selection Changed: {selected.Index}. Running Analysis.");
+                    UnityEngine.Debug.Log($"[TrafficSpy] New Road Selected: {selected.Index}. Running Analysis...");
                     RunAnalysis(selected);
                 }
                 else
                 {
+                    if (selected != Entity.Null)
+                        // Optional: Log what we clicked on if it wasn't a road
+                        UnityEngine.Debug.Log($"[TrafficSpy] Ignored Selection {selected.Index} (Not a Road/Lane).");
+
                     ClearData();
                 }
             }
@@ -112,34 +110,64 @@ namespace TrafficSpy.Systems
 
         private void ClearHighlights()
         {
+            int count = 0;
             foreach (var entity in highlightedEntities)
             {
                 if (EntityManager.Exists(entity))
                 {
                     EntityManager.RemoveComponent<Highlighted>(entity);
                     EntityManager.AddComponent<BatchesUpdated>(entity);
+                    count++;
                 }
             }
             highlightedEntities.Clear();
+            // Only log if we actually cleared something to avoid spam
+            if (count > 0) UnityEngine.Debug.Log($"[TrafficSpy] Cleared {count} highlights.");
         }
 
-        private void AddHighlight(Entity entity)
+        private void AddHighlight(Entity entity, string debugLabel)
         {
-            if (!EntityManager.Exists(entity)) return;
+            // Check 1: Does the source entity exist?
+            if (!EntityManager.Exists(entity))
+            {
+                UnityEngine.Debug.LogWarning($"[TrafficSpy] FAILED {debugLabel}: Source Entity {entity.Index} does not exist.");
+                return;
+            }
 
             Entity target = entity;
+            bool isRenter = false;
 
+            // Check 2: Is it a Renter (Virtual) or Building (Physical)?
             if (EntityManager.HasComponent<PropertyRenter>(entity))
             {
                 PropertyRenter renter = EntityManager.GetComponentData<PropertyRenter>(entity);
                 target = renter.m_Property;
+                isRenter = true;
+            }
+            else
+            {
+                // LOG ELSE: Useful to know if we are trying to highlight a raw building vs a person
+                UnityEngine.Debug.Log($"[TrafficSpy] Info {debugLabel}: Entity {entity.Index} has no PropertyRenter. Assuming it is already a Building/Object.");
             }
 
-            if (EntityManager.Exists(target) && !highlightedEntities.Contains(target))
+            // Check 3: Does the FINAL target exist?
+            if (EntityManager.Exists(target))
             {
-                EntityManager.AddComponent<Highlighted>(target);
-                EntityManager.AddComponent<BatchesUpdated>(target);
-                highlightedEntities.Add(target);
+                if (!highlightedEntities.Contains(target))
+                {
+                    EntityManager.AddComponent<Highlighted>(target);
+                    EntityManager.AddComponent<BatchesUpdated>(target);
+                    highlightedEntities.Add(target);
+
+                    // Log Success
+                    string type = isRenter ? $"Virtual(Renter) -> Physical(Building {target.Index})" : $"Physical({target.Index})";
+                    UnityEngine.Debug.Log($"[TrafficSpy] HIGHLIGHT SUCCESS {debugLabel}: {type}");
+                }
+            }
+            else
+            {
+                // Log Failure: We had a renter, but their building reference was dead/null
+                UnityEngine.Debug.LogWarning($"[TrafficSpy] FAILED {debugLabel}: Target Building {target.Index} (from Source {entity.Index}) does not exist.");
             }
         }
 
@@ -184,12 +212,16 @@ namespace TrafficSpy.Systems
 
             job.Run();
 
-            // Update Highlights only once per selection change
+            CurrentRenderList.Clear();
             ClearHighlights();
+
+            UnityEngine.Debug.Log($"[TrafficSpy] Analysis Found {results.Length} entities. Beginning Highlight Loop...");
 
             for (int i = 0; i < results.Length; i++)
             {
-                AddHighlight(results[i].entity);
+                CurrentRenderList.Add(results[i]);
+                // Pass a debug string so we know which item in the list failed
+                AddHighlight(results[i].entity, $"Item #{i} ({results[i].purpose})");
             }
 
             int totalOther = other.Count + noPurpose.Count;
@@ -204,10 +236,7 @@ namespace TrafficSpy.Systems
 
             this.activityDataBinding.Update(json);
 
-            if (results.Length > 0)
-            {
-                UnityEngine.Debug.Log($"[TrafficSpy] Highlighting {results.Length} buildings (Cyan Glow).");
-            }
+            UnityEngine.Debug.Log($"[TrafficSpy] Stats: Work:{workers.Count} School:{students.Count} Shop:{shoppers.Count} Home:{goingHome.Count} Other:{totalOther}");
 
             workers.Dispose();
             students.Dispose();

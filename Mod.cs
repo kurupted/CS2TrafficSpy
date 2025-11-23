@@ -5,7 +5,6 @@ using Game.Input;
 using Game.Modding;
 using Game.SceneFlow;
 using TrafficSpy.ModSettings;
-using Unity.Entities;
 using UnityEngine;
 
 namespace TrafficSpy
@@ -43,15 +42,13 @@ namespace TrafficSpy
             m_AxisAction.shouldBeEnabled = true;
             m_VectorAction.shouldBeEnabled = true;
 
-            m_ButtonAction.onInteraction += (_, phase) => log.Info($"[{m_ButtonAction.name}] On{phase} {m_ButtonAction.ReadValue<float>()}");
-            m_AxisAction.onInteraction += (_, phase) => log.Info($"[{m_AxisAction.name}] On{phase} {m_AxisAction.ReadValue<float>()}");
-            m_VectorAction.onInteraction += (_, phase) => log.Info($"[{m_VectorAction.name}] On{phase} {m_VectorAction.ReadValue<Vector2>()}");
-
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
-            // In OnLoad
-            updateSystem.UpdateAt<Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
-            //updateSystem.UpdateAt<Systems.OriginDestRenderSystem>(SystemUpdatePhase.Rendering); // Register the renderer too!
+            // FIX: Run in MainLoop so visual updates (Highlights) are caught by the Renderer
+            updateSystem.UpdateAt<Systems.TrafficUISystem>(SystemUpdatePhase.MainLoop);
+
+            // Keep the custom renderer commented out for now to avoid "weird lines"
+            // updateSystem.UpdateAt<Systems.OriginDestRenderSystem>(SystemUpdatePhase.Rendering); 
         }
 
         public void OnDispose()
