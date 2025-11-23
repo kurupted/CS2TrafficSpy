@@ -1,75 +1,74 @@
 using Colossal;
+using Colossal.Collections; // Required for NativeCounter
 using Colossal.UI.Binding;
-using Game;
 using Game.Common;
 using Game.Net;
 using Game.Tools;
-using Game.UI;
-using System.Collections.Generic;
-using Traffic_Explorer.Jobs;
-using Unity.Collections;
-using Unity.Entities;
+using Game.UI.InGame;
+using System.Collections.Generic; // Required for List<T>
 using Unity.Jobs;
+using TrafficSpy.Jobs; // Required for SegmentActivityJob (Namespace from your other file)
+using Unity.Collections;    // Required for Allocator
+using Unity.Entities;
 
-namespace Traffic_Explorer.Systems
+namespace TrafficSpy.Systems
 {
-    public partial class TrafficUISystem : UISystemBase
+    public partial class TrafficUISystem : InfoSectionBase
     {
         private ToolSystem toolSystem;
         private ValueBinding<string> activityDataBinding;
-
-        // NEW: Tool State Bindings
         private ValueBinding<bool> toolActiveBinding;
         private bool isToolActive = false;
 
-        // Shared data for Renderer
+        // RESTORED: These static lists are required by OriginDestRenderSystem
         public static List<Entity> CurrentOrigins = new List<Entity>();
         public static List<Entity> CurrentDestinations = new List<Entity>();
+
+        protected override string group => "TrafficSpy";
 
         protected override void OnCreate()
         {
             base.OnCreate();
-            this.toolSystem = World.GetExistingSystemManaged<ToolSystem>();
+            m_InfoUISystem.AddMiddleSection(this);
+            this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
 
-            // 1. Create Bindings
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "segmentActivity", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
-
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
 
-            // 2. Create Trigger to receive clicks from UI
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
-
-                // Clear visuals immediately if turned off
                 if (!active) ClearData();
             }));
         }
 
         protected override void OnUpdate()
         {
-            // FIXED: Check the InputAction defined in Mod.cs
-            // We do NOT check Mod.Settings.ToggleToolBinding because it is just a UI wrapper.
-            /*if (Mod.toggleToolAction.WasPressedThisFrame())
+            if (visible && this.isToolActive)
             {
-                this.isToolActive = !this.isToolActive;
-                this.toolActiveBinding.Update(this.isToolActive);
-                if (!this.isToolActive) ClearData();
-            }*/
+                if (this.toolSystem == null) return;
 
-            if (!this.isToolActive) return;
-
-            Entity selected = this.toolSystem.selected;
-            if (selected == Entity.Null || !EntityManager.HasBuffer<SubLane>(selected))
+                Entity selected = this.toolSystem.selected;
+                if (selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected))
+                {
+                    RunAnalysis(selected);
+                }
+                else
+                {
+                    ClearData();
+                }
+            }
+            else
             {
                 ClearData();
-                return;
             }
-
-            RunAnalysis(selected);
         }
+
+        protected override void Reset() { }
+        protected override void OnProcess() { }
+        public override void OnWriteProperties(Colossal.UI.Binding.IJsonWriter writer) { }
 
         private void ClearData()
         {
@@ -80,6 +79,7 @@ namespace Traffic_Explorer.Systems
 
         private void RunAnalysis(Entity selectedSegment)
         {
+            // Using Allocator.TempJob as these need to exist for the duration of the job
             NativeCounter workers = new NativeCounter(Allocator.TempJob);
             NativeCounter students = new NativeCounter(Allocator.TempJob);
             NativeCounter shoppers = new NativeCounter(Allocator.TempJob);

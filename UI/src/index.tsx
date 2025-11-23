@@ -4,15 +4,17 @@ import { ActivitySection } from "./ActivitySection";
 
 const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
     
-    // 1. Add the button to the top-left game HUD
     moduleRegistry.append("GameTopLeft", TrafficButton);
 
-    // 2. Add your section to the Selected Info Panel list
-    // FIX: Use 'append' instead of 'extend' for lists/arrays
-    moduleRegistry.append(
+    // Register the Info Section using the Dictionary method
+    moduleRegistry.extend(
         "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx", 
         'selectedInfoSectionComponents', 
-        ActivitySection
+        (sections: any) => {
+            // "TrafficSpy" must match the 'group' string in TrafficUISystem.cs
+            sections["TrafficSpy"] = ActivitySection;
+            return sections;
+        }
     );
     
     console.log("Traffic Spy UI Registered");

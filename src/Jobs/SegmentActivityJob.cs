@@ -10,7 +10,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Colossal; // Fixed: NativeCounter is here, not Colossal.Collections
 
-namespace Traffic_Explorer.Jobs
+namespace TrafficSpy.Jobs
 {
     [BurstCompile]
     public struct SegmentActivityJob : IJob

@@ -5,6 +5,7 @@ using Game.Input;
 using Game.Modding;
 using Game.SceneFlow;
 using TrafficSpy.ModSettings;
+using Unity.Entities;
 using UnityEngine;
 
 namespace TrafficSpy
@@ -47,6 +48,8 @@ namespace TrafficSpy
             m_VectorAction.onInteraction += (_, phase) => log.Info($"[{m_VectorAction.name}] On{phase} {m_VectorAction.ReadValue<Vector2>()}");
 
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
+
+            updateSystem.UpdateAt<Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
         }
 
         public void OnDispose()

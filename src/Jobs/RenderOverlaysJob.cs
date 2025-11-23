@@ -8,7 +8,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace Traffic_Explorer.Jobs
+namespace TrafficSpy.Jobs
 {
     [BurstCompile]
     public struct RenderOverlaysJob : IJob

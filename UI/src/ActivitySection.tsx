@@ -1,34 +1,32 @@
 import React, { Component } from 'react';
-import styles from "./activity.module.scss";
+import styles from "./activity.module.scss"; 
 import { segmentActivity } from "./bindings";
 import { SegmentActivity } from "./types";
 
-export class ActivitySection extends Component {
+interface ActivitySectionProps {
+    // FIX: Make 'group' optional with '?' to prevent TS build errors
+    group?: string; 
+}
+
+export class ActivitySection extends Component<ActivitySectionProps> {
     state = {
         data: { workers: 0, students: 0, shoppers: 0, goingHome: 0, healthcare: 0, other: 0 } as SegmentActivity
     };
 
-    // Store the cleanup function
     private unsubscribe: (() => void) | undefined;
 
     componentDidMount() {
-        // FIXED: subscribe returns an object, not a function.
-        // We get the object, then create a function that calls .dispose() on it.
         const subscription = segmentActivity.subscribe((jsonString: string) => {
             try {
                 const parsed = JSON.parse(jsonString || "{}");
                 this.setState({ data: { ...this.state.data, ...parsed } });
-            } catch (e) { console.warn(e); }
+            } catch (e) { console.warn("TrafficSpy JSON Parse Error", e); }
         });
-
-        // Save the cleanup function
         this.unsubscribe = () => subscription.dispose();
     }
 
     componentWillUnmount() {
-        if (this.unsubscribe) {
-            this.unsubscribe();
-        }
+        if (this.unsubscribe) this.unsubscribe();
     }
 
     render() {

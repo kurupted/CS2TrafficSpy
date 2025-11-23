@@ -1,13 +1,14 @@
-using Game.Common;
-using Game.Rendering;
 using Game.Buildings;
+using Game.Common;
 using Game.Objects;
+using Game.Rendering;
+using TrafficSpy.Jobs;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Collections;
-using Traffic_Explorer.Jobs;
 
-namespace Traffic_Explorer.Systems
+// FIX: Match the namespace of TrafficUISystem
+namespace TrafficSpy.Systems
 {
     public partial class OriginDestRenderSystem : SystemBase
     {
@@ -21,6 +22,7 @@ namespace Traffic_Explorer.Systems
 
         protected override void OnUpdate()
         {
+            // Now this will find TrafficUISystem because they are in the same namespace
             var originList = TrafficUISystem.CurrentOrigins;
             var destList = TrafficUISystem.CurrentDestinations;
 
@@ -39,7 +41,6 @@ namespace Traffic_Explorer.Systems
                 overlayBuffer = buffer,
                 origins = nativeOrigins,
                 destinations = nativeDestinations,
-                // FIXED: Explicitly getting Game.Objects.Transform
                 transformLookup = SystemAPI.GetComponentLookup<Game.Objects.Transform>(true),
                 renterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true)
             };
