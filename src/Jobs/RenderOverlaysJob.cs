@@ -52,9 +52,6 @@ namespace TrafficSpy.Jobs
                     return new UnityEngine.Color(0.5f, 0f, 0.5f, 1f);
                 case Purpose.GoingHome:
                     return new UnityEngine.Color(0f, 1f, 1f, 1f);
-                case Purpose.Delivery:
-                case Purpose.UpkeepDelivery:
-                    return new UnityEngine.Color(1f, 0.5f, 0f, 1f); // Orange
                 case Purpose.Hospital:
                 case Purpose.InHospital:
                     return new UnityEngine.Color(1f, 0f, 0f, 1f);
