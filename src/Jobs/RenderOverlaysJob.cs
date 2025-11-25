@@ -30,33 +30,46 @@ namespace TrafficSpy.Jobs
             for (int i = 0; i < renderList.Length; i++)
             {
                 TrafficRenderData data = renderList[i];
-                UnityEngine.Color color = GetColorForPurpose(data.purpose, data.isOrigin);
+                UnityEngine.Color color = GetColor(data);
                 DrawEntityOutline(data.entity, color);
             }
         }
 
-        private UnityEngine.Color GetColorForPurpose(Purpose purpose, bool isOrigin)
+        private UnityEngine.Color GetColor(TrafficRenderData data)
         {
-            if (isOrigin) return new UnityEngine.Color(0f, 1f, 0f, 1f);
+            if (data.isOrigin) return new UnityEngine.Color(0f, 1f, 0f, 1f); // Green for Origin
 
-            switch (purpose)
+            // Cargo = Orange
+            if (data.type == TrafficType.Cargo)
+                return new UnityEngine.Color(1f, 0.5f, 0f, 1f);
+
+            // Public Transport = Purple
+            if (data.type == TrafficType.PublicTransport)
+                return new UnityEngine.Color(0.6f, 0f, 1f, 1f);
+
+            // Service = Red/Pink
+            if (data.type == TrafficType.Service)
+                return new UnityEngine.Color(1f, 0.2f, 0.4f, 1f);
+
+            // Citizens based on Purpose
+            switch (data.purpose)
             {
                 case Purpose.GoingToWork:
                 case Purpose.Working:
-                    return new UnityEngine.Color(1f, 0.92f, 0.016f, 1f);
+                    return new UnityEngine.Color(1f, 0.92f, 0.016f, 1f); // Yellow
                 case Purpose.GoingToSchool:
                 case Purpose.Studying:
-                    return new UnityEngine.Color(0f, 0.5f, 1f, 1f);
+                    return new UnityEngine.Color(0f, 0.5f, 1f, 1f); // Blue
                 case Purpose.Shopping:
                 case Purpose.Leisure:
-                    return new UnityEngine.Color(0.5f, 0f, 0.5f, 1f);
+                    return new UnityEngine.Color(0.5f, 0f, 0.5f, 1f); // Purple
                 case Purpose.GoingHome:
-                    return new UnityEngine.Color(0f, 1f, 1f, 1f);
+                    return new UnityEngine.Color(0f, 1f, 1f, 1f); // Cyan
                 case Purpose.Hospital:
                 case Purpose.InHospital:
-                    return new UnityEngine.Color(1f, 0f, 0f, 1f);
+                    return new UnityEngine.Color(1f, 0f, 0f, 1f); // Red
                 default:
-                    return new UnityEngine.Color(0.7f, 0.7f, 0.7f, 1f);
+                    return new UnityEngine.Color(0.7f, 0.7f, 0.7f, 1f); // Gray
             }
         }
 

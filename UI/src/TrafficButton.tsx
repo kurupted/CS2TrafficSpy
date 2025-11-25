@@ -5,7 +5,7 @@ import { toolActive } from "./bindings";
 
 export default class TrafficButton extends Component {
     state = {
-        active: toolActive.value, // This will now be 'false' by default instead of crashing
+        active: toolActive.value,
         hovering: false
     };
 

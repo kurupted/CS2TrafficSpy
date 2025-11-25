@@ -10,17 +10,25 @@ using Unity.Jobs;
 using TrafficSpy.Jobs;
 using Unity.Collections;
 using Unity.Entities;
-using Colossal;
 using UnityEngine;
 using Game.Citizens;
 using Game.Buildings;
 
 namespace TrafficSpy.Systems
 {
+    public enum TrafficType
+    {
+        Citizen,
+        Cargo,
+        PublicTransport,
+        Service
+    }
+
     public struct TrafficRenderData
     {
         public Entity entity;
         public Purpose purpose;
+        public TrafficType type;
         public bool isOrigin;
     }
 
@@ -36,7 +44,6 @@ namespace TrafficSpy.Systems
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
         private HashSet<Entity> highlightedEntities = new HashSet<Entity>();
 
-        // NEW: Track selection to prevent spamming updates
         private Entity lastSelectedEntity = Entity.Null;
 
         protected override void OnCreate()
@@ -81,12 +88,10 @@ namespace TrafficSpy.Systems
 
             Entity selected = this.toolSystem.selected;
 
-            // FIX: Only run logic if selection CHANGED
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
 
-                // Check if it's a road
                 bool isRoad = selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected);
 
                 if (isRoad)
@@ -151,6 +156,9 @@ namespace TrafficSpy.Systems
             NativeCounter shoppers = new NativeCounter(Allocator.TempJob);
             NativeCounter goingHome = new NativeCounter(Allocator.TempJob);
             NativeCounter healthcare = new NativeCounter(Allocator.TempJob);
+            NativeCounter cargo = new NativeCounter(Allocator.TempJob);
+            NativeCounter services = new NativeCounter(Allocator.TempJob);
+            NativeCounter publicTransport = new NativeCounter(Allocator.TempJob);
             NativeCounter other = new NativeCounter(Allocator.TempJob);
             NativeCounter noPurpose = new NativeCounter(Allocator.TempJob);
 
@@ -167,17 +175,24 @@ namespace TrafficSpy.Systems
                 currentVehicleLookup = SystemAPI.GetComponentLookup<Game.Creatures.CurrentVehicle>(true),
                 travelPurposeLookup = SystemAPI.GetComponentLookup<Game.Citizens.TravelPurpose>(true),
                 targetLookup = SystemAPI.GetComponentLookup<Game.Common.Target>(true),
+                ownerLookup = SystemAPI.GetComponentLookup<Game.Common.Owner>(true),
                 householdMemberLookup = SystemAPI.GetComponentLookup<Game.Citizens.HouseholdMember>(true),
                 workerLookup = SystemAPI.GetComponentLookup<Game.Citizens.Worker>(true),
                 studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
                 creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
                 propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
+                deliveryTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.DeliveryTruck>(true),
+                cargoTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.CargoTransport>(true),
+                publicTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PublicTransport>(true),
 
                 workers = workers,
                 students = students,
                 shoppers = shoppers,
                 goingHome = goingHome,
                 healthcare = healthcare,
+                cargo = cargo,
+                services = services,
+                publicTransport = publicTransport,
                 other = other,
                 noPurpose = noPurpose,
                 results = results
@@ -185,12 +200,17 @@ namespace TrafficSpy.Systems
 
             job.Run();
 
-            // Update Highlights only once per selection change
             ClearHighlights();
 
             for (int i = 0; i < results.Length; i++)
             {
                 AddHighlight(results[i].entity);
+            }
+
+            CurrentRenderList.Clear();
+            for (int i = 0; i < results.Length; i++)
+            {
+                CurrentRenderList.Add(results[i]);
             }
 
             int totalOther = other.Count + noPurpose.Count;
@@ -200,6 +220,9 @@ namespace TrafficSpy.Systems
                 ""shoppers"": {shoppers.Count},
                 ""goingHome"": {goingHome.Count},
                 ""healthcare"": {healthcare.Count},
+                ""cargo"": {cargo.Count},
+                ""services"": {services.Count},
+                ""publicTransport"": {publicTransport.Count},
                 ""other"": {totalOther}
             }}";
 
@@ -207,7 +230,7 @@ namespace TrafficSpy.Systems
 
             if (results.Length > 0)
             {
-                UnityEngine.Debug.Log($"[TrafficSpy] Highlighting {results.Length} buildings (Cyan Glow).");
+                UnityEngine.Debug.Log($"[TrafficSpy] Analysis Complete. Highlights: {results.Length}. Data: {json}");
             }
 
             workers.Dispose();
@@ -215,6 +238,9 @@ namespace TrafficSpy.Systems
             shoppers.Dispose();
             goingHome.Dispose();
             healthcare.Dispose();
+            cargo.Dispose();
+            services.Dispose();
+            publicTransport.Dispose();
             other.Dispose();
             noPurpose.Dispose();
             results.Dispose();
