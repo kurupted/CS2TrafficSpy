@@ -5,6 +5,8 @@ using Game.Common;
 using Game.Net;
 using Game.Tools;
 using Game.UI;
+using Game.UI.InGame; // Required for InfoSectionBase
+using Colossal.Serialization.Entities;
 using System.Collections.Generic;
 using Unity.Jobs;
 using TrafficSpy.Jobs;
@@ -13,9 +15,11 @@ using Unity.Entities;
 using UnityEngine;
 using Game.Citizens;
 using Game.Buildings;
+//using TrafficSpy.Systems; // Needed to see TrafficUISystem & TrafficRenderData
 
 namespace TrafficSpy.Systems
 {
+    // Keep your enums and structs as they are
     public enum TrafficType
     {
         Citizen,
@@ -23,32 +27,34 @@ namespace TrafficSpy.Systems
         PublicTransport,
         Service
     }
-
     public struct TrafficRenderData
     {
         public Entity entity;
-        public Purpose purpose;
+        public Game.Citizens.Purpose purpose; // <--- FIXED: Explicit namespace
         public TrafficType type;
         public bool isOrigin;
     }
 
-    public partial class TrafficUISystem : UISystemBase
+    // 1. Inherit from InfoSectionBase
+    public partial class TrafficUISystem : InfoSectionBase
     {
         private ToolSystem toolSystem;
         private DefaultToolSystem defaultToolSystem;
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
-        private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
 
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
         private HashSet<Entity> highlightedEntities = new HashSet<Entity>();
-
         private Entity lastSelectedEntity = Entity.Null;
 
         protected override void OnCreate()
         {
             base.OnCreate();
+
+            // 2. Register with the game's UI system (Like EmploymentTracker)
+            m_InfoUISystem.AddMiddleSection(this);
+
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
 
@@ -57,52 +63,58 @@ namespace TrafficSpy.Systems
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
 
+            // Keep your trigger binding...
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
-                this.isToolActive = active;
-                this.toolActiveBinding.Update(active);
-
-                if (active)
+                if (defaultToolSystem != null)
                 {
-                    if (defaultToolSystem != null)
+                    if (active)
                     {
                         this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
                         this.defaultToolSystem.debugSelect = true;
-                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED");
                     }
-                }
-                else
-                {
-                    if (defaultToolSystem != null)
+                    else
                     {
                         this.defaultToolSystem.debugSelect = this.defaultDebugSelectState;
+                        ClearData();
                     }
-                    ClearData();
-                    UnityEngine.Debug.Log("[TrafficSpy] Tool DEACTIVATED");
                 }
+                this.toolActiveBinding.Update(active);
             }));
         }
 
+        // 3. Implement required abstract methods (EmploymentTracker does this)
+        protected override string group => "TrafficSpy"; // Can be anything, just needs to exist
+        protected override void Reset() { }
+        protected override void OnProcess() { }
+        public override void OnWriteProperties(IJsonWriter writer) { }
+
         protected override void OnUpdate()
         {
-            if (toolSystem == null) return;
+            // COPYING EMPLOYMENT TRACKER: Force enable to ensure logic runs
+            if (!Enabled) { Enabled = true; }
 
+            base.OnUpdate();
+
+            // Logic to decide if we should show the panel
             Entity selected = this.toolSystem.selected;
+            bool isRoad = EntityManager.Exists(selected) && EntityManager.HasBuffer<SubLane>(selected);
 
+            if (isRoad)
+            {
+                this.visible = true; // This triggers the UI component in SelectedInfoPanelTogglesComponent
+            }
+            else
+            {
+                this.visible = false;
+                ClearData();
+                return;
+            }
+
+            // Run your existing analysis logic
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
-
-                bool isRoad = selected != Entity.Null && EntityManager.HasBuffer<SubLane>(selected);
-
-                if (isRoad)
-                {
-                    UnityEngine.Debug.Log($"[TrafficSpy] Selection Changed: {selected.Index}. Running Analysis.");
-                    RunAnalysis(selected);
-                }
-                else
-                {
-                    ClearData();
-                }
+                RunAnalysis(selected);
             }
         }
 

@@ -4,28 +4,19 @@ import { SelectedInfoPanelTogglesComponent } from "./SelectedInfoPanelTogglesCom
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
 
 const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
-
-    console.log("[TrafficSpy] begin register");
     
-    // 1. Initialize Resolver
+    // 1. Resolver must be first
     VanillaComponentResolver.setRegistry(moduleRegistry);
 
-    console.log("[TrafficSpy] did vanilla");
-
-    // 2. Add Button
+    // 2. Button
     moduleRegistry.append("GameTopLeft", TrafficButton);
 
-    console.log("[TrafficSpy] added button");
-
-    // 3. Register Info Panel Section (The Native Way)
-    // We extend the list of components, adding ours to it
-    /*moduleRegistry.extend(
+    // 3. Info Panel Extension (Native Method)
+    moduleRegistry.extend(
         "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx", 
         'selectedInfoSectionComponents', 
         SelectedInfoPanelTogglesComponent
-    );*/
-    
-    console.log("[TrafficSpy] UI Registered (Native Method)");
+    );
 }
 
 export default register;
