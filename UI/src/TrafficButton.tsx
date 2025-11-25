@@ -1,40 +1,32 @@
-import React, { Component } from 'react';
-import { FloatingButton, Tooltip } from "cs2/ui"; 
+import { useValue } from "cs2/api";
 import { trigger } from "cs2/api";
-import { toolActive } from "./bindings"; 
+import { Button } from "cs2/ui";
+import { toolActive } from "./bindings";
 
-export default class TrafficButton extends Component {
-    state = {
-        active: toolActive.value,
-        hovering: false
-    };
-
-    private unsubscribe: (() => void) | undefined;
-
-    componentDidMount() {
-        const subscription = toolActive.subscribe((val: boolean) => {
-            this.setState({ active: val });
-        });
-        this.unsubscribe = () => subscription.dispose();
-    }
-
-    componentWillUnmount() {
-        if (this.unsubscribe) {
-            this.unsubscribe();
-        }
-    }
-
-    render() {
+// Simple functional component - no imports that could fail
+const TrafficButton = () => {
+    console.log("[TrafficSpy] TrafficButton rendering...");
+    
+    try {
+        const active = useValue(toolActive);
+        
+        console.log("[TrafficSpy] Button state:", active);
+        
         return (
-            <Tooltip tooltip="Traffic Explorer Tool (Ctrl+T)">
-                <FloatingButton 
-                    src="coui://uil/Standard/GenericVehicles.svg" 
-                    selected={this.state.active} 
-                    onSelect={() => { 
-                        trigger("TrafficSpy", "setToolActive", !this.state.active); 
-                    }}
-                />
-            </Tooltip>
+            <Button 
+                src="coui://uil/Standard/GenericVehicles.svg"
+                selected={active}
+                variant="floating"
+                onSelect={() => {
+                    console.log("[TrafficSpy] Button clicked, toggling from", active);
+                    trigger("TrafficSpy", "setToolActive", !active);
+                }}
+            />
         );
+    } catch (error) {
+        console.error("[TrafficSpy] Button render error:", error);
+        return null;
     }
-}
+};
+
+export default TrafficButton;

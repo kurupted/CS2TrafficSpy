@@ -1,7 +1,6 @@
 using Colossal;
-using Colossal.Serialization.Entities;
 using Colossal.UI.Binding;
-using Game.Buildings; // FIXED: Needed for PropertyRenter
+using Game.Buildings;
 using Game.Citizens;
 using Game.Common;
 using Game.Net;
@@ -9,14 +8,14 @@ using Game.Tools;
 using Game.UI;
 using Game.UI.InGame;
 using System.Collections.Generic;
-using TrafficSpy.Jobs; // FIXED: Needed for SegmentActivityJob
+using TrafficSpy.Jobs;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 
 namespace TrafficSpy.Systems
 {
-    // FIXED: Defined at namespace level so Jobs can see them
+    // Enums and structs at namespace level
     public enum TrafficType
     {
         Citizen,
@@ -40,7 +39,6 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
 
-        // FIXED: Restored these missing variables
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
 
@@ -52,18 +50,28 @@ namespace TrafficSpy.Systems
         {
             base.OnCreate();
 
-            // Register as a native Info Section (like EmploymentTracker)
+            UnityEngine.Debug.Log("[TrafficSpy] OnCreate START");
+
+            // Register as a MIDDLE section
             m_InfoUISystem.AddMiddleSection(this);
+            UnityEngine.Debug.Log("[TrafficSpy] Added to middle section");
 
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
+            UnityEngine.Debug.Log("[TrafficSpy] Got tool systems");
 
+            // Create bindings
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "segmentActivity", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
+            UnityEngine.Debug.Log("[TrafficSpy] Created bindings");
+
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
+            UnityEngine.Debug.Log("[TrafficSpy] Added bindings");
 
+            // Register the trigger
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
+                UnityEngine.Debug.Log($"[TrafficSpy] setToolActive triggered: {active}");
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
 
@@ -73,7 +81,7 @@ namespace TrafficSpy.Systems
                     {
                         this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
                         this.defaultToolSystem.debugSelect = true;
-                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED");
+                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED - debugSelect enabled");
                     }
                 }
                 else
@@ -86,9 +94,13 @@ namespace TrafficSpy.Systems
                     UnityEngine.Debug.Log("[TrafficSpy] Tool DEACTIVATED");
                 }
             }));
+
+            UnityEngine.Debug.Log("[TrafficSpy] TrafficUISystem.OnCreate() completed successfully");
         }
 
-        protected override string group => "TrafficSpy";
+        // CRITICAL: Must match TypeScript registration key
+        protected override string group => "TrafficSpy.Systems.TrafficUISystem";
+
         protected override void Reset() { }
         protected override void OnProcess() { }
         public override void OnWriteProperties(IJsonWriter writer) { }
@@ -100,13 +112,14 @@ namespace TrafficSpy.Systems
 
         protected override void OnUpdate()
         {
-            // Prevent the system from being disabled by the game
-            if (!Enabled) { Enabled = true; }
+            // Keep system enabled
+            if (!Enabled) Enabled = true;
 
             base.OnUpdate();
 
             Entity selected = this.toolSystem.selected;
 
+            // Check if we should be visible
             if (ShouldBeVisible(selected))
             {
                 this.visible = true;
@@ -118,9 +131,11 @@ namespace TrafficSpy.Systems
                 return;
             }
 
+            // Run analysis when selection changes
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
+                UnityEngine.Debug.Log($"[TrafficSpy] Selection changed to: {selected.Index}");
                 RunAnalysis(selected);
             }
         }
@@ -129,6 +144,7 @@ namespace TrafficSpy.Systems
         {
             if (this.activityDataBinding.value != "{}")
             {
+                UnityEngine.Debug.Log("[TrafficSpy] Clearing data");
                 this.activityDataBinding.Update("{}");
                 CurrentRenderList.Clear();
                 ClearHighlights();
@@ -137,12 +153,21 @@ namespace TrafficSpy.Systems
 
         private void ClearHighlights()
         {
+            UnityEngine.Debug.Log($"[TrafficSpy] Clearing {highlightedEntities.Count} highlights");
             foreach (var entity in highlightedEntities)
             {
                 if (EntityManager.Exists(entity))
                 {
-                    EntityManager.RemoveComponent<Highlighted>(entity);
-                    EntityManager.AddComponent<BatchesUpdated>(entity);
+                    // Remove Highlighted component
+                    if (EntityManager.HasComponent<Highlighted>(entity))
+                    {
+                        EntityManager.RemoveComponent<Highlighted>(entity);
+                    }
+                    // Mark for batch update
+                    if (!EntityManager.HasComponent<BatchesUpdated>(entity))
+                    {
+                        EntityManager.AddComponent<BatchesUpdated>(entity);
+                    }
                 }
             }
             highlightedEntities.Clear();
@@ -150,26 +175,52 @@ namespace TrafficSpy.Systems
 
         private void AddHighlight(Entity entity)
         {
-            if (!EntityManager.Exists(entity)) return;
+            if (!EntityManager.Exists(entity))
+            {
+                UnityEngine.Debug.LogWarning($"[TrafficSpy] Cannot highlight - entity does not exist: {entity.Index}");
+                return;
+            }
 
             Entity target = entity;
 
+            // If it's a renter (household/company), get the building
             if (EntityManager.HasComponent<PropertyRenter>(entity))
             {
                 PropertyRenter renter = EntityManager.GetComponentData<PropertyRenter>(entity);
                 target = renter.m_Property;
+                UnityEngine.Debug.Log($"[TrafficSpy] Resolved renter {entity.Index} to building {target.Index}");
             }
 
-            if (EntityManager.Exists(target) && !highlightedEntities.Contains(target))
+            if (!EntityManager.Exists(target))
             {
-                EntityManager.AddComponent<Highlighted>(target);
-                EntityManager.AddComponent<BatchesUpdated>(target);
+                UnityEngine.Debug.LogWarning($"[TrafficSpy] Target entity does not exist: {target.Index}");
+                return;
+            }
+
+            if (!highlightedEntities.Contains(target))
+            {
+                // Add Highlighted component
+                if (!EntityManager.HasComponent<Highlighted>(target))
+                {
+                    EntityManager.AddComponent<Highlighted>(target);
+                }
+
+                // Mark for batch update
+                if (!EntityManager.HasComponent<BatchesUpdated>(target))
+                {
+                    EntityManager.AddComponent<BatchesUpdated>(target);
+                }
+
                 highlightedEntities.Add(target);
+                UnityEngine.Debug.Log($"[TrafficSpy] Highlighted entity: {target.Index}");
             }
         }
 
         private void RunAnalysis(Entity selectedSegment)
         {
+            UnityEngine.Debug.Log($"[TrafficSpy] Running analysis on segment: {selectedSegment.Index}");
+
+            // Initialize counters
             NativeCounter workers = new NativeCounter(Allocator.TempJob);
             NativeCounter students = new NativeCounter(Allocator.TempJob);
             NativeCounter shoppers = new NativeCounter(Allocator.TempJob);
@@ -183,6 +234,7 @@ namespace TrafficSpy.Systems
 
             NativeList<TrafficRenderData> results = new NativeList<TrafficRenderData>(Allocator.TempJob);
 
+            // Create and run the job
             SegmentActivityJob job = new SegmentActivityJob
             {
                 selectedSegment = selectedSegment,
@@ -219,6 +271,9 @@ namespace TrafficSpy.Systems
 
             job.Run();
 
+            UnityEngine.Debug.Log($"[TrafficSpy] Job complete. Found {results.Length} entities");
+
+            // Clear old highlights and add new ones
             ClearHighlights();
 
             for (int i = 0; i < results.Length; i++)
@@ -226,12 +281,16 @@ namespace TrafficSpy.Systems
                 AddHighlight(results[i].entity);
             }
 
+            UnityEngine.Debug.Log($"[TrafficSpy] Added {highlightedEntities.Count} highlights");
+
+            // Update render list
             CurrentRenderList.Clear();
             for (int i = 0; i < results.Length; i++)
             {
                 CurrentRenderList.Add(results[i]);
             }
 
+            // Build JSON for UI
             int totalOther = other.Count + noPurpose.Count;
             string json = $@"{{
                 ""workers"": {workers.Count},
@@ -245,13 +304,12 @@ namespace TrafficSpy.Systems
                 ""other"": {totalOther}
             }}";
 
+            // Update the binding
             this.activityDataBinding.Update(json);
 
-            if (results.Length > 0)
-            {
-                UnityEngine.Debug.Log($"[TrafficSpy] Analysis Complete. Highlights: {results.Length}. Data: {json}");
-            }
+            UnityEngine.Debug.Log($"[TrafficSpy] Analysis Complete. Highlights: {highlightedEntities.Count}. Data: {json}");
 
+            // Dispose
             workers.Dispose();
             students.Dispose();
             shoppers.Dispose();
