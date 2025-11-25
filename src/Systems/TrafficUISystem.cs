@@ -94,6 +94,9 @@ namespace TrafficSpy.Systems
         // FIX 1: Implement these empty methods to prevent NotImplementedException
         protected override void Reset() { }
         protected override void OnProcess() { }
+        public override void OnWriteProperties(IJsonWriter writer)
+        {
+        }
 
         // FIX 2: Do NOT override OnWriteProperties (or call base). 
         // The base InfoSectionBase handles writing the 'group' property needed for the UI to find this system.
