@@ -25,30 +25,28 @@ function safeGetModule(path: string, exportName: string, fallback: any = null) {
 }
 
 // Import game modules
-const InfoSectionTheme = safeGetModule(
+const InfoSectionTheme: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/info-section/info-section.module.scss",
     "classes"
 );
 
-const InfoRowTheme = safeGetModule(
+const InfoRowTheme: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/info-row/info-row.module.scss",
     "classes"
 );
 
-const InfoSection = safeGetModule(
+const InfoSection: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/info-section/info-section.tsx",
     "InfoSection"
 );
 
-const InfoRow = safeGetModule(
+const InfoRow: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/info-row/info-row.tsx",
     "InfoRow"
 );
 
-const SectionTitle = safeGetModule(
-    "game-ui/game/components/selected-info-panel/shared-components/section-title/section-title.tsx",
-    "SectionTitle"
-);
+// Note: EmploymentTracker does NOT seem to use SectionTitle in the file you uploaded.
+// Try removing SectionTitle for now to see if the rest loads.
 
 // Main export function
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
@@ -92,7 +90,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             }, []);
 
             // If modules didn't load, show a simple fallback
-            if (!InfoSection || !InfoRow || !SectionTitle) {
+            if (!InfoSection || !InfoRow) {
                 console.warn("[TrafficSpy] Missing game components, using fallback");
                 if (!isVisible) return null;
                 
@@ -153,7 +151,6 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     disableFocus={true} 
                     className={InfoSectionTheme?.infoSection}
                 >
-                    <SectionTitle title={`TRAFFIC SPY (${total})`} />
                     {renderRow("Commuting to Work", data.workers)}
                     {renderRow("Commuting to School", data.students)}
                     {renderRow("Returning Home", data.goingHome)}

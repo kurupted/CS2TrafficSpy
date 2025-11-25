@@ -44,11 +44,9 @@ namespace TrafficSpy
 
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
-            // FIX: Run in MainLoop so visual updates (Highlights) are caught by the Renderer
             updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
-
-            // Keep the custom renderer commented out for now to avoid "weird lines"
-            // updateSystem.UpdateAt<Systems.OriginDestRenderSystem>(SystemUpdatePhase.Rendering); 
+            // NEW: Register the highlighter in the main loop
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.GameSimulation);
         }
 
         public void OnDispose()
