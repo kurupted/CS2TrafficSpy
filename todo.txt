@@ -1,4 +1,9 @@
 ﻿
+we're highlighting but only rarely
+group var data is appearing in panel. try to set group var in TrafficUI
+add back logging
+
+
 TODO
 
 - Highlight destination buildings of delivery/cargo vehicles

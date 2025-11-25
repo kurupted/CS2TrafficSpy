@@ -7,6 +7,7 @@ using Game.Net;
 using Game.Tools;
 using Game.UI;
 using Game.UI.InGame;
+using Game.Vehicles;
 using System.Collections.Generic;
 using TrafficSpy.Jobs;
 using Unity.Collections;
@@ -89,7 +90,7 @@ namespace TrafficSpy.Systems
         }
 
         // CRITICAL: Must match the TypeScript component key
-        protected override string group => "TrafficSpy.Systems.TrafficUISystem";
+        //protected override string group => "TrafficSpy.Systems.TrafficUISystem";
 
         // FIX 1: Implement these empty methods to prevent NotImplementedException
         protected override void Reset() { }
@@ -237,6 +238,32 @@ namespace TrafficSpy.Systems
             other.Dispose();
             noPurpose.Dispose();
             results.Dispose();
+        }
+
+
+        protected override string group
+        {
+            get
+            {
+                string json = $@"{{
+                    ""workers"": {1},
+                    ""students"": {2},
+                    ""shoppers"": {3},
+                    ""goingHome"": {4}
+                }}";
+                return json;
+
+                //if (this.commutingEntities.IsCreated)
+                //{
+                string rowName = "";
+                    rowName = "Cims Passing Through Road";
+                    return rowName + "," + 1234;
+                /*}
+                else
+                {
+                    return "";
+                }*/
+            }
         }
     }
 }

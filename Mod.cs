@@ -44,9 +44,8 @@ namespace TrafficSpy
 
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
-            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
-            // NEW: Register the highlighter in the main loop
-            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate); // info view
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.MainLoop); // building highlighter
         }
 
         public void OnDispose()
