@@ -10,7 +10,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Colossal.Mathematics;
-using TrafficSpy.Systems;
+using TrafficSpy.Systems; // FIXED: Needed for TrafficRenderData
 
 namespace TrafficSpy.Jobs
 {
@@ -37,39 +37,35 @@ namespace TrafficSpy.Jobs
 
         private UnityEngine.Color GetColor(TrafficRenderData data)
         {
-            if (data.isOrigin) return new UnityEngine.Color(0f, 1f, 0f, 1f); // Green for Origin
+            if (data.isOrigin) return new UnityEngine.Color(0f, 1f, 0f, 1f);
 
-            // Cargo = Orange
             if (data.type == TrafficType.Cargo)
                 return new UnityEngine.Color(1f, 0.5f, 0f, 1f);
 
-            // Public Transport = Purple
             if (data.type == TrafficType.PublicTransport)
                 return new UnityEngine.Color(0.6f, 0f, 1f, 1f);
 
-            // Service = Red/Pink
             if (data.type == TrafficType.Service)
                 return new UnityEngine.Color(1f, 0.2f, 0.4f, 1f);
 
-            // Citizens based on Purpose
             switch (data.purpose)
             {
                 case Purpose.GoingToWork:
                 case Purpose.Working:
-                    return new UnityEngine.Color(1f, 0.92f, 0.016f, 1f); // Yellow
+                    return new UnityEngine.Color(1f, 0.92f, 0.016f, 1f);
                 case Purpose.GoingToSchool:
                 case Purpose.Studying:
-                    return new UnityEngine.Color(0f, 0.5f, 1f, 1f); // Blue
+                    return new UnityEngine.Color(0f, 0.5f, 1f, 1f);
                 case Purpose.Shopping:
                 case Purpose.Leisure:
-                    return new UnityEngine.Color(0.5f, 0f, 0.5f, 1f); // Purple
+                    return new UnityEngine.Color(0.5f, 0f, 0.5f, 1f);
                 case Purpose.GoingHome:
-                    return new UnityEngine.Color(0f, 1f, 1f, 1f); // Cyan
+                    return new UnityEngine.Color(0f, 1f, 1f, 1f);
                 case Purpose.Hospital:
                 case Purpose.InHospital:
-                    return new UnityEngine.Color(1f, 0f, 0f, 1f); // Red
+                    return new UnityEngine.Color(1f, 0f, 0f, 1f);
                 default:
-                    return new UnityEngine.Color(0.7f, 0.7f, 0.7f, 1f); // Gray
+                    return new UnityEngine.Color(0.7f, 0.7f, 0.7f, 1f);
             }
         }
 
@@ -80,7 +76,6 @@ namespace TrafficSpy.Jobs
             if (!transformLookup.TryGetComponent(entity, out Game.Objects.Transform transform))
                 return;
 
-            // Debug Circle
             overlayBuffer.DrawCircle(color, transform.m_Position, 10.0f);
 
             if (prefabRefLookup.TryGetComponent(entity, out PrefabRef prefabRef) &&

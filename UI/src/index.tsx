@@ -11,12 +11,14 @@ const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
     // 2. Button
     moduleRegistry.append("GameTopLeft", TrafficButton);
 
-    // 3. Info Panel Extension (Native Method)
+    // 3. Info Panel Extension
     moduleRegistry.extend(
         "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx", 
         'selectedInfoSectionComponents', 
         SelectedInfoPanelTogglesComponent
     );
+    
+    console.log("[TrafficSpy] UI Registered");
 }
 
 export default register;

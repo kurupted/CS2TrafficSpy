@@ -1,18 +1,16 @@
 import { getModule } from "cs2/modding";
-// We import types locally to avoid the crash you experienced earlier
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
 import { segmentActivity } from "./bindings";
-import { SegmentActivity, Theme } from "./types"; 
 import { useState, useEffect } from "react";
 
-// 1. Define the Props interface (Like EmploymentTracker)
+// 1. Define types LOCALLY to prevent runtime crashes
 interface InfoSectionComponent {
     group: string;
     tooltipKeys: Array<string>;
     tooltipTags: Array<string>;
 }
 
-// 2. Define Styles/Components right here (Like EmploymentTracker)
+// 2. Fetch Game Modules (Exactly like EmploymentTracker, but cast to 'any' for safety)
 const InfoSectionTheme: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/info-section/info-section.module.scss",
     "classes"
@@ -38,17 +36,16 @@ const SectionTitle: any = getModule(
     "SectionTitle"
 );
 
-// 3. The Main Registration Function
+// 3. The Main Export
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
-    
-    // Define the component inline, exactly like EmploymentTracker
+
+    // 4. Register the Component
+    // The key MUST match your C# Class Name: Namespace.ClassName
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
         
-        // -- INSERT YOUR LOGIC HERE --
-        const [data, setData] = useState<SegmentActivity>({
-            workers: 0, students: 0, shoppers: 0, goingHome: 0, 
-            healthcare: 0, cargo: 0, services: 0, publicTransport: 0, other: 0
-        });
+        // --- TrafficSpy Logic (Inline) ---
+        // We ignore 'e.group' and use our own binding because it handles complex JSON data better
+        const [data, setData] = useState<any>({});
         const [isVisible, setIsVisible] = useState(false);
 
         useEffect(() => {
@@ -66,7 +63,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             return () => sub.dispose();
         }, []);
 
-        // Safety check
+        // Safety check: If game modules failed to load, don't render (prevents white screen)
         if (!isVisible || !InfoSection || !InfoRow) return null;
 
         const total = (data.workers || 0) + (data.students || 0) + (data.shoppers || 0) + 
@@ -88,7 +85,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             );
         };
 
-        // Return the JSX directly (Like EmploymentTracker)
+        // Return the UI using the Native components
         return (
             <InfoSection focusKey={VanillaComponentResolver.instance.FOCUS_DISABLED} disableFocus={true} className={InfoSectionTheme.infoSection}>
                 {SectionTitle && <SectionTitle title={`TRAFFIC SPY (${total})`} />}
