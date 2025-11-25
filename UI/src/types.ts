@@ -10,7 +10,7 @@ export interface SegmentActivity {
     other: number;
 }
 
-// Add these here so we don't have to import them from cs2/bindings
+// Local definitions to prevent "cs2/bindings" import errors
 export interface Entity {
     index: number;
     version: number;

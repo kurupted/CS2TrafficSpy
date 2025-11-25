@@ -1,17 +1,13 @@
 import { TrafficSpyInfoPanel } from "./TrafficSpyInfoPanel";
 
-interface InfoSectionComponent {
-    group: string;
-    tooltipKeys: Array<string>;
-    tooltipTags: Array<string>;
-}
-
+// This component acts as a "Router". It tells the game:
+// "When you see the C# system 'TrafficSpy.Systems.TrafficUISystem', show this React component."
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     
-    // The key here MUST match the C# Namespace + Class Name
-    componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
+    // The key MUST match your C# Class: namespace + class name
+    componentList["TrafficSpy.Systems.TrafficUISystem"] = () => {
         return <TrafficSpyInfoPanel />;
-    }
+    };
 
     return componentList;
-}
+};

@@ -19,11 +19,11 @@ const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
 
     // 3. Register Info Panel Section (The Native Way)
     // We extend the list of components, adding ours to it
-    moduleRegistry.extend(
+    /*moduleRegistry.extend(
         "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx", 
         'selectedInfoSectionComponents', 
         SelectedInfoPanelTogglesComponent
-    );
+    );*/
     
     console.log("[TrafficSpy] UI Registered (Native Method)");
 }

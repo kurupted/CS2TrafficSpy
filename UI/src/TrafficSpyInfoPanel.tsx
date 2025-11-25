@@ -2,19 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { getModule } from "cs2/modding";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
 import { segmentActivity } from "./bindings";
-import { SegmentActivity, Theme } from "./types";
+// Import types locally to avoid runtime crashes from "cs2/bindings"
+import { SegmentActivity, Theme } from "./types"; 
 
-// 1. Helper to safely get game modules without crashing the whole script
+// Helper to safely get game modules without crashing
 function safeGet(path: string, name: string) {
     const mod = getModule(path, name);
     if (!mod) {
-        console.warn(`[TrafficSpy] Failed to load game module: ${path}:${name}`);
+        console.warn(`[TrafficSpy] Module not found: ${path}:${name}`);
         return null;
     }
     return mod;
 }
 
-// 2. Fetch standard themes and components using the safe helper
+// Safely fetch components. If these fail, they return null instead of crashing.
 const InfoSectionTheme: any = safeGet("game-ui/game/components/selected-info-panel/shared-components/info-section/info-section.module.scss", "classes");
 const InfoRowTheme: any = safeGet("game-ui/game/components/selected-info-panel/shared-components/info-row/info-row.module.scss", "classes");
 const InfoSection: any = safeGet("game-ui/game/components/selected-info-panel/shared-components/info-section/info-section.tsx", "InfoSection");
@@ -45,7 +46,7 @@ export const TrafficSpyInfoPanel = () => {
         return () => sub.dispose();
     }, []);
 
-    // 3. GUARD: If required components failed to load, stop here to prevent crashing the main UI.
+    // If dependencies are missing, just hide the panel. DO NOT CRASH.
     if (!isVisible || !InfoSection || !InfoRow || !InfoSectionTheme || !InfoRowTheme) {
         return null;
     }
@@ -68,7 +69,6 @@ export const TrafficSpyInfoPanel = () => {
         );
     };
 
-    // Safe access to the resolver instance
     const focusKey = VanillaComponentResolver.instance?.FOCUS_DISABLED || null;
 
     return (
