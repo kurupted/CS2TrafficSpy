@@ -15,7 +15,6 @@ using Unity.Jobs;
 
 namespace TrafficSpy.Systems
 {
-    // Enums and structs at namespace level
     public enum TrafficType
     {
         Citizen,
@@ -42,36 +41,31 @@ namespace TrafficSpy.Systems
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
 
+        // Static data shared with TrafficHighlightSystem
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
-        private HashSet<Entity> highlightedEntities = new HashSet<Entity>();
+        public static bool IsDirty = false; // Flag to prevent flickering
+
         private Entity lastSelectedEntity = Entity.Null;
 
         protected override void OnCreate()
         {
             base.OnCreate();
 
-            UnityEngine.Debug.Log("[TrafficSpy] OnCreate START");
-
-            // Register as a MIDDLE section
+            // Register as a MIDDLE section in the info panel
             m_InfoUISystem.AddMiddleSection(this);
-            UnityEngine.Debug.Log("[TrafficSpy] Added to middle section");
 
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
-            UnityEngine.Debug.Log("[TrafficSpy] Got tool systems");
 
             // Create bindings
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "segmentActivity", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
-            UnityEngine.Debug.Log("[TrafficSpy] Created bindings");
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
-            UnityEngine.Debug.Log("[TrafficSpy] Added bindings");
 
-            // Register the trigger
+            // Tool toggle trigger
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
-                UnityEngine.Debug.Log($"[TrafficSpy] setToolActive triggered: {active}");
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
 
@@ -81,7 +75,6 @@ namespace TrafficSpy.Systems
                     {
                         this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
                         this.defaultToolSystem.debugSelect = true;
-                        UnityEngine.Debug.Log("[TrafficSpy] Tool ACTIVATED - debugSelect enabled");
                     }
                 }
                 else
@@ -91,35 +84,37 @@ namespace TrafficSpy.Systems
                         this.defaultToolSystem.debugSelect = this.defaultDebugSelectState;
                     }
                     ClearData();
-                    UnityEngine.Debug.Log("[TrafficSpy] Tool DEACTIVATED");
                 }
             }));
-
-            UnityEngine.Debug.Log("[TrafficSpy] TrafficUISystem.OnCreate() completed successfully");
         }
 
-        // CRITICAL: Must match TypeScript registration key
+        // CRITICAL: Must match the TypeScript component key
         protected override string group => "TrafficSpy.Systems.TrafficUISystem";
 
+        // FIX 1: Implement these empty methods to prevent NotImplementedException
         protected override void Reset() { }
         protected override void OnProcess() { }
-        public override void OnWriteProperties(IJsonWriter writer) { }
+
+        // FIX 2: Do NOT override OnWriteProperties (or call base). 
+        // The base InfoSectionBase handles writing the 'group' property needed for the UI to find this system.
+        // removing the override allows the base method to work correctly.
 
         protected bool ShouldBeVisible(Entity entity)
         {
+            // Only visible if a road segment (SubLane) is selected
             return EntityManager.Exists(entity) && EntityManager.HasBuffer<SubLane>(entity);
         }
 
         protected override void OnUpdate()
         {
-            // Keep system enabled
+            // Ensure system stays enabled
             if (!Enabled) Enabled = true;
 
             base.OnUpdate();
 
             Entity selected = this.toolSystem.selected;
 
-            // Check if we should be visible
+            // Check visibility
             if (ShouldBeVisible(selected))
             {
                 this.visible = true;
@@ -131,95 +126,27 @@ namespace TrafficSpy.Systems
                 return;
             }
 
-            // Run analysis when selection changes
+            // Run analysis only when selection changes
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
-                UnityEngine.Debug.Log($"[TrafficSpy] Selection changed to: {selected.Index}");
                 RunAnalysis(selected);
             }
         }
 
         private void ClearData()
         {
+            // Only clear if we actually have data to clear
             if (this.activityDataBinding.value != "{}")
             {
-                UnityEngine.Debug.Log("[TrafficSpy] Clearing data");
                 this.activityDataBinding.Update("{}");
                 CurrentRenderList.Clear();
-                ClearHighlights();
-            }
-        }
-
-        private void ClearHighlights()
-        {
-            UnityEngine.Debug.Log($"[TrafficSpy] Clearing {highlightedEntities.Count} highlights");
-            foreach (var entity in highlightedEntities)
-            {
-                if (EntityManager.Exists(entity))
-                {
-                    // Remove Highlighted component
-                    if (EntityManager.HasComponent<Highlighted>(entity))
-                    {
-                        EntityManager.RemoveComponent<Highlighted>(entity);
-                    }
-                    // Mark for batch update
-                    if (!EntityManager.HasComponent<BatchesUpdated>(entity))
-                    {
-                        EntityManager.AddComponent<BatchesUpdated>(entity);
-                    }
-                }
-            }
-            highlightedEntities.Clear();
-        }
-
-        private void AddHighlight(Entity entity)
-        {
-            if (!EntityManager.Exists(entity))
-            {
-                UnityEngine.Debug.LogWarning($"[TrafficSpy] Cannot highlight - entity does not exist: {entity.Index}");
-                return;
-            }
-
-            Entity target = entity;
-
-            // If it's a renter (household/company), get the building
-            if (EntityManager.HasComponent<PropertyRenter>(entity))
-            {
-                PropertyRenter renter = EntityManager.GetComponentData<PropertyRenter>(entity);
-                target = renter.m_Property;
-                UnityEngine.Debug.Log($"[TrafficSpy] Resolved renter {entity.Index} to building {target.Index}");
-            }
-
-            if (!EntityManager.Exists(target))
-            {
-                UnityEngine.Debug.LogWarning($"[TrafficSpy] Target entity does not exist: {target.Index}");
-                return;
-            }
-
-            if (!highlightedEntities.Contains(target))
-            {
-                // Add Highlighted component
-                if (!EntityManager.HasComponent<Highlighted>(target))
-                {
-                    EntityManager.AddComponent<Highlighted>(target);
-                }
-
-                // Mark for batch update
-                if (!EntityManager.HasComponent<BatchesUpdated>(target))
-                {
-                    EntityManager.AddComponent<BatchesUpdated>(target);
-                }
-
-                highlightedEntities.Add(target);
-                UnityEngine.Debug.Log($"[TrafficSpy] Highlighted entity: {target.Index}");
+                IsDirty = true; // Signal HighlightSystem to clear visuals
             }
         }
 
         private void RunAnalysis(Entity selectedSegment)
         {
-            UnityEngine.Debug.Log($"[TrafficSpy] Running analysis on segment: {selectedSegment.Index}");
-
             // Initialize counters
             NativeCounter workers = new NativeCounter(Allocator.TempJob);
             NativeCounter students = new NativeCounter(Allocator.TempJob);
@@ -234,7 +161,7 @@ namespace TrafficSpy.Systems
 
             NativeList<TrafficRenderData> results = new NativeList<TrafficRenderData>(Allocator.TempJob);
 
-            // Create and run the job
+            // Setup Job
             SegmentActivityJob job = new SegmentActivityJob
             {
                 selectedSegment = selectedSegment,
@@ -271,24 +198,13 @@ namespace TrafficSpy.Systems
 
             job.Run();
 
-            UnityEngine.Debug.Log($"[TrafficSpy] Job complete. Found {results.Length} entities");
-
-            // Clear old highlights and add new ones
-            ClearHighlights();
-
-            for (int i = 0; i < results.Length; i++)
-            {
-                AddHighlight(results[i].entity);
-            }
-
-            UnityEngine.Debug.Log($"[TrafficSpy] Added {highlightedEntities.Count} highlights");
-
-            // Update render list
+            // Update static render list for the HighlightSystem
             CurrentRenderList.Clear();
             for (int i = 0; i < results.Length; i++)
             {
                 CurrentRenderList.Add(results[i]);
             }
+            IsDirty = true; // Signal HighlightSystem that data has changed
 
             // Build JSON for UI
             int totalOther = other.Count + noPurpose.Count;
@@ -304,12 +220,9 @@ namespace TrafficSpy.Systems
                 ""other"": {totalOther}
             }}";
 
-            // Update the binding
             this.activityDataBinding.Update(json);
 
-            UnityEngine.Debug.Log($"[TrafficSpy] Analysis Complete. Highlights: {highlightedEntities.Count}. Data: {json}");
-
-            // Dispose
+            // Cleanup
             workers.Dispose();
             students.Dispose();
             shoppers.Dispose();
