@@ -2,11 +2,13 @@
 
 TODO
 
-- Highlight destination buildings of delivery/cargo vehicles
+- include more purpose types in summary
 - Determine if we're highlighting destination of peds atm
+    - show counts of vehicles vs peds separately
 - Color-coded destination based on purpose
 - Highlight origin buildings
 - Options to include/exclude peds, delivery, etc
+- ability to select which side of the road to analyze
 
 
 
