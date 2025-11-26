@@ -1,9 +1,12 @@
 using Colossal;
+using Colossal.Entities;
 using Colossal.UI.Binding;
 using Game.Buildings;
 using Game.Citizens;
 using Game.Common;
+using Game.Creatures;
 using Game.Net;
+using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
 using Game.UI.InGame;
@@ -45,10 +48,14 @@ namespace TrafficSpy.Systems
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
 
+        // Toggle between methods here
+        private bool usePathBasedAnalysis = true;
+
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
         public static bool IsDirty = false;
 
         private Entity lastSelectedEntity = Entity.Null;
+        private EntityQuery pathOwnerQuery;
 
         protected override void OnCreate()
         {
@@ -57,6 +64,20 @@ namespace TrafficSpy.Systems
 
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
+
+            this.pathOwnerQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<PathOwner>(),
+                    ComponentType.ReadOnly<PathElement>()
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
+            });
 
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
@@ -119,6 +140,7 @@ namespace TrafficSpy.Systems
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
+                Mod.log.Info($"TrafficSpy: Selection changed to {selected.Index}. Running analysis...");
                 RunAnalysis(selected);
             }
         }
@@ -135,6 +157,21 @@ namespace TrafficSpy.Systems
             }
         }
 
+        private NativeHashSet<Entity> GetTargetEntities(Entity segment, Allocator allocator)
+        {
+            NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
+            targets.Add(segment);
+
+            if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<SubLane> lanes))
+            {
+                for (int i = 0; i < lanes.Length; i++)
+                {
+                    targets.Add(lanes[i].m_SubLane);
+                }
+            }
+            return targets;
+        }
+
         private void RunAnalysis(Entity selectedSegment)
         {
             NativeCounter workers = new NativeCounter(Allocator.TempJob);
@@ -148,53 +185,111 @@ namespace TrafficSpy.Systems
             NativeCounter other = new NativeCounter(Allocator.TempJob);
             NativeCounter noPurpose = new NativeCounter(Allocator.TempJob);
 
-            NativeList<TrafficRenderData> results = new NativeList<TrafficRenderData>(Allocator.TempJob);
-
-            SegmentActivityJob job = new SegmentActivityJob
+            if (usePathBasedAnalysis)
             {
-                selectedSegment = selectedSegment,
+                // === PATH BASED (Global) ===
+                Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
 
-                subLaneLookup = SystemAPI.GetBufferLookup<SubLane>(true),
-                laneObjectLookup = SystemAPI.GetBufferLookup<Game.Net.LaneObject>(true),
-                layoutElementLookup = SystemAPI.GetBufferLookup<Game.Vehicles.LayoutElement>(true),
-                passengerLookup = SystemAPI.GetBufferLookup<Game.Vehicles.Passenger>(true),
+                // Use NativeQueue for variable result size in parallel job
+                NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
+                NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob);
 
-                controllerLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Controller>(true),
-                currentVehicleLookup = SystemAPI.GetComponentLookup<Game.Creatures.CurrentVehicle>(true),
-                travelPurposeLookup = SystemAPI.GetComponentLookup<Game.Citizens.TravelPurpose>(true),
-                targetLookup = SystemAPI.GetComponentLookup<Game.Common.Target>(true),
-                ownerLookup = SystemAPI.GetComponentLookup<Game.Common.Owner>(true),
-                householdMemberLookup = SystemAPI.GetComponentLookup<Game.Citizens.HouseholdMember>(true),
-                workerLookup = SystemAPI.GetComponentLookup<Game.Citizens.Worker>(true),
-                studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
-                creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
-                propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
-                deliveryTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.DeliveryTruck>(true),
-                cargoTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.CargoTransport>(true),
-                publicTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PublicTransport>(true),
-                // Added ComponentLookup for Building to check existence directly
-                buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
+                PathActivityJob pathJob = new PathActivityJob
+                {
+                    targets = targets,
 
-                workers = workers,
-                students = students,
-                shoppers = shoppers,
-                goingHome = goingHome,
-                healthcare = healthcare,
-                cargo = cargo,
-                services = services,
-                publicTransport = publicTransport,
-                other = other,
-                noPurpose = noPurpose,
-                results = results
-            };
+                    travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
+                    targetLookup = SystemAPI.GetComponentLookup<Target>(true),
+                    householdMemberLookup = SystemAPI.GetComponentLookup<HouseholdMember>(true),
+                    workerLookup = SystemAPI.GetComponentLookup<Worker>(true),
+                    studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
+                    creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
+                    propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
+                    ownerLookup = SystemAPI.GetComponentLookup<Owner>(true),
+                    buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
+                    currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
 
-            job.Run();
+                    workers = workers.ToConcurrent(),
+                    students = students.ToConcurrent(),
+                    shoppers = shoppers.ToConcurrent(),
+                    goingHome = goingHome.ToConcurrent(),
+                    healthcare = healthcare.ToConcurrent(),
+                    cargo = cargo.ToConcurrent(),
+                    services = services.ToConcurrent(),
+                    publicTransport = publicTransport.ToConcurrent(),
+                    other = other.ToConcurrent(),
+                    noPurpose = noPurpose.ToConcurrent(),
+                    results = resultsQueue.AsParallelWriter()
+                };
 
-            CurrentRenderList.Clear();
-            for (int i = 0; i < results.Length; i++)
-            {
-                CurrentRenderList.Add(results[i]);
+                pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
+
+                Mod.log.Info($"TrafficSpy: Job Complete. Found {workers.Count} workers, {students.Count} students.");
+
+                // Move results from Queue to List
+                CurrentRenderList.Clear();
+                while (resultsQueue.TryDequeue(out TrafficRenderData item))
+                {
+                    CurrentRenderList.Add(item);
+                }
+
+                targets.Dispose();
+                resultsQueue.Dispose();
             }
+            else
+            {
+                // === SNAPSHOT BASED (Local) ===
+                Mod.log.Info("TrafficSpy: Starting Snapshot Analysis");
+                NativeList<TrafficRenderData> resultsList = new NativeList<TrafficRenderData>(Allocator.TempJob);
+
+                SegmentActivityJob job = new SegmentActivityJob
+                {
+                    selectedSegment = selectedSegment,
+
+                    subLaneLookup = SystemAPI.GetBufferLookup<SubLane>(true),
+                    laneObjectLookup = SystemAPI.GetBufferLookup<Game.Net.LaneObject>(true),
+                    layoutElementLookup = SystemAPI.GetBufferLookup<LayoutElement>(true),
+                    passengerLookup = SystemAPI.GetBufferLookup<Passenger>(true),
+
+                    controllerLookup = SystemAPI.GetComponentLookup<Controller>(true),
+                    currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
+                    travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
+                    targetLookup = SystemAPI.GetComponentLookup<Target>(true),
+                    ownerLookup = SystemAPI.GetComponentLookup<Owner>(true),
+                    householdMemberLookup = SystemAPI.GetComponentLookup<HouseholdMember>(true),
+                    workerLookup = SystemAPI.GetComponentLookup<Worker>(true),
+                    studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
+                    creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
+                    propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
+                    deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
+                    cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
+                    publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
+                    buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
+
+                    workers = workers,
+                    students = students,
+                    shoppers = shoppers,
+                    goingHome = goingHome,
+                    healthcare = healthcare,
+                    cargo = cargo,
+                    services = services,
+                    publicTransport = publicTransport,
+                    other = other,
+                    noPurpose = noPurpose,
+                    results = resultsList
+                };
+
+                job.Run();
+
+                CurrentRenderList.Clear();
+                for (int i = 0; i < resultsList.Length; i++)
+                {
+                    CurrentRenderList.Add(resultsList[i]);
+                }
+                resultsList.Dispose();
+            }
+
+            // Common cleanup and UI update
             IsDirty = true;
 
             int totalOther = other.Count + noPurpose.Count;
@@ -222,7 +317,6 @@ namespace TrafficSpy.Systems
             publicTransport.Dispose();
             other.Dispose();
             noPurpose.Dispose();
-            results.Dispose();
         }
     }
 }

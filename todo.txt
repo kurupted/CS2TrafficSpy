@@ -15,3 +15,101 @@ DONE
 - Highlights destination buildings of citizens
 - show summary of trip purposes in info panel
 
+
+
+===========
+
+
+
+public enum Purpose : byte
+{
+    None,
+    Shopping,
+    Leisure,
+    GoingHome,
+    GoingToWork,
+    Working,
+    Sleeping,
+    Exporting,
+    MovingAway,
+    Studying,
+    GoingToSchool,
+    StorageTransfer,
+    Hospital,
+    Delivery,
+    UpkeepDelivery,
+    Safety,
+    EmergencyShelter,
+    Crime,
+    GoingToJail,
+    GoingToPrison,
+    InJail,
+    InPrison,
+    Collect,
+    Escape,
+    InHospital,
+    Deathcare,
+    InDeathcare,
+    ReturnUnsortedMail,
+    ReturnLocalMail,
+    ReturnOutgoingMail,
+    Traveling,
+    Relaxing,
+    Sightseeing,
+    VisitAttractions,
+    ReturnGarbage,
+    SendMail,
+    Disappear,
+    WaitingHome,
+    PathFailed,
+    InEmergencyShelter,
+    CompanyShopping,
+    Count
+}
+
+
+
+
+
+
+
+public enum Purpose : byte
+{
+    None,
+    Shopping,
+    Leisure,Sleeping,WaitingHome,Relaxing,
+    GoingHome,
+    GoingToWork,Working,
+    
+    MovingAway,
+
+    Studying,
+    GoingToSchool,
+
+      
+    Delivery,Exporting,UpkeepDelivery,StorageTransfer,Collect,CompanyShopping,
+    
+    
+    OTHER --
+    Escape,
+    PathFailed,
+    Disappear,
+    Safety,EmergencyShelter,InEmergencyShelter,
+    Crime,GoingToJail,GoingToPrison,InJail,InPrison,
+    
+    
+    SERVICES --
+    ReturnGarbage,
+    Deathcare,InDeathcare,
+    ReturnUnsortedMail,ReturnLocalMail,ReturnOutgoingMail,SendMail,
+    Hospital,InHospital,
+
+    Traveling,Sightseeing,VisitAttractions,
+    
+    
+    
+    
+    
+    
+    Count
+}
