@@ -13,6 +13,7 @@ using TrafficSpy.Jobs;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using UnityEngine.Diagnostics;
 
 namespace TrafficSpy.Systems
 {
@@ -36,6 +37,8 @@ namespace TrafficSpy.Systems
     {
         private ToolSystem toolSystem;
         private DefaultToolSystem defaultToolSystem;
+
+        // UI Bindings
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
 
@@ -44,7 +47,7 @@ namespace TrafficSpy.Systems
 
         // Static data shared with TrafficHighlightSystem
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
-        public static bool IsDirty = false; // Flag to prevent flickering
+        public static bool IsDirty = false;
 
         private Entity lastSelectedEntity = Entity.Null;
 
@@ -52,21 +55,25 @@ namespace TrafficSpy.Systems
         {
             base.OnCreate();
 
-            // Register as a MIDDLE section in the info panel
+            UnityEngine.Debug.Log("[TrafficSpy] OnCreate START");
+
+            // Register as a middle section
             m_InfoUISystem.AddMiddleSection(this);
 
+            // Get tool systems
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
 
-            // Create bindings
-            this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "segmentActivity", "{}");
+            // Create bindings - this is how we send data to TypeScript!
+            this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
 
-            // Tool toggle trigger
+            // Register trigger for button
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
+                UnityEngine.Debug.Log($"[TrafficSpy] setToolActive: {active}");
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
 
@@ -87,21 +94,17 @@ namespace TrafficSpy.Systems
                     ClearData();
                 }
             }));
+
+            UnityEngine.Debug.Log("[TrafficSpy] TrafficUISystem.OnCreate() completed successfully");
         }
 
-        // CRITICAL: Must match the TypeScript component key
-        //protected override string group => "TrafficSpy.Systems.TrafficUISystem";
+        // CRITICAL: This is just an identifier, NOT data!
+        // It must match the TypeScript registration key
+        protected override string group => "TrafficSpy.Systems.TrafficUISystem";
 
-        // FIX 1: Implement these empty methods to prevent NotImplementedException
         protected override void Reset() { }
         protected override void OnProcess() { }
-        public override void OnWriteProperties(IJsonWriter writer)
-        {
-        }
-
-        // FIX 2: Do NOT override OnWriteProperties (or call base). 
-        // The base InfoSectionBase handles writing the 'group' property needed for the UI to find this system.
-        // removing the override allows the base method to work correctly.
+        public override void OnWriteProperties(IJsonWriter writer) { }
 
         protected bool ShouldBeVisible(Entity entity)
         {
@@ -134,6 +137,7 @@ namespace TrafficSpy.Systems
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
+                UnityEngine.Debug.Log($"[TrafficSpy] Selection changed to: {selected.Index}");
                 RunAnalysis(selected);
             }
         }
@@ -143,14 +147,17 @@ namespace TrafficSpy.Systems
             // Only clear if we actually have data to clear
             if (this.activityDataBinding.value != "{}")
             {
+                UnityEngine.Debug.Log("[TrafficSpy] Clearing data");
                 this.activityDataBinding.Update("{}");
                 CurrentRenderList.Clear();
-                IsDirty = true; // Signal HighlightSystem to clear visuals
+                IsDirty = true;
             }
         }
 
         private void RunAnalysis(Entity selectedSegment)
         {
+            UnityEngine.Debug.Log($"[TrafficSpy] Running analysis on segment: {selectedSegment.Index}");
+
             // Initialize counters
             NativeCounter workers = new NativeCounter(Allocator.TempJob);
             NativeCounter students = new NativeCounter(Allocator.TempJob);
@@ -165,7 +172,7 @@ namespace TrafficSpy.Systems
 
             NativeList<TrafficRenderData> results = new NativeList<TrafficRenderData>(Allocator.TempJob);
 
-            // Setup Job
+            // Setup and run job
             SegmentActivityJob job = new SegmentActivityJob
             {
                 selectedSegment = selectedSegment,
@@ -202,15 +209,17 @@ namespace TrafficSpy.Systems
 
             job.Run();
 
-            // Update static render list for the HighlightSystem
+            UnityEngine.Debug.Log($"[TrafficSpy] Job complete. Found {results.Length} entities");
+
+            // Update static render list for TrafficHighlightSystem
             CurrentRenderList.Clear();
             for (int i = 0; i < results.Length; i++)
             {
                 CurrentRenderList.Add(results[i]);
             }
-            IsDirty = true; // Signal HighlightSystem that data has changed
+            IsDirty = true;
 
-            // Build JSON for UI
+            // Build JSON for UI - THIS is how data gets to TypeScript!
             int totalOther = other.Count + noPurpose.Count;
             string json = $@"{{
                 ""workers"": {workers.Count},
@@ -224,7 +233,10 @@ namespace TrafficSpy.Systems
                 ""other"": {totalOther}
             }}";
 
+            // Update the binding - this sends the data to TypeScript
             this.activityDataBinding.Update(json);
+
+            UnityEngine.Debug.Log($"[TrafficSpy] Analysis Complete. Data: {json}");
 
             // Cleanup
             workers.Dispose();
@@ -238,32 +250,6 @@ namespace TrafficSpy.Systems
             other.Dispose();
             noPurpose.Dispose();
             results.Dispose();
-        }
-
-
-        protected override string group
-        {
-            get
-            {
-                string json = $@"{{
-                    ""workers"": {1},
-                    ""students"": {2},
-                    ""shoppers"": {3},
-                    ""goingHome"": {4}
-                }}";
-                return json;
-
-                //if (this.commutingEntities.IsCreated)
-                //{
-                string rowName = "";
-                    rowName = "Cims Passing Through Road";
-                    return rowName + "," + 1234;
-                /*}
-                else
-                {
-                    return "";
-                }*/
-            }
         }
     }
 }

@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import styles from "./activity.module.scss"; 
-import { segmentActivity } from "./bindings";
+import { activityData } from "./bindings";
 import { SegmentActivity } from "./types";
 
 interface ActivitySectionProps {
@@ -25,7 +25,7 @@ export class ActivitySection extends Component<ActivitySectionProps> {
     private unsubscribe: (() => void) | undefined;
 
     componentDidMount() {
-        const subscription = segmentActivity.subscribe((jsonString: string) => {
+        const subscription = activityData.subscribe((jsonString: string) => {
             try {
                 const parsed = JSON.parse(jsonString || "{}");
                 this.setState({ data: { ...this.state.data, ...parsed } });
