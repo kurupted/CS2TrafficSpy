@@ -6,7 +6,6 @@ using Game.Net;
 using Game.Pathfind;
 using Game.Vehicles;
 using Game.Buildings;
-using Game.Companies;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -25,30 +24,32 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public BufferLookup<Game.Net.LaneObject> laneObjectLookup;
         [ReadOnly] public BufferLookup<LayoutElement> layoutElementLookup;
         [ReadOnly] public BufferLookup<Passenger> passengerLookup;
+
         [ReadOnly] public ComponentLookup<Controller> controllerLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<Target> targetLookup;
-        [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
         [ReadOnly] public ComponentLookup<Worker> workerLookup;
         [ReadOnly] public ComponentLookup<Game.Citizens.Student> studentLookup;
         [ReadOnly] public ComponentLookup<Game.Creatures.Resident> creatureResidentLookup;
         [ReadOnly] public ComponentLookup<PropertyRenter> propertyRenterLookup;
-        [ReadOnly] public ComponentLookup<Game.Vehicles.DeliveryTruck> deliveryTruckLookup;
-        [ReadOnly] public ComponentLookup<Game.Vehicles.CargoTransport> cargoTransportLookup;
-        [ReadOnly] public ComponentLookup<Game.Vehicles.PublicTransport> publicTransportLookup;
+        [ReadOnly] public ComponentLookup<Owner> ownerLookup;
+        [ReadOnly] public ComponentLookup<Building> buildingLookup;
+        [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
+        [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
+        [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
 
         public NativeCounter workers;
         public NativeCounter students;
         public NativeCounter shoppers;
         public NativeCounter goingHome;
         public NativeCounter healthcare;
+        public NativeCounter other;
+        public NativeCounter noPurpose;
         public NativeCounter cargo;
         public NativeCounter services;
         public NativeCounter publicTransport;
-        public NativeCounter other;
-        public NativeCounter noPurpose;
 
         public NativeList<TrafficRenderData> results;
 
@@ -64,122 +65,70 @@ namespace TrafficSpy.Jobs
                 {
                     DynamicBuffer<Game.Net.LaneObject> laneObjects = laneObjectLookup[laneEntity];
                     for (int j = 0; j < laneObjects.Length; j++)
-                        ProcessLaneObject(laneObjects[j].m_LaneObject);
+                        ProcessRootEntity(laneObjects[j].m_LaneObject);
                 }
             }
         }
 
-        private void ProcessLaneObject(Entity entity)
+        private void ProcessRootEntity(Entity entity)
         {
-            // 1. CARGO
-            if (deliveryTruckLookup.HasComponent(entity) || cargoTransportLookup.HasComponent(entity))
+            if (controllerLookup.HasComponent(entity))
             {
-                cargo.Increment();
-                AnalyzeVehicleData(entity, TrafficType.Cargo);
-                return;
+                if (layoutElementLookup.HasBuffer(entity))
+                {
+                    DynamicBuffer<LayoutElement> elements = layoutElementLookup[entity];
+                    for (int k = 0; k < elements.Length; k++)
+                        ProcessVehicle(elements[k].m_Vehicle);
+                }
             }
-
-            // 2. PUBLIC TRANSPORT
-            if (publicTransportLookup.HasComponent(entity))
+            else if (passengerLookup.HasBuffer(entity))
             {
-                publicTransport.Increment();
-                AnalyzeVehicleData(entity, TrafficType.PublicTransport);
-                return;
+                ProcessVehicle(entity);
             }
-
-            // 3. SERVICE VEHICLES
-            if (controllerLookup.HasComponent(entity) && targetLookup.HasComponent(entity))
+            else
             {
-                if (CheckPassengers(entity)) return; // It's a private car with passengers
-
-                services.Increment();
-                AnalyzeVehicleData(entity, TrafficType.Service);
-                return;
-            }
-
-            // 4. PRIVATE CARS
-            if (CheckPassengers(entity)) return;
-
-            // 5. PEDESTRIANS
-            if (!controllerLookup.HasComponent(entity))
-            {
-                AnalyzeCitizen(entity);
+                AnalyzeEntity(entity);
             }
         }
 
-        private bool CheckPassengers(Entity rootEntity)
+        private void ProcessVehicle(Entity vehicleEntity)
         {
-            bool found = false;
-            if (passengerLookup.HasBuffer(rootEntity))
-            {
-                found |= ProcessPassengerBuffer(rootEntity);
-            }
+            if (!passengerLookup.HasBuffer(vehicleEntity)) return;
 
-            if (layoutElementLookup.HasBuffer(rootEntity))
+            DynamicBuffer<Passenger> passengers = passengerLookup[vehicleEntity];
+            for (int i = 0; i < passengers.Length; i++)
             {
-                DynamicBuffer<LayoutElement> elements = layoutElementLookup[rootEntity];
-                for (int k = 0; k < elements.Length; k++)
-                {
-                    Entity vehiclePart = elements[k].m_Vehicle;
-                    if (passengerLookup.HasBuffer(vehiclePart))
-                    {
-                        found |= ProcessPassengerBuffer(vehiclePart);
-                    }
-                }
+                AnalyzeEntity(passengers[i].m_Passenger);
             }
-            return found;
         }
 
-        private bool ProcessPassengerBuffer(Entity vehicle)
+        // This climbs up from a "Parking Spot" or "Renter" to find the actual Building
+        private Entity ResolvePhysicalEntity(Entity target)
         {
-            DynamicBuffer<Passenger> passengers = passengerLookup[vehicle];
-            if (passengers.Length > 0)
+            if (target == Entity.Null) return Entity.Null;
+
+            Entity current = target;
+
+            // 1. If it's a Renter (Company/Household), the physical location is the Property
+            if (propertyRenterLookup.TryGetComponent(current, out PropertyRenter renter))
             {
-                for (int i = 0; i < passengers.Length; i++)
-                {
-                    AnalyzeCitizen(passengers[i].m_Passenger);
-                }
-                return true;
+                current = renter.m_Property;
             }
-            return false;
+
+            // 2. If it's a Sub-object (like a parking spot), check the Owner
+            if (ownerLookup.TryGetComponent(current, out Owner owner))
+            {
+                // Only replace 'current' if the owner is actually a Building
+                if (buildingLookup.HasComponent(owner.m_Owner))
+                {
+                    current = owner.m_Owner;
+                }
+            }
+
+            return current;
         }
 
-        private void AnalyzeVehicleData(Entity vehicleEntity, TrafficType type)
-        {
-            // ORIGIN (Owner)
-            if (ownerLookup.TryGetComponent(vehicleEntity, out Owner owner))
-            {
-                Entity origin = ResolvePhysicalEntity(owner.m_Owner);
-                if (origin != Entity.Null)
-                {
-                    results.Add(new TrafficRenderData
-                    {
-                        entity = origin,
-                        purpose = Purpose.None,
-                        type = type,
-                        isOrigin = true
-                    });
-                }
-            }
-
-            // DESTINATION (Target)
-            if (targetLookup.TryGetComponent(vehicleEntity, out Target target))
-            {
-                Entity dest = ResolvePhysicalEntity(target.m_Target);
-                if (dest != Entity.Null)
-                {
-                    results.Add(new TrafficRenderData
-                    {
-                        entity = dest,
-                        purpose = Purpose.None,
-                        type = type,
-                        isOrigin = false
-                    });
-                }
-            }
-        }
-
-        private void AnalyzeCitizen(Entity entity)
+        private void AnalyzeEntity(Entity entity)
         {
             Entity citizenEntity = entity;
             if (creatureResidentLookup.TryGetComponent(entity, out Game.Creatures.Resident resident))
@@ -224,13 +173,10 @@ namespace TrafficSpy.Jobs
                 if (originEntity != Entity.Null)
                 {
                     Entity physicalOrigin = ResolvePhysicalEntity(originEntity);
-                    results.Add(new TrafficRenderData
+                    if (physicalOrigin != Entity.Null)
                     {
-                        entity = physicalOrigin,
-                        purpose = currentPurpose,
-                        type = TrafficType.Citizen,
-                        isOrigin = true
-                    });
+                        results.Add(new TrafficRenderData { entity = physicalOrigin, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = true });
+                    }
                 }
             }
             else
@@ -238,6 +184,7 @@ namespace TrafficSpy.Jobs
                 noPurpose.Increment();
             }
 
+            // Determine Destination
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
             {
@@ -254,28 +201,12 @@ namespace TrafficSpy.Jobs
             if (rawDest != Entity.Null)
             {
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);
-                results.Add(new TrafficRenderData
+                // Don't highlight the road segment itself
+                if (physicalDest != Entity.Null && physicalDest != selectedSegment)
                 {
-                    entity = physicalDest,
-                    purpose = currentPurpose,
-                    type = TrafficType.Citizen,
-                    isOrigin = false
-                });
+                    results.Add(new TrafficRenderData { entity = physicalDest, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = false });
+                }
             }
-        }
-
-        private Entity ResolvePhysicalEntity(Entity target)
-        {
-            // If target is a Renter (Company/Household), get the Property (Building)
-            if (propertyRenterLookup.TryGetComponent(target, out PropertyRenter renter))
-            {
-                return renter.m_Property;
-            }
-
-            // If target is a Vehicle or Citizen, we might want to find their current location, 
-            // but usually for TrafficSpy we care about static buildings. 
-            // If the target IS a building, it won't have PropertyRenter, so we return target itself.
-            return target;
         }
     }
 }
