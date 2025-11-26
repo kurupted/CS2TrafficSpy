@@ -2,8 +2,9 @@ import { getModule } from "cs2/modding";
 import { Theme } from "cs2/bindings";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
 import { activityData } from "./bindings"; // This is your data binding!
-import { useValue } from "cs2/api"; //
+import { useValue } from "cs2/api";
 import { useMemo } from "react";
+import { SegmentActivity } from "./types";
 
 interface InfoSectionComponent {
     group: string;
@@ -32,10 +33,10 @@ const InfoRow: any = getModule(
     "InfoRow"
 );
 
-/*const SectionTitle: any = getModule(
+const SectionTitle: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/section-title/section-title.tsx",
     "SectionTitle"
-);*/
+);
 
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
 
@@ -54,49 +55,64 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         );
     };
     
-
-    // Register component - key MUST match C# group property
+    // Register component
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
 
         const jsonString = useValue(activityData);
-        // Parse the JSON only when the string changes
-        const data = useMemo(() => {
+        const data: SegmentActivity = useMemo(() => {
             try {
                 if (!jsonString || jsonString === "{}") {
-                    return { workers: 0, students: 0, /* ... zeros ... */ };
+                    return { 
+                        none: 0, shopping: 0, leisure: 0, goingHome: 0, 
+                        goingToWork: 0, movingAway: 0, school: 0, delivery: 0, 
+                        tourism: 0, other: 0, services: 0 
+                    };
                 }
                 return JSON.parse(jsonString);
             } catch (e) {
                 console.error("Parse error", e);
-                return { workers: 0, students: 0, /* ... zeros ... */ };
+                return { 
+                    none: 0, shopping: 0, leisure: 0, goingHome: 0, 
+                    goingToWork: 0, movingAway: 0, school: 0, delivery: 0, 
+                    tourism: 0, other: 0, services: 0 
+                };
             }
         }, [jsonString]);
         
+        // Calculate Total
+        const total = (data.none || 0) + (data.shopping || 0) + (data.leisure || 0) +
+                      (data.goingHome || 0) + (data.goingToWork || 0) + (data.movingAway || 0) +
+                      (data.school || 0) + (data.delivery || 0) + (data.tourism || 0) +
+                      (data.other || 0) + (data.services || 0);
 
-        // Calculate total
-        /*const total = (data.workers || 0) + (data.students || 0) + (data.shoppers || 0) + 
-                      (data.goingHome || 0) + (data.healthcare || 0) + 
-                      (data.cargo || 0) + (data.services || 0) + 
-                      (data.publicTransport || 0) + (data.other || 0);
-                      */
-
-        // Return the UI            {SectionTitle && <SectionTitle title={`TRAFFIC SPY (${total})`} />}
         return (
             <InfoSection 
                 focusKey={VanillaComponentResolver.instance.FOCUS_DISABLED} 
                 disableFocus={true} 
                 className={InfoSectionTheme?.infoSection}
             >
+                {SectionTitle && <SectionTitle title={`TRAFFIC SPY (${total})`} />}
+
+                <InfoRow 
+                    left="TOTAL ACTIVITY" 
+                    right={total.toString()} 
+                    uppercase={true} 
+                    disableFocus={true}
+                    subRow={false}
+                    className={InfoRowTheme?.infoRow} 
+                />
                 
-                {renderRow("Commuting to Work", data.workers)}
-                {renderRow("Commuting to School", data.students)}
+                {renderRow("Going to Work", data.goingToWork)}
+                {renderRow("Going to School", data.school)}
                 {renderRow("Returning Home", data.goingHome)}
-                {renderRow("Shopping / Leisure", data.shoppers)}
-                {renderRow("Healthcare", data.healthcare)}
-                {renderRow("Cargo / Delivery", data.cargo)}
-                {renderRow("Public Transport", data.publicTransport)}
-                {renderRow("City Services", data.services)}
+                {renderRow("Shopping", data.shopping)}
+                {renderRow("Leisure", data.leisure)}
+                {renderRow("Delivery / Commercial", data.delivery)}
+                {renderRow("Services", data.services)}
+                {renderRow("Tourism", data.tourism)}
+                {renderRow("Moving Away", data.movingAway)}
                 {renderRow("Other", data.other)}
+                {renderRow("None / Unknown", data.none)}
             </InfoSection>
         );
     };

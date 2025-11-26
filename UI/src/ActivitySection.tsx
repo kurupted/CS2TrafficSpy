@@ -10,15 +10,17 @@ interface ActivitySectionProps {
 export class ActivitySection extends Component<ActivitySectionProps> {
     state = {
         data: { 
-            workers: 0, 
-            students: 0, 
-            shoppers: 0, 
+            none: 0, 
+            shopping: 0, 
+            leisure: 0, 
             goingHome: 0, 
-            healthcare: 0, 
-            cargo: 0, 
-            services: 0, 
-            publicTransport: 0,
-            other: 0 
+            goingToWork: 0, 
+            movingAway: 0, 
+            school: 0, 
+            delivery: 0, 
+            tourism: 0, 
+            other: 0, 
+            services: 0 
         } as SegmentActivity
     };
 
@@ -40,25 +42,27 @@ export class ActivitySection extends Component<ActivitySectionProps> {
 
     render() {
         const { data } = this.state;
-        const total = (data.workers || 0) + (data.students || 0) + (data.shoppers || 0) + 
-                      (data.goingHome || 0) + (data.healthcare || 0) + 
-                      (data.cargo || 0) + (data.services || 0) + 
-                      (data.publicTransport || 0) + (data.other || 0);
+        const total = (data.none || 0) + (data.shopping || 0) + (data.leisure || 0) + 
+                      (data.goingHome || 0) + (data.goingToWork || 0) + (data.movingAway || 0) + 
+                      (data.school || 0) + (data.delivery || 0) + (data.tourism || 0) + 
+                      (data.other || 0) + (data.services || 0);
 
         if (total === 0) return null;
 
         return (
             <div className={styles.activityPanel}>
                 <div className={styles.title}>TRAFFIC ACTIVITY ({total})</div>
-                {data.workers > 0 && <div className={styles.row}><span>Commuting to Work</span> <span className={styles.count}>{data.workers}</span></div>}
-                {data.students > 0 && <div className={styles.row}><span>Commuting to School</span> <span className={styles.count}>{data.students}</span></div>}
+                {data.goingToWork > 0 && <div className={styles.row}><span>Commuting to Work</span> <span className={styles.count}>{data.goingToWork}</span></div>}
+                {data.school > 0 && <div className={styles.row}><span>Commuting to School</span> <span className={styles.count}>{data.school}</span></div>}
                 {data.goingHome > 0 && <div className={styles.row}><span>Returning Home</span> <span className={styles.count}>{data.goingHome}</span></div>}
-                {data.shoppers > 0 && <div className={styles.row}><span>Shopping / Leisure</span> <span className={styles.count}>{data.shoppers}</span></div>}
-                {data.healthcare > 0 && <div className={styles.row}><span>Healthcare</span> <span className={styles.count}>{data.healthcare}</span></div>}
-                {data.cargo > 0 && <div className={styles.row}><span>Cargo / Delivery</span> <span className={styles.count}>{data.cargo}</span></div>}
-                {data.publicTransport > 0 && <div className={styles.row}><span>Public Transport</span> <span className={styles.count}>{data.publicTransport}</span></div>}
-                {data.services > 0 && <div className={styles.row}><span>City Services</span> <span className={styles.count}>{data.services}</span></div>}
+                {data.shopping > 0 && <div className={styles.row}><span>Shopping</span> <span className={styles.count}>{data.shopping}</span></div>}
+                {data.leisure > 0 && <div className={styles.row}><span>Leisure / Relaxing</span> <span className={styles.count}>{data.leisure}</span></div>}
+                {data.delivery > 0 && <div className={styles.row}><span>Delivery / Commercial</span> <span className={styles.count}>{data.delivery}</span></div>}
+                {data.services > 0 && <div className={styles.row}><span>Services / Healthcare</span> <span className={styles.count}>{data.services}</span></div>}
+                {data.tourism > 0 && <div className={styles.row}><span>Tourism</span> <span className={styles.count}>{data.tourism}</span></div>}
+                {data.movingAway > 0 && <div className={styles.row}><span>Moving Away</span> <span className={styles.count}>{data.movingAway}</span></div>}
                 {data.other > 0 && <div className={styles.row}><span>Other</span> <span className={styles.count}>{data.other}</span></div>}
+                {data.none > 0 && <div className={styles.row}><span>None / Unknown</span> <span className={styles.count}>{data.none}</span></div>}
             </div>
         );
     }

@@ -174,16 +174,18 @@ namespace TrafficSpy.Systems
 
         private void RunAnalysis(Entity selectedSegment)
         {
-            NativeCounter workers = new NativeCounter(Allocator.TempJob);
-            NativeCounter students = new NativeCounter(Allocator.TempJob);
-            NativeCounter shoppers = new NativeCounter(Allocator.TempJob);
-            NativeCounter goingHome = new NativeCounter(Allocator.TempJob);
-            NativeCounter healthcare = new NativeCounter(Allocator.TempJob);
-            NativeCounter cargo = new NativeCounter(Allocator.TempJob);
-            NativeCounter services = new NativeCounter(Allocator.TempJob);
-            NativeCounter publicTransport = new NativeCounter(Allocator.TempJob);
-            NativeCounter other = new NativeCounter(Allocator.TempJob);
-            NativeCounter noPurpose = new NativeCounter(Allocator.TempJob);
+            // Initialize new counters
+            NativeCounter cntNone = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntShopping = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntLeisure = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntGoingHome = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntGoingToWork = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntMovingAway = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntSchool = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntDelivery = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntTourism = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntOther = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntServices = new NativeCounter(Allocator.TempJob);
 
             if (usePathBasedAnalysis)
             {
@@ -209,23 +211,25 @@ namespace TrafficSpy.Systems
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
                     currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
 
-                    workers = workers.ToConcurrent(),
-                    students = students.ToConcurrent(),
-                    shoppers = shoppers.ToConcurrent(),
-                    goingHome = goingHome.ToConcurrent(),
-                    healthcare = healthcare.ToConcurrent(),
-                    cargo = cargo.ToConcurrent(),
-                    services = services.ToConcurrent(),
-                    publicTransport = publicTransport.ToConcurrent(),
-                    other = other.ToConcurrent(),
-                    noPurpose = noPurpose.ToConcurrent(),
+                    // Concurrent counters
+                    cntNone = cntNone.ToConcurrent(),
+                    cntShopping = cntShopping.ToConcurrent(),
+                    cntLeisure = cntLeisure.ToConcurrent(),
+                    cntGoingHome = cntGoingHome.ToConcurrent(),
+                    cntGoingToWork = cntGoingToWork.ToConcurrent(),
+                    cntMovingAway = cntMovingAway.ToConcurrent(),
+                    cntSchool = cntSchool.ToConcurrent(),
+                    cntDelivery = cntDelivery.ToConcurrent(),
+                    cntTourism = cntTourism.ToConcurrent(),
+                    cntOther = cntOther.ToConcurrent(),
+                    cntServices = cntServices.ToConcurrent(),
+
                     results = resultsQueue.AsParallelWriter()
                 };
 
                 pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
 
-                Mod.log.Info($"TrafficSpy: Job Complete. Found {workers.Count} workers, {students.Count} students.");
-
+                Mod.log.Info($"TrafficSpy: Job Complete.");
                 // Move results from Queue to List
                 CurrentRenderList.Clear();
                 while (resultsQueue.TryDequeue(out TrafficRenderData item))
@@ -266,16 +270,19 @@ namespace TrafficSpy.Systems
                     publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
 
-                    workers = workers,
-                    students = students,
-                    shoppers = shoppers,
-                    goingHome = goingHome,
-                    healthcare = healthcare,
-                    cargo = cargo,
-                    services = services,
-                    publicTransport = publicTransport,
-                    other = other,
-                    noPurpose = noPurpose,
+                    // Standard counters
+                    cntNone = cntNone,
+                    cntShopping = cntShopping,
+                    cntLeisure = cntLeisure,
+                    cntGoingHome = cntGoingHome,
+                    cntGoingToWork = cntGoingToWork,
+                    cntMovingAway = cntMovingAway,
+                    cntSchool = cntSchool,
+                    cntDelivery = cntDelivery,
+                    cntTourism = cntTourism,
+                    cntOther = cntOther,
+                    cntServices = cntServices,
+
                     results = resultsList
                 };
 
@@ -292,31 +299,35 @@ namespace TrafficSpy.Systems
             // Common cleanup and UI update
             IsDirty = true;
 
-            int totalOther = other.Count + noPurpose.Count;
+            // Construct updated JSON
             string json = $@"{{
-                ""workers"": {workers.Count},
-                ""students"": {students.Count},
-                ""shoppers"": {shoppers.Count},
-                ""goingHome"": {goingHome.Count},
-                ""healthcare"": {healthcare.Count},
-                ""cargo"": {cargo.Count},
-                ""services"": {services.Count},
-                ""publicTransport"": {publicTransport.Count},
-                ""other"": {totalOther}
+                ""none"": {cntNone.Count},
+                ""shopping"": {cntShopping.Count},
+                ""leisure"": {cntLeisure.Count},
+                ""goingHome"": {cntGoingHome.Count},
+                ""goingToWork"": {cntGoingToWork.Count},
+                ""movingAway"": {cntMovingAway.Count},
+                ""school"": {cntSchool.Count},
+                ""delivery"": {cntDelivery.Count},
+                ""tourism"": {cntTourism.Count},
+                ""other"": {cntOther.Count},
+                ""services"": {cntServices.Count}
             }}";
 
             this.activityDataBinding.Update(json);
 
-            workers.Dispose();
-            students.Dispose();
-            shoppers.Dispose();
-            goingHome.Dispose();
-            healthcare.Dispose();
-            cargo.Dispose();
-            services.Dispose();
-            publicTransport.Dispose();
-            other.Dispose();
-            noPurpose.Dispose();
+            // Dispose counters
+            cntNone.Dispose();
+            cntShopping.Dispose();
+            cntLeisure.Dispose();
+            cntGoingHome.Dispose();
+            cntGoingToWork.Dispose();
+            cntMovingAway.Dispose();
+            cntSchool.Dispose();
+            cntDelivery.Dispose();
+            cntTourism.Dispose();
+            cntOther.Dispose();
+            cntServices.Dispose();
         }
     }
 }

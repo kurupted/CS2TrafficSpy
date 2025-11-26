@@ -82,14 +82,10 @@ public enum Purpose : byte
     Leisure,Sleeping,WaitingHome,Relaxing,
     GoingHome,
     GoingToWork,Working,
-    
     MovingAway,
-
-    Studying,
-    GoingToSchool,
-
-      
+    Studying,GoingToSchool,
     Delivery,Exporting,UpkeepDelivery,StorageTransfer,Collect,CompanyShopping,
+    Traveling,Sightseeing,VisitAttractions,
     
     
     OTHER --
@@ -106,12 +102,105 @@ public enum Purpose : byte
     ReturnUnsortedMail,ReturnLocalMail,ReturnOutgoingMail,SendMail,
     Hospital,InHospital,
 
-    Traveling,Sightseeing,VisitAttractions,
     
     
     
+
+    	case Purpose.GoingHome:
+		{
+			if (this.householdMemberLookup.TryGetComponent(residents[i].m_Citizen, out var householdMember) &&
+				this.householdLookup.TryGetComponent(householdMember.m_Household, out var household) &&
+				(household.m_Flags & HouseholdFlags.MovedIn) == 0)
+			{
+				++movingInCount;
+			}
+			else
+			{
+				++goingHomeCount;
+			}
+		}
+		break;
     
-    
-    
-    Count
-}
+
+
+
+
+
+
+
+
+
+
+
+    	Target target = targets[i];
+		bool isExactTarget = target.m_Target == this.searchTarget ||
+			(this.hasTarget2 && target.m_Target == this.searchTarget2);
+
+		bool isPassingThrough = false;
+		if (!isExactTarget)
+		{
+			if (checkPaths)
+			{
+				DynamicBuffer<PathElement> path = entityPaths[i];
+				for (int pathIndex = pathOwners[i].m_ElementIndex; pathIndex < path.Length; ++pathIndex)
+				{
+					if (this.pathTargets.Contains(path[pathIndex].m_Target))
+					{
+						isPassingThrough = true;
+						break;
+					}
+				}
+			}
+			if (checkVehicle && checkPaths && this.pathLookup.TryGetBuffer(currentVehicles[i].m_Vehicle, out var vehiclePath) && this.pathOwnerLookup.TryGetComponent(currentVehicles[i].m_Vehicle, out var vehiclePathOwner))
+			{
+				for (int pathIndex = vehiclePathOwner.m_ElementIndex; pathIndex < vehiclePath.Length; ++pathIndex)
+				{
+					if (this.pathTargets.Contains(vehiclePath[pathIndex].m_Target))
+					{
+						isPassingThrough = true;
+						break;
+					}
+				}
+			}
+		}
+    	if (isExactTarget || isPassingThrough)
+		{
+			bool shouldCount = true;
+			if (hasResident) 
+			{
+				if ((residents[i].m_Flags & ResidentFlags.Arrived) == 0)
+				{
+					if ((residents[i].m_Flags & ResidentFlags.InVehicle) > 0)
+					{
+						++inVehicleCount;
+						if (checkVehicle && this.publicTransportLookup.HasComponent(currentVehicles[i].m_Vehicle))
+						{
+							++inPublicTransportCount;
+						}
+					}
+					else if ((residents[i].m_Flags & ResidentFlags.WaitingTransport) > 0)
+					{
+						++waitingTransportCount;
+					}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    ===================
+
+
+
+Game.Vehicles 	PersonalCar 	Properties of a personally owned car (i.e. not a taxi, police car, etc.). 	unmanaged 	m_Keeper 	Entity 	Reference to the "citizen" entity who is owning the car.
+m_State 	PersonalCarFlags 	Status flags like Transporting, Boarding, Disembarking, DummyTraffic, HomeTarget. 
+
+

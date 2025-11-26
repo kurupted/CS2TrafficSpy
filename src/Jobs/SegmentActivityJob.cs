@@ -40,16 +40,18 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
         [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
 
-        public NativeCounter workers;
-        public NativeCounter students;
-        public NativeCounter shoppers;
-        public NativeCounter goingHome;
-        public NativeCounter healthcare;
-        public NativeCounter other;
-        public NativeCounter noPurpose;
-        public NativeCounter cargo;
-        public NativeCounter services;
-        public NativeCounter publicTransport;
+        // Updated Counters
+        public NativeCounter cntNone;
+        public NativeCounter cntShopping;
+        public NativeCounter cntLeisure;
+        public NativeCounter cntGoingHome;
+        public NativeCounter cntGoingToWork;
+        public NativeCounter cntMovingAway;
+        public NativeCounter cntSchool;
+        public NativeCounter cntDelivery;
+        public NativeCounter cntTourism;
+        public NativeCounter cntOther;
+        public NativeCounter cntServices;
 
         public NativeList<TrafficRenderData> results;
 
@@ -106,25 +108,15 @@ namespace TrafficSpy.Jobs
         private Entity ResolvePhysicalEntity(Entity target)
         {
             if (target == Entity.Null) return Entity.Null;
-
             Entity current = target;
-
             // 1. If it's a Renter (Company/Household), the physical location is the Property
             if (propertyRenterLookup.TryGetComponent(current, out PropertyRenter renter))
-            {
                 current = renter.m_Property;
-            }
-
             // 2. If it's a Sub-object (like a parking spot), check the Owner
             if (ownerLookup.TryGetComponent(current, out Owner owner))
-            {
                 // Only replace 'current' if the owner is actually a Building
                 if (buildingLookup.HasComponent(owner.m_Owner))
-                {
                     current = owner.m_Owner;
-                }
-            }
-
             return current;
         }
 
@@ -143,17 +135,55 @@ namespace TrafficSpy.Jobs
                 currentPurpose = purpose.m_Purpose;
                 switch (currentPurpose)
                 {
+                    case Purpose.None: cntNone.Increment(); break;
+                    case Purpose.Shopping: cntShopping.Increment(); break;
+                    case Purpose.Leisure:
+                    case Purpose.Sleeping:
+                    case Purpose.WaitingHome:
+                    case Purpose.Relaxing:
+                        cntLeisure.Increment(); break;
+                    case Purpose.GoingHome: cntGoingHome.Increment(); break;
                     case Purpose.GoingToWork:
-                    case Purpose.Working: workers.Increment(); break;
+                    case Purpose.Working:
+                        cntGoingToWork.Increment(); break;
+                    case Purpose.MovingAway: cntMovingAway.Increment(); break;
                     case Purpose.GoingToSchool:
-                    case Purpose.Studying: students.Increment(); break;
-                    case Purpose.GoingHome: goingHome.Increment(); break;
-                    case Purpose.Shopping:
+                    case Purpose.Studying:
+                        cntSchool.Increment(); break;
+                    case Purpose.Delivery:
+                    case Purpose.Exporting:
+                    case Purpose.UpkeepDelivery:
+                    case Purpose.StorageTransfer:
+                    case Purpose.Collect:
+                    case Purpose.CompanyShopping:
+                        cntDelivery.Increment(); break;
+                    case Purpose.Sightseeing:
+                    case Purpose.Traveling:
                     case Purpose.VisitAttractions:
-                    case Purpose.Leisure: shoppers.Increment(); break;
+                        cntTourism.Increment(); break;
+                    case Purpose.ReturnGarbage:
+                    case Purpose.Deathcare:
+                    case Purpose.InDeathcare:
+                    case Purpose.ReturnUnsortedMail:
+                    case Purpose.ReturnLocalMail:
+                    case Purpose.ReturnOutgoingMail:
+                    case Purpose.SendMail:
                     case Purpose.Hospital:
-                    case Purpose.InHospital: healthcare.Increment(); break;
-                    default: other.Increment(); break;
+                    case Purpose.InHospital:
+                        cntServices.Increment(); break;
+                    case Purpose.Escape:
+                    case Purpose.PathFailed:
+                    case Purpose.Disappear:
+                    case Purpose.Safety:
+                    case Purpose.EmergencyShelter:
+                    case Purpose.InEmergencyShelter:
+                    case Purpose.Crime:
+                    case Purpose.GoingToJail:
+                    case Purpose.GoingToPrison:
+                    case Purpose.InJail:
+                    case Purpose.InPrison:
+                    default:
+                        cntOther.Increment(); break;
                 }
 
                 Entity originEntity = Entity.Null;
@@ -181,22 +211,16 @@ namespace TrafficSpy.Jobs
             }
             else
             {
-                noPurpose.Increment();
+                cntNone.Increment();
             }
 
             // Determine Destination
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
-            {
                 rawDest = dest.m_Target;
-            }
             else if (currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef))
-            {
                 if (targetLookup.TryGetComponent(vehicleRef.m_Vehicle, out Target vehicleDest))
-                {
                     rawDest = vehicleDest.m_Target;
-                }
-            }
 
             if (rawDest != Entity.Null)
             {

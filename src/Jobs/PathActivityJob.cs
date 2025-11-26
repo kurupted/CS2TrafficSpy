@@ -29,26 +29,25 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
 
-        // Concurrent counters for thread safety
-        public NativeCounter.Concurrent workers;
-        public NativeCounter.Concurrent students;
-        public NativeCounter.Concurrent shoppers;
-        public NativeCounter.Concurrent goingHome;
-        public NativeCounter.Concurrent healthcare;
-        public NativeCounter.Concurrent other;
-        public NativeCounter.Concurrent noPurpose;
-        public NativeCounter.Concurrent cargo;
-        public NativeCounter.Concurrent services;
-        public NativeCounter.Concurrent publicTransport;
+        // Updated Counters
+        public NativeCounter.Concurrent cntNone;
+        public NativeCounter.Concurrent cntShopping;
+        public NativeCounter.Concurrent cntLeisure;
+        public NativeCounter.Concurrent cntGoingHome;
+        public NativeCounter.Concurrent cntGoingToWork;
+        public NativeCounter.Concurrent cntMovingAway;
+        public NativeCounter.Concurrent cntSchool;
+        public NativeCounter.Concurrent cntDelivery;
+        public NativeCounter.Concurrent cntTourism;
+        public NativeCounter.Concurrent cntOther;
+        public NativeCounter.Concurrent cntServices;
 
-        // FIXED: Use NativeQueue for thread-safe dynamic insertion
         public NativeQueue<TrafficRenderData>.ParallelWriter results;
 
         public void Execute(Entity entity, DynamicBuffer<PathElement> path)
         {
             // 1. Check if this entity's path intersects with our target road/lanes
             bool passesThrough = false;
-
             for (int i = 0; i < path.Length; i++)
             {
                 if (targets.Contains(path[i].m_Target))
@@ -77,22 +76,87 @@ namespace TrafficSpy.Jobs
             if (travelPurposeLookup.TryGetComponent(citizenEntity, out TravelPurpose purpose))
             {
                 currentPurpose = purpose.m_Purpose;
+
+                // Updated Switch Statement based on your groups
                 switch (currentPurpose)
                 {
-                    case Purpose.GoingToWork:
-                    case Purpose.Working: workers.Increment(); break;
-                    case Purpose.GoingToSchool:
-                    case Purpose.Studying: students.Increment(); break;
-                    case Purpose.GoingHome: goingHome.Increment(); break;
+                    case Purpose.None:
+                        cntNone.Increment();
+                        break;
+
                     case Purpose.Shopping:
+                        cntShopping.Increment();
+                        break;
+
+                    case Purpose.Leisure:
+                    case Purpose.Sleeping:
+                    case Purpose.WaitingHome:
+                    case Purpose.Relaxing:
+                        cntLeisure.Increment();
+                        break;
+
+                    case Purpose.GoingHome:
+                        cntGoingHome.Increment();
+                        break;
+
+                    case Purpose.GoingToWork:
+                    case Purpose.Working:
+                        cntGoingToWork.Increment();
+                        break;
+
+                    case Purpose.MovingAway:
+                        cntMovingAway.Increment();
+                        break;
+
+                    case Purpose.GoingToSchool:
+                    case Purpose.Studying:
+                        cntSchool.Increment();
+                        break;
+
+                    case Purpose.Delivery:
+                    case Purpose.Exporting:
+                    case Purpose.UpkeepDelivery:
+                    case Purpose.StorageTransfer:
+                    case Purpose.Collect:
+                    case Purpose.CompanyShopping:
+                        cntDelivery.Increment();
+                        break;
+
+                    case Purpose.Sightseeing:
+                    case Purpose.Traveling:
                     case Purpose.VisitAttractions:
-                    case Purpose.Leisure: shoppers.Increment(); break;
+                        cntTourism.Increment();
+                        break;
+
+                    case Purpose.ReturnGarbage:
+                    case Purpose.Deathcare:
+                    case Purpose.InDeathcare:
+                    case Purpose.ReturnUnsortedMail:
+                    case Purpose.ReturnLocalMail:
+                    case Purpose.ReturnOutgoingMail:
+                    case Purpose.SendMail:
                     case Purpose.Hospital:
-                    case Purpose.InHospital: healthcare.Increment(); break;
-                    default: other.Increment(); break;
+                    case Purpose.InHospital:
+                        cntServices.Increment();
+                        break;
+
+                    case Purpose.Escape:
+                    case Purpose.PathFailed:
+                    case Purpose.Disappear:
+                    case Purpose.Safety:
+                    case Purpose.EmergencyShelter:
+                    case Purpose.InEmergencyShelter:
+                    case Purpose.Crime:
+                    case Purpose.GoingToJail:
+                    case Purpose.GoingToPrison:
+                    case Purpose.InJail:
+                    case Purpose.InPrison:
+                    default: // Catch-all for anything else
+                        cntOther.Increment();
+                        break;
                 }
 
-                // Resolve Origin
+                // Origin/Destination Logic (Kept same, just ensures visuals still work)
                 Entity originEntity = Entity.Null;
                 if (currentPurpose == Purpose.GoingHome)
                 {
@@ -118,10 +182,11 @@ namespace TrafficSpy.Jobs
             }
             else
             {
-                noPurpose.Increment();
+                // No purpose component usually means "None" or generic vehicle behavior
+                cntNone.Increment();
             }
 
-            // Resolve Destination
+            // Destination Logic
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
             {
@@ -148,22 +213,12 @@ namespace TrafficSpy.Jobs
         private Entity ResolvePhysicalEntity(Entity target)
         {
             if (target == Entity.Null) return Entity.Null;
-
             Entity current = target;
-
             if (propertyRenterLookup.TryGetComponent(current, out PropertyRenter renter))
-            {
                 current = renter.m_Property;
-            }
-
             if (ownerLookup.TryGetComponent(current, out Owner owner))
-            {
                 if (buildingLookup.HasComponent(owner.m_Owner))
-                {
                     current = owner.m_Owner;
-                }
-            }
-
             return current;
         }
     }

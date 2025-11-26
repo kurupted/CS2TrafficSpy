@@ -1,13 +1,15 @@
 export interface SegmentActivity {
-    workers: number;
-    students: number;
-    shoppers: number;
+    none: number;
+    shopping: number;
+    leisure: number;
     goingHome: number;
-    healthcare: number;
-    cargo: number;
-    services: number;
-    publicTransport: number;
+    goingToWork: number;
+    movingAway: number;
+    school: number;
+    delivery: number;
+    tourism: number;
     other: number;
+    services: number;
 }
 
 // Local definitions to prevent "cs2/bindings" import errors
