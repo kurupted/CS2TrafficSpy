@@ -29,7 +29,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
 
-        // Updated Counters
+        // Updated Counters matching your new groups
         public NativeCounter.Concurrent cntNone;
         public NativeCounter.Concurrent cntShopping;
         public NativeCounter.Concurrent cntLeisure;
@@ -46,7 +46,6 @@ namespace TrafficSpy.Jobs
 
         public void Execute(Entity entity, DynamicBuffer<PathElement> path)
         {
-            // 1. Check if this entity's path intersects with our target road/lanes
             bool passesThrough = false;
             for (int i = 0; i < path.Length; i++)
             {
@@ -59,7 +58,6 @@ namespace TrafficSpy.Jobs
 
             if (!passesThrough) return;
 
-            // 2. If it intersects, analyze the entity
             AnalyzeEntity(entity);
         }
 
@@ -77,7 +75,6 @@ namespace TrafficSpy.Jobs
             {
                 currentPurpose = purpose.m_Purpose;
 
-                // Updated Switch Statement based on your groups
                 switch (currentPurpose)
                 {
                     case Purpose.None:
@@ -151,12 +148,12 @@ namespace TrafficSpy.Jobs
                     case Purpose.GoingToPrison:
                     case Purpose.InJail:
                     case Purpose.InPrison:
-                    default: // Catch-all for anything else
+                    default:
                         cntOther.Increment();
                         break;
                 }
 
-                // Origin/Destination Logic (Kept same, just ensures visuals still work)
+                // Origin logic for visualization
                 Entity originEntity = Entity.Null;
                 if (currentPurpose == Purpose.GoingHome)
                 {
@@ -182,23 +179,16 @@ namespace TrafficSpy.Jobs
             }
             else
             {
-                // No purpose component usually means "None" or generic vehicle behavior
                 cntNone.Increment();
             }
 
             // Destination Logic
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
-            {
                 rawDest = dest.m_Target;
-            }
             else if (currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef))
-            {
                 if (targetLookup.TryGetComponent(vehicleRef.m_Vehicle, out Target vehicleDest))
-                {
                     rawDest = vehicleDest.m_Target;
-                }
-            }
 
             if (rawDest != Entity.Null)
             {

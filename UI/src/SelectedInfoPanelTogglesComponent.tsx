@@ -1,7 +1,6 @@
 import { getModule } from "cs2/modding";
-import { Theme } from "cs2/bindings";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
-import { activityData } from "./bindings"; // This is your data binding!
+import { activityData } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo } from "react";
 import { SegmentActivity } from "./types";
@@ -12,7 +11,6 @@ interface InfoSectionComponent {
     tooltipTags: Array<string>;
 }
 
-// Get game components
 const InfoSectionTheme: any = getModule(
     "game-ui/game/components/selected-info-panel/shared-components/info-section/info-section.module.scss",
     "classes"
@@ -33,14 +31,8 @@ const InfoRow: any = getModule(
     "InfoRow"
 );
 
-const SectionTitle: any = getModule(
-    "game-ui/game/components/selected-info-panel/shared-components/section-title/section-title.tsx",
-    "SectionTitle"
-);
-
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
 
-    // Helper to render a row
     const renderRow = (label: string, count: number) => {
         if (!count || count <= 0) return null;
         return (
@@ -91,8 +83,6 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true} 
                 className={InfoSectionTheme?.infoSection}
             >
-                {SectionTitle && <SectionTitle title={`TRAFFIC SPY (${total})`} />}
-
                 <InfoRow 
                     left="TOTAL ACTIVITY" 
                     right={total.toString()} 
@@ -106,9 +96,9 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 {renderRow("Going to School", data.school)}
                 {renderRow("Returning Home", data.goingHome)}
                 {renderRow("Shopping", data.shopping)}
-                {renderRow("Leisure", data.leisure)}
+                {renderRow("Leisure / Relaxing", data.leisure)}
                 {renderRow("Delivery / Commercial", data.delivery)}
-                {renderRow("Services", data.services)}
+                {renderRow("Services / Healthcare", data.services)}
                 {renderRow("Tourism", data.tourism)}
                 {renderRow("Moving Away", data.movingAway)}
                 {renderRow("Other", data.other)}

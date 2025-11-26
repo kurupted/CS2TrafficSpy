@@ -48,7 +48,6 @@ namespace TrafficSpy.Systems
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
 
-        // Toggle between methods here
         private bool usePathBasedAnalysis = true;
 
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
@@ -174,7 +173,7 @@ namespace TrafficSpy.Systems
 
         private void RunAnalysis(Entity selectedSegment)
         {
-            // Initialize new counters
+            // Init new counters
             NativeCounter cntNone = new NativeCounter(Allocator.TempJob);
             NativeCounter cntShopping = new NativeCounter(Allocator.TempJob);
             NativeCounter cntLeisure = new NativeCounter(Allocator.TempJob);
@@ -189,10 +188,8 @@ namespace TrafficSpy.Systems
 
             if (usePathBasedAnalysis)
             {
-                // === PATH BASED (Global) ===
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
 
-                // Use NativeQueue for variable result size in parallel job
                 NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
                 NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob);
 
@@ -211,7 +208,7 @@ namespace TrafficSpy.Systems
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
                     currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
 
-                    // Concurrent counters
+                    // Pass as concurrent
                     cntNone = cntNone.ToConcurrent(),
                     cntShopping = cntShopping.ToConcurrent(),
                     cntLeisure = cntLeisure.ToConcurrent(),
@@ -229,8 +226,6 @@ namespace TrafficSpy.Systems
 
                 pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
 
-                Mod.log.Info($"TrafficSpy: Job Complete.");
-                // Move results from Queue to List
                 CurrentRenderList.Clear();
                 while (resultsQueue.TryDequeue(out TrafficRenderData item))
                 {
@@ -242,7 +237,6 @@ namespace TrafficSpy.Systems
             }
             else
             {
-                // === SNAPSHOT BASED (Local) ===
                 Mod.log.Info("TrafficSpy: Starting Snapshot Analysis");
                 NativeList<TrafficRenderData> resultsList = new NativeList<TrafficRenderData>(Allocator.TempJob);
 
@@ -270,7 +264,7 @@ namespace TrafficSpy.Systems
                     publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
 
-                    // Standard counters
+                    // Pass as standard
                     cntNone = cntNone,
                     cntShopping = cntShopping,
                     cntLeisure = cntLeisure,
@@ -296,10 +290,8 @@ namespace TrafficSpy.Systems
                 resultsList.Dispose();
             }
 
-            // Common cleanup and UI update
             IsDirty = true;
 
-            // Construct updated JSON
             string json = $@"{{
                 ""none"": {cntNone.Count},
                 ""shopping"": {cntShopping.Count},
@@ -316,7 +308,7 @@ namespace TrafficSpy.Systems
 
             this.activityDataBinding.Update(json);
 
-            // Dispose counters
+            // Must dispose all counters
             cntNone.Dispose();
             cntShopping.Dispose();
             cntLeisure.Dispose();

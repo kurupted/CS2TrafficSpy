@@ -2,13 +2,15 @@
 
 TODO
 
-- include more purpose types in summary
-- Determine if we're highlighting destination of peds atm
-    - show counts of vehicles vs peds separately
-- Color-coded destination based on purpose
-- Highlight origin buildings
+handle cargo better: Buying, Returning, etc are currently unknown/other
+handle movingIn
+handle waiting for public transit
+
 - Options to include/exclude peds, delivery, etc
 - ability to select which side of the road to analyze
+- show counts of vehicles vs peds separately
+- Color-coded destination based on purpose
+- Highlight origin buildings (?)
 
 
 
@@ -19,91 +21,69 @@ DONE
 
 
 
+
+
+
+
+==========
+
+
+
+Game.Vehicles.CargoTransportFlags:		Returning, EnRoute ?, DummyTraffic
+Game.Vehicles.DeliveryTruckFlags: 		Buying, Delivering, Returning, UpkeepDelivery
+Game.UI.InGame.VehicleStateLocaleKey:
+									{
+										Evacuating,
+										Boarding,
+										Parked,
+										AccidentSite,
+										CrimeScene,
+										Patrolling,
+										Working,
+										Collecting,
+										Extinguishing,
+										Rescuing,
+										Dispatched,
+										Transporting,
+										Buying,
+										Exporting,
+										Importing,
+										Delivering,
+										Conveying,
+										Gathering,
+										Returning,
+										Loading,
+										EnRoute,
+										Disembarking,
+										InvolvedInAccident,
+										Fishing,
+										Farming,
+										Harvesting,
+										Drilling,
+										Mining,
+										Extracting,
+										Unknown
+									}
+
+
+
+Game.Vehicles 	PersonalCar 	
+Properties of a personally owned car (i.e. not a taxi, police car, etc.). 	unmanaged 	m_Keeper 	
+Entity 	Reference to the "citizen" entity who is owning the car.
+m_State 	PersonalCarFlags 	Status flags like Transporting, Boarding, Disembarking, DummyTraffic, HomeTarget. 
+
+
+
+
+
+
+
+
 ===========
 
 
 
-public enum Purpose : byte
-{
-    None,
-    Shopping,
-    Leisure,
-    GoingHome,
-    GoingToWork,
-    Working,
-    Sleeping,
-    Exporting,
-    MovingAway,
-    Studying,
-    GoingToSchool,
-    StorageTransfer,
-    Hospital,
-    Delivery,
-    UpkeepDelivery,
-    Safety,
-    EmergencyShelter,
-    Crime,
-    GoingToJail,
-    GoingToPrison,
-    InJail,
-    InPrison,
-    Collect,
-    Escape,
-    InHospital,
-    Deathcare,
-    InDeathcare,
-    ReturnUnsortedMail,
-    ReturnLocalMail,
-    ReturnOutgoingMail,
-    Traveling,
-    Relaxing,
-    Sightseeing,
-    VisitAttractions,
-    ReturnGarbage,
-    SendMail,
-    Disappear,
-    WaitingHome,
-    PathFailed,
-    InEmergencyShelter,
-    CompanyShopping,
-    Count
-}
-
-
-
-
-
-
-
-public enum Purpose : byte
-{
-    None,
-    Shopping,
-    Leisure,Sleeping,WaitingHome,Relaxing,
-    GoingHome,
-    GoingToWork,Working,
-    MovingAway,
-    Studying,GoingToSchool,
-    Delivery,Exporting,UpkeepDelivery,StorageTransfer,Collect,CompanyShopping,
-    Traveling,Sightseeing,VisitAttractions,
-    
-    
-    OTHER --
-    Escape,
-    PathFailed,
-    Disappear,
-    Safety,EmergencyShelter,InEmergencyShelter,
-    Crime,GoingToJail,GoingToPrison,InJail,InPrison,
-    
-    
-    SERVICES --
-    ReturnGarbage,
-    Deathcare,InDeathcare,
-    ReturnUnsortedMail,ReturnLocalMail,ReturnOutgoingMail,SendMail,
-    Hospital,InHospital,
-
-    
-    
+MOVING IN:
     
 
     	case Purpose.GoingHome:
@@ -128,7 +108,7 @@ public enum Purpose : byte
 
 
 
-
+PUBLIC TRANSIT :
 
 
 
@@ -197,10 +177,4 @@ public enum Purpose : byte
 
 
                     ===================
-
-
-
-Game.Vehicles 	PersonalCar 	Properties of a personally owned car (i.e. not a taxi, police car, etc.). 	unmanaged 	m_Keeper 	Entity 	Reference to the "citizen" entity who is owning the car.
-m_State 	PersonalCarFlags 	Status flags like Transporting, Boarding, Disembarking, DummyTraffic, HomeTarget. 
-
 

@@ -12,7 +12,6 @@ export interface SegmentActivity {
     services: number;
 }
 
-// Local definitions to prevent "cs2/bindings" import errors
 export interface Entity {
     index: number;
     version: number;

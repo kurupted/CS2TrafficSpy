@@ -40,7 +40,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
         [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
 
-        // Updated Counters
+        // Counters matching the new groups
         public NativeCounter cntNone;
         public NativeCounter cntShopping;
         public NativeCounter cntLeisure;
@@ -104,17 +104,13 @@ namespace TrafficSpy.Jobs
             }
         }
 
-        // This climbs up from a "Parking Spot" or "Renter" to find the actual Building
         private Entity ResolvePhysicalEntity(Entity target)
         {
             if (target == Entity.Null) return Entity.Null;
             Entity current = target;
-            // 1. If it's a Renter (Company/Household), the physical location is the Property
             if (propertyRenterLookup.TryGetComponent(current, out PropertyRenter renter))
                 current = renter.m_Property;
-            // 2. If it's a Sub-object (like a parking spot), check the Owner
             if (ownerLookup.TryGetComponent(current, out Owner owner))
-                // Only replace 'current' if the owner is actually a Building
                 if (buildingLookup.HasComponent(owner.m_Owner))
                     current = owner.m_Owner;
             return current;
@@ -214,7 +210,6 @@ namespace TrafficSpy.Jobs
                 cntNone.Increment();
             }
 
-            // Determine Destination
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
                 rawDest = dest.m_Target;
@@ -225,7 +220,6 @@ namespace TrafficSpy.Jobs
             if (rawDest != Entity.Null)
             {
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);
-                // Don't highlight the road segment itself
                 if (physicalDest != Entity.Null && physicalDest != selectedSegment)
                 {
                     results.Add(new TrafficRenderData { entity = physicalDest, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = false });
