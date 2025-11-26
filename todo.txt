@@ -1,14 +1,8 @@
 ﻿
-we're highlighting but only rarely
-group var data is appearing in panel. try to set group var in TrafficUI
-add back logging
-jetbrains
-
 
 TODO
 
 - Highlight destination buildings of delivery/cargo vehicles
-- Add summary to UI panel
 - Determine if we're highlighting destination of peds atm
 - Color-coded destination based on purpose
 - Highlight origin buildings
@@ -19,4 +13,5 @@ TODO
 DONE
 
 - Highlights destination buildings of citizens
+- show summary of trip purposes in info panel
 
