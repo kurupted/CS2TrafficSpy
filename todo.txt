@@ -1,6 +1,10 @@
 ﻿
 
 TODO
+most destination buildings are not being highlighted anymore. Maybe one or two out of dozens that used to highlight for the same segment
+service vehicles (eg a hearse) that are Returning are being counted as Other. they should count as "Service"
+a delivery vehicle "Buying" is still counted as other
+vehicle says transporting, citizen inside says shopping (not counted as shopping? route at industrial ramp, car far N /\ )
 
 handle cargo better: Buying, Returning, etc are currently unknown/other
 handle movingIn
@@ -11,6 +15,7 @@ handle waiting for public transit
 - show counts of vehicles vs peds separately
 - Color-coded destination based on purpose
 - Highlight origin buildings (?)
+- remove ActivitySection?
 
 
 

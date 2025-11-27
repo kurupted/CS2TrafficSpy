@@ -10,7 +10,8 @@ using Unity.Entities;
 
 namespace TrafficSpy.Systems
 {
-    // This system runs in the main loop to ensure visual updates happen correctly
+    // Ensure this runs after TrafficUISystem updates
+    [UpdateAfter(typeof(TrafficUISystem))]
     public partial class TrafficHighlightSystem : SystemBase
     {
         private HashSet<Entity> highlightedEntities = new HashSet<Entity>();
@@ -18,6 +19,8 @@ namespace TrafficSpy.Systems
         protected override void OnCreate()
         {
             base.OnCreate();
+            // Ensure system is enabled
+            Enabled = true;
         }
 
         protected override void OnUpdate()

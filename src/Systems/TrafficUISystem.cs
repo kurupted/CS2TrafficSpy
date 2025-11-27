@@ -11,6 +11,7 @@ using Game.Tools;
 using Game.UI;
 using Game.UI.InGame;
 using Game.Vehicles;
+using System;
 using System.Collections.Generic;
 using TrafficSpy.Jobs;
 using Unity.Collections;
@@ -47,7 +48,6 @@ namespace TrafficSpy.Systems
 
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
-
         private bool usePathBasedAnalysis = true;
 
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
@@ -87,7 +87,6 @@ namespace TrafficSpy.Systems
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
-
                 if (active)
                 {
                     if (defaultToolSystem != null)
@@ -108,7 +107,6 @@ namespace TrafficSpy.Systems
         }
 
         protected override string group => "TrafficSpy.Systems.TrafficUISystem";
-
         protected override void Reset() { }
         protected override void OnProcess() { }
         public override void OnWriteProperties(IJsonWriter writer) { }
@@ -147,7 +145,6 @@ namespace TrafficSpy.Systems
         private void ClearData()
         {
             lastSelectedEntity = Entity.Null;
-
             if (this.activityDataBinding.value != "{}")
             {
                 this.activityDataBinding.Update("{}");
@@ -160,20 +157,16 @@ namespace TrafficSpy.Systems
         {
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
             targets.Add(segment);
-
             if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<SubLane> lanes))
             {
                 for (int i = 0; i < lanes.Length; i++)
-                {
                     targets.Add(lanes[i].m_SubLane);
-                }
             }
             return targets;
         }
 
         private void RunAnalysis(Entity selectedSegment)
         {
-            // Init new counters
             NativeCounter cntNone = new NativeCounter(Allocator.TempJob);
             NativeCounter cntShopping = new NativeCounter(Allocator.TempJob);
             NativeCounter cntLeisure = new NativeCounter(Allocator.TempJob);
@@ -181,7 +174,8 @@ namespace TrafficSpy.Systems
             NativeCounter cntGoingToWork = new NativeCounter(Allocator.TempJob);
             NativeCounter cntMovingAway = new NativeCounter(Allocator.TempJob);
             NativeCounter cntSchool = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntDelivery = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntTransporting = new NativeCounter(Allocator.TempJob);
+            NativeCounter cntReturning = new NativeCounter(Allocator.TempJob);
             NativeCounter cntTourism = new NativeCounter(Allocator.TempJob);
             NativeCounter cntOther = new NativeCounter(Allocator.TempJob);
             NativeCounter cntServices = new NativeCounter(Allocator.TempJob);
@@ -189,14 +183,12 @@ namespace TrafficSpy.Systems
             if (usePathBasedAnalysis)
             {
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
-
                 NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
                 NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob);
 
                 PathActivityJob pathJob = new PathActivityJob
                 {
                     targets = targets,
-
                     travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
                     targetLookup = SystemAPI.GetComponentLookup<Target>(true),
                     householdMemberLookup = SystemAPI.GetComponentLookup<HouseholdMember>(true),
@@ -208,7 +200,18 @@ namespace TrafficSpy.Systems
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
                     currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
 
-                    // Pass as concurrent
+                    deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
+                    cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
+                    publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
+
+                    hearseLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Hearse>(true),
+                    garbageTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.GarbageTruck>(true),
+                    policeCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PoliceCar>(true),
+                    fireEngineLookup = SystemAPI.GetComponentLookup<Game.Vehicles.FireEngine>(true),
+                    ambulanceLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Ambulance>(true),
+                    postVanLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PostVan>(true),
+                    maintenanceVehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.MaintenanceVehicle>(true),
+
                     cntNone = cntNone.ToConcurrent(),
                     cntShopping = cntShopping.ToConcurrent(),
                     cntLeisure = cntLeisure.ToConcurrent(),
@@ -216,7 +219,8 @@ namespace TrafficSpy.Systems
                     cntGoingToWork = cntGoingToWork.ToConcurrent(),
                     cntMovingAway = cntMovingAway.ToConcurrent(),
                     cntSchool = cntSchool.ToConcurrent(),
-                    cntDelivery = cntDelivery.ToConcurrent(),
+                    cntTransporting = cntTransporting.ToConcurrent(),
+                    cntReturning = cntReturning.ToConcurrent(),
                     cntTourism = cntTourism.ToConcurrent(),
                     cntOther = cntOther.ToConcurrent(),
                     cntServices = cntServices.ToConcurrent(),
@@ -224,12 +228,28 @@ namespace TrafficSpy.Systems
                     results = resultsQueue.AsParallelWriter()
                 };
 
+                // Add this temporary debugging to your RunAnalysis method in TrafficUISystem.cs
+                // Replace the section after pathJob.ScheduleParallel with this:
+
                 pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
 
                 CurrentRenderList.Clear();
+                int queueCount = 0;
                 while (resultsQueue.TryDequeue(out TrafficRenderData item))
                 {
                     CurrentRenderList.Add(item);
+                    queueCount++;
+                }
+
+                Mod.log.Info($"TrafficSpy: Queue had {queueCount} items");
+                Mod.log.Info($"TrafficSpy: CurrentRenderList now has {CurrentRenderList.Count} items");
+                Mod.log.Info($"TrafficSpy: Setting IsDirty = true");
+
+                // Log some sample entities
+                for (int i = 0; i < Math.Min(5, CurrentRenderList.Count); i++)
+                {
+                    var item = CurrentRenderList[i];
+                    Mod.log.Info($"TrafficSpy: Item {i}: Entity={item.entity.Index}, Purpose={item.purpose}, Type={item.type}, IsOrigin={item.isOrigin}");
                 }
 
                 targets.Dispose();
@@ -243,12 +263,10 @@ namespace TrafficSpy.Systems
                 SegmentActivityJob job = new SegmentActivityJob
                 {
                     selectedSegment = selectedSegment,
-
                     subLaneLookup = SystemAPI.GetBufferLookup<SubLane>(true),
                     laneObjectLookup = SystemAPI.GetBufferLookup<Game.Net.LaneObject>(true),
                     layoutElementLookup = SystemAPI.GetBufferLookup<LayoutElement>(true),
                     passengerLookup = SystemAPI.GetBufferLookup<Passenger>(true),
-
                     controllerLookup = SystemAPI.GetComponentLookup<Controller>(true),
                     currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
                     travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
@@ -259,12 +277,20 @@ namespace TrafficSpy.Systems
                     studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
                     creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
                     propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
+
                     deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
                     cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
                     publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
 
-                    // Pass as standard
+                    hearseLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Hearse>(true),
+                    garbageTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.GarbageTruck>(true),
+                    policeCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PoliceCar>(true),
+                    fireEngineLookup = SystemAPI.GetComponentLookup<Game.Vehicles.FireEngine>(true),
+                    ambulanceLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Ambulance>(true),
+                    postVanLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PostVan>(true),
+                    maintenanceVehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.MaintenanceVehicle>(true),
+
                     cntNone = cntNone,
                     cntShopping = cntShopping,
                     cntLeisure = cntLeisure,
@@ -272,7 +298,8 @@ namespace TrafficSpy.Systems
                     cntGoingToWork = cntGoingToWork,
                     cntMovingAway = cntMovingAway,
                     cntSchool = cntSchool,
-                    cntDelivery = cntDelivery,
+                    cntTransporting = cntTransporting,
+                    cntReturning = cntReturning,
                     cntTourism = cntTourism,
                     cntOther = cntOther,
                     cntServices = cntServices,
@@ -284,9 +311,8 @@ namespace TrafficSpy.Systems
 
                 CurrentRenderList.Clear();
                 for (int i = 0; i < resultsList.Length; i++)
-                {
                     CurrentRenderList.Add(resultsList[i]);
-                }
+
                 resultsList.Dispose();
             }
 
@@ -300,7 +326,8 @@ namespace TrafficSpy.Systems
                 ""goingToWork"": {cntGoingToWork.Count},
                 ""movingAway"": {cntMovingAway.Count},
                 ""school"": {cntSchool.Count},
-                ""delivery"": {cntDelivery.Count},
+                ""transporting"": {cntTransporting.Count},
+                ""returning"": {cntReturning.Count},
                 ""tourism"": {cntTourism.Count},
                 ""other"": {cntOther.Count},
                 ""services"": {cntServices.Count}
@@ -308,7 +335,6 @@ namespace TrafficSpy.Systems
 
             this.activityDataBinding.Update(json);
 
-            // Must dispose all counters
             cntNone.Dispose();
             cntShopping.Dispose();
             cntLeisure.Dispose();
@@ -316,7 +342,8 @@ namespace TrafficSpy.Systems
             cntGoingToWork.Dispose();
             cntMovingAway.Dispose();
             cntSchool.Dispose();
-            cntDelivery.Dispose();
+            cntTransporting.Dispose();
+            cntReturning.Dispose();
             cntTourism.Dispose();
             cntOther.Dispose();
             cntServices.Dispose();

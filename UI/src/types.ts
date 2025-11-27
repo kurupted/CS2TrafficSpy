@@ -6,7 +6,8 @@ export interface SegmentActivity {
     goingToWork: number;
     movingAway: number;
     school: number;
-    delivery: number;
+    transporting: number;
+    returning: number;
     tourism: number;
     other: number;
     services: number;

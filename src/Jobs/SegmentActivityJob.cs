@@ -36,11 +36,20 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<PropertyRenter> propertyRenterLookup;
         [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
+
+        // Vehicle Lookups
         [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
         [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
         [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
 
-        // Counters matching the new groups
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Hearse> hearseLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.GarbageTruck> garbageTruckLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.PoliceCar> policeCarLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.FireEngine> fireEngineLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Ambulance> ambulanceLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.PostVan> postVanLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.MaintenanceVehicle> maintenanceVehicleLookup;
+
         public NativeCounter cntNone;
         public NativeCounter cntShopping;
         public NativeCounter cntLeisure;
@@ -48,7 +57,8 @@ namespace TrafficSpy.Jobs
         public NativeCounter cntGoingToWork;
         public NativeCounter cntMovingAway;
         public NativeCounter cntSchool;
-        public NativeCounter cntDelivery;
+        public NativeCounter cntTransporting;
+        public NativeCounter cntReturning;
         public NativeCounter cntTourism;
         public NativeCounter cntOther;
         public NativeCounter cntServices;
@@ -76,6 +86,15 @@ namespace TrafficSpy.Jobs
         {
             if (controllerLookup.HasComponent(entity))
             {
+                // Check for specific vehicle types first
+                if (AnalyzeVehicle(entity))
+                {
+                    // If matched a known vehicle type, visualize its destination and stop
+                    AddDestinationVisuals(entity, Purpose.None);
+                    return;
+                }
+
+                // If not a specific vehicle, iterate contents (e.g. passengers in a private car)
                 if (layoutElementLookup.HasBuffer(entity))
                 {
                     DynamicBuffer<LayoutElement> elements = layoutElementLookup[entity];
@@ -89,19 +108,45 @@ namespace TrafficSpy.Jobs
             }
             else
             {
-                AnalyzeEntity(entity);
+                AnalyzeCitizen(entity);
             }
+        }
+
+        private bool AnalyzeVehicle(Entity entity)
+        {
+            if (hearseLookup.HasComponent(entity) ||
+                garbageTruckLookup.HasComponent(entity) ||
+                policeCarLookup.HasComponent(entity) ||
+                fireEngineLookup.HasComponent(entity) ||
+                ambulanceLookup.HasComponent(entity) ||
+                postVanLookup.HasComponent(entity) ||
+                maintenanceVehicleLookup.HasComponent(entity))
+            {
+                cntServices.Increment();
+                return true;
+            }
+
+            if (deliveryTruckLookup.TryGetComponent(entity, out DeliveryTruck truck))
+            {
+                if ((truck.m_State & DeliveryTruckFlags.Returning) != 0) cntReturning.Increment();
+                else cntTransporting.Increment();
+                return true;
+            }
+            if (cargoTransportLookup.TryGetComponent(entity, out CargoTransport cargo))
+            {
+                if ((cargo.m_State & CargoTransportFlags.Returning) != 0) cntReturning.Increment();
+                else cntTransporting.Increment();
+                return true;
+            }
+            return false;
         }
 
         private void ProcessVehicle(Entity vehicleEntity)
         {
             if (!passengerLookup.HasBuffer(vehicleEntity)) return;
-
             DynamicBuffer<Passenger> passengers = passengerLookup[vehicleEntity];
             for (int i = 0; i < passengers.Length; i++)
-            {
-                AnalyzeEntity(passengers[i].m_Passenger);
-            }
+                AnalyzeCitizen(passengers[i].m_Passenger);
         }
 
         private Entity ResolvePhysicalEntity(Entity target)
@@ -116,7 +161,7 @@ namespace TrafficSpy.Jobs
             return current;
         }
 
-        private void AnalyzeEntity(Entity entity)
+        private void AnalyzeCitizen(Entity entity)
         {
             Entity citizenEntity = entity;
             if (creatureResidentLookup.TryGetComponent(entity, out Game.Creatures.Resident resident))
@@ -136,27 +181,26 @@ namespace TrafficSpy.Jobs
                     case Purpose.Leisure:
                     case Purpose.Sleeping:
                     case Purpose.WaitingHome:
-                    case Purpose.Relaxing:
-                        cntLeisure.Increment(); break;
+                    case Purpose.Relaxing: cntLeisure.Increment(); break;
                     case Purpose.GoingHome: cntGoingHome.Increment(); break;
                     case Purpose.GoingToWork:
-                    case Purpose.Working:
-                        cntGoingToWork.Increment(); break;
+                    case Purpose.Working: cntGoingToWork.Increment(); break;
                     case Purpose.MovingAway: cntMovingAway.Increment(); break;
                     case Purpose.GoingToSchool:
-                    case Purpose.Studying:
-                        cntSchool.Increment(); break;
+                    case Purpose.Studying: cntSchool.Increment(); break;
+                    case Purpose.Sightseeing:
+                    case Purpose.Traveling:
+                    case Purpose.VisitAttractions: cntTourism.Increment(); break;
+
                     case Purpose.Delivery:
                     case Purpose.Exporting:
                     case Purpose.UpkeepDelivery:
                     case Purpose.StorageTransfer:
                     case Purpose.Collect:
                     case Purpose.CompanyShopping:
-                        cntDelivery.Increment(); break;
-                    case Purpose.Sightseeing:
-                    case Purpose.Traveling:
-                    case Purpose.VisitAttractions:
-                        cntTourism.Increment(); break;
+                        cntTransporting.Increment();
+                        break;
+
                     case Purpose.ReturnGarbage:
                     case Purpose.Deathcare:
                     case Purpose.InDeathcare:
@@ -165,21 +209,9 @@ namespace TrafficSpy.Jobs
                     case Purpose.ReturnOutgoingMail:
                     case Purpose.SendMail:
                     case Purpose.Hospital:
-                    case Purpose.InHospital:
-                        cntServices.Increment(); break;
-                    case Purpose.Escape:
-                    case Purpose.PathFailed:
-                    case Purpose.Disappear:
-                    case Purpose.Safety:
-                    case Purpose.EmergencyShelter:
-                    case Purpose.InEmergencyShelter:
-                    case Purpose.Crime:
-                    case Purpose.GoingToJail:
-                    case Purpose.GoingToPrison:
-                    case Purpose.InJail:
-                    case Purpose.InPrison:
-                    default:
-                        cntOther.Increment(); break;
+                    case Purpose.InHospital: cntServices.Increment(); break;
+
+                    default: cntOther.Increment(); break;
                 }
 
                 Entity originEntity = Entity.Null;
@@ -200,9 +232,7 @@ namespace TrafficSpy.Jobs
                 {
                     Entity physicalOrigin = ResolvePhysicalEntity(originEntity);
                     if (physicalOrigin != Entity.Null)
-                    {
                         results.Add(new TrafficRenderData { entity = physicalOrigin, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = true });
-                    }
                 }
             }
             else
@@ -210,6 +240,11 @@ namespace TrafficSpy.Jobs
                 cntNone.Increment();
             }
 
+            AddDestinationVisuals(entity, currentPurpose);
+        }
+
+        private void AddDestinationVisuals(Entity entity, Purpose purpose)
+        {
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
                 rawDest = dest.m_Target;
@@ -222,7 +257,7 @@ namespace TrafficSpy.Jobs
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);
                 if (physicalDest != Entity.Null && physicalDest != selectedSegment)
                 {
-                    results.Add(new TrafficRenderData { entity = physicalDest, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = false });
+                    results.Add(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = TrafficType.Citizen, isOrigin = false });
                 }
             }
         }

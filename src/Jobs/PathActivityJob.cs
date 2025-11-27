@@ -16,8 +16,9 @@ namespace TrafficSpy.Jobs
     [BurstCompile]
     public partial struct PathActivityJob : IJobEntity
     {
-        [ReadOnly] public NativeHashSet<Entity> targets;
+        [ReadOnly] public NativeHashSet<Entity> targets; // the road segment
 
+        // Citizen Lookups
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<Target> targetLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
@@ -29,7 +30,21 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
 
-        // Updated Counters matching your new groups
+        // Vehicle Lookups
+        [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
+        [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
+        [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
+
+        // Service Vehicle Lookups
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Hearse> hearseLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.GarbageTruck> garbageTruckLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.PoliceCar> policeCarLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.FireEngine> fireEngineLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Ambulance> ambulanceLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.PostVan> postVanLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.MaintenanceVehicle> maintenanceVehicleLookup;
+
+        // Counters
         public NativeCounter.Concurrent cntNone;
         public NativeCounter.Concurrent cntShopping;
         public NativeCounter.Concurrent cntLeisure;
@@ -37,7 +52,8 @@ namespace TrafficSpy.Jobs
         public NativeCounter.Concurrent cntGoingToWork;
         public NativeCounter.Concurrent cntMovingAway;
         public NativeCounter.Concurrent cntSchool;
-        public NativeCounter.Concurrent cntDelivery;
+        public NativeCounter.Concurrent cntTransporting;
+        public NativeCounter.Concurrent cntReturning;
         public NativeCounter.Concurrent cntTourism;
         public NativeCounter.Concurrent cntOther;
         public NativeCounter.Concurrent cntServices;
@@ -58,21 +74,88 @@ namespace TrafficSpy.Jobs
 
             if (!passesThrough) return;
 
-            AnalyzeEntity(entity);
+            // Check Vehicle types first
+            if (AnalyzeVehicle(entity)) return;
+
+            // Fallback to Citizen/Generic
+            AnalyzeCitizen(entity);
         }
 
-        private void AnalyzeEntity(Entity entity)
+        private bool AnalyzeVehicle(Entity entity)
+        {
+            // 1. Service Vehicles (Check these first to catch returning hearses etc)
+            if (hearseLookup.HasComponent(entity) ||
+                garbageTruckLookup.HasComponent(entity) ||
+                policeCarLookup.HasComponent(entity) ||
+                fireEngineLookup.HasComponent(entity) ||
+                ambulanceLookup.HasComponent(entity) ||
+                postVanLookup.HasComponent(entity) ||
+                maintenanceVehicleLookup.HasComponent(entity))
+            {
+                cntServices.Increment();
+                // FIXED: Directly enqueue destination for vehicles
+                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service);
+                return true;
+            }
+
+            // 2. Public Transport
+            if (publicTransportLookup.HasComponent(entity))
+            {
+                cntOther.Increment();
+                // FIXED: Directly enqueue destination for vehicles
+                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.PublicTransport);
+                return true;
+            }
+
+            // 3. Delivery / Cargo
+            if (deliveryTruckLookup.TryGetComponent(entity, out DeliveryTruck truck))
+            {
+                if ((truck.m_State & DeliveryTruckFlags.Returning) != 0)
+                {
+                    cntReturning.Increment();
+                }
+                else
+                {
+                    cntTransporting.Increment();
+                }
+                // FIXED: Always enqueue destination regardless of returning status
+                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
+                return true;
+            }
+
+            if (cargoTransportLookup.TryGetComponent(entity, out CargoTransport cargo))
+            {
+                if ((cargo.m_State & CargoTransportFlags.Returning) != 0)
+                {
+                    cntReturning.Increment();
+                }
+                else
+                {
+                    cntTransporting.Increment();
+                }
+                // FIXED: Always enqueue destination regardless of returning status
+                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
+                return true;
+            }
+
+            return false;
+        }
+
+        private void AnalyzeCitizen(Entity entity)
         {
             Entity citizenEntity = entity;
+            // Try to resolve driver/resident if possible
             if (creatureResidentLookup.TryGetComponent(entity, out Game.Creatures.Resident resident))
             {
                 citizenEntity = resident.m_Citizen;
             }
 
             Purpose currentPurpose = Purpose.None;
+            bool hasPurpose = false;
 
             if (travelPurposeLookup.TryGetComponent(citizenEntity, out TravelPurpose purpose))
             {
+                hasPurpose = true;
                 currentPurpose = purpose.m_Purpose;
 
                 switch (currentPurpose)
@@ -80,49 +163,43 @@ namespace TrafficSpy.Jobs
                     case Purpose.None:
                         cntNone.Increment();
                         break;
-
                     case Purpose.Shopping:
                         cntShopping.Increment();
                         break;
-
                     case Purpose.Leisure:
                     case Purpose.Sleeping:
                     case Purpose.WaitingHome:
                     case Purpose.Relaxing:
                         cntLeisure.Increment();
                         break;
-
                     case Purpose.GoingHome:
                         cntGoingHome.Increment();
                         break;
-
                     case Purpose.GoingToWork:
                     case Purpose.Working:
                         cntGoingToWork.Increment();
                         break;
-
                     case Purpose.MovingAway:
                         cntMovingAway.Increment();
                         break;
-
                     case Purpose.GoingToSchool:
                     case Purpose.Studying:
                         cntSchool.Increment();
                         break;
+                    case Purpose.Sightseeing:
+                    case Purpose.Traveling:
+                    case Purpose.VisitAttractions:
+                        cntTourism.Increment();
+                        break;
 
+                    // Cargo purposes (if citizen has them, unlikely but possible)
                     case Purpose.Delivery:
                     case Purpose.Exporting:
                     case Purpose.UpkeepDelivery:
                     case Purpose.StorageTransfer:
                     case Purpose.Collect:
                     case Purpose.CompanyShopping:
-                        cntDelivery.Increment();
-                        break;
-
-                    case Purpose.Sightseeing:
-                    case Purpose.Traveling:
-                    case Purpose.VisitAttractions:
-                        cntTourism.Increment();
+                        cntTransporting.Increment();
                         break;
 
                     case Purpose.ReturnGarbage:
@@ -137,23 +214,12 @@ namespace TrafficSpy.Jobs
                         cntServices.Increment();
                         break;
 
-                    case Purpose.Escape:
-                    case Purpose.PathFailed:
-                    case Purpose.Disappear:
-                    case Purpose.Safety:
-                    case Purpose.EmergencyShelter:
-                    case Purpose.InEmergencyShelter:
-                    case Purpose.Crime:
-                    case Purpose.GoingToJail:
-                    case Purpose.GoingToPrison:
-                    case Purpose.InJail:
-                    case Purpose.InPrison:
                     default:
                         cntOther.Increment();
                         break;
                 }
 
-                // Origin logic for visualization
+                // Origin Logic
                 Entity originEntity = Entity.Null;
                 if (currentPurpose == Purpose.GoingHome)
                 {
@@ -179,23 +245,59 @@ namespace TrafficSpy.Jobs
             }
             else
             {
+                // No purpose (Private cars, dummy traffic)
                 cntNone.Increment();
             }
 
-            // Destination Logic
+            // Always try to visualize destination, even if no purpose found
+            EnqueueDestination(entity, currentPurpose);
+        }
+
+        // FIXED: New method specifically for vehicle destinations
+        private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type)
+        {
             Entity rawDest = Entity.Null;
-            if (targetLookup.TryGetComponent(entity, out Target dest))
+
+            // Vehicles have Target component directly on them
+            if (targetLookup.TryGetComponent(vehicleEntity, out Target dest))
+            {
                 rawDest = dest.m_Target;
+
+                if (rawDest != Entity.Null)
+                {
+                    Entity physicalDest = ResolvePhysicalEntity(rawDest);
+                    if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
+                    {
+                        results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false });
+                    }
+                }
+            }
+        }
+
+        private void EnqueueDestination(Entity entity, Purpose purpose)
+        {
+            Entity rawDest = Entity.Null;
+
+            // 1. Check direct target (Citizens, Pedestrians)
+            if (targetLookup.TryGetComponent(entity, out Target dest))
+            {
+                rawDest = dest.m_Target;
+            }
+            // 2. Check Vehicle target (Drivers)
             else if (currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef))
+            {
                 if (targetLookup.TryGetComponent(vehicleRef.m_Vehicle, out Target vehicleDest))
+                {
                     rawDest = vehicleDest.m_Target;
+                }
+            }
 
             if (rawDest != Entity.Null)
             {
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = false });
+                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = TrafficType.Citizen, isOrigin = false });
                 }
             }
         }
