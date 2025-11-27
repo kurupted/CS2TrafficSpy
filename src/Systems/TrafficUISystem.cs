@@ -334,13 +334,12 @@ namespace TrafficSpy.Systems
                     studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
                     creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
                     propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
-
-
+                    //
                     deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
                     cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
                     publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
-
+                    //
                     hearseLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Hearse>(true),
                     garbageTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.GarbageTruck>(true),
                     policeCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PoliceCar>(true),

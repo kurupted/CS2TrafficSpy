@@ -102,7 +102,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 {renderRow("Moving In", data.movingIn)}
                 {renderRow("Moving Away", data.movingAway)}
                 {renderRow("Other", data.other)}
-                {renderRow("None / Unknown", data.none)}
+                {renderRow("None/Unknown", data.none)}
             </InfoSection>
         );
     };
