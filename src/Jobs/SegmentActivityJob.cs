@@ -29,6 +29,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<Target> targetLookup;
+        [ReadOnly] public ComponentLookup<Household> householdLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
         [ReadOnly] public ComponentLookup<Worker> workerLookup;
         [ReadOnly] public ComponentLookup<Game.Citizens.Student> studentLookup;
@@ -55,6 +56,7 @@ namespace TrafficSpy.Jobs
         public NativeCounter cntLeisure;
         public NativeCounter cntGoingHome;
         public NativeCounter cntGoingToWork;
+        public NativeCounter cntMovingIn;
         public NativeCounter cntMovingAway;
         public NativeCounter cntSchool;
         public NativeCounter cntTransporting;

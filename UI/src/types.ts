@@ -4,6 +4,7 @@ export interface SegmentActivity {
     leisure: number;
     goingHome: number;
     goingToWork: number;
+    movingIn: number;
     movingAway: number;
     school: number;
     transporting: number;

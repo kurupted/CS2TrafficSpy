@@ -39,7 +39,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             <InfoRow 
                 left={label} 
                 right={count.toString()} 
-                uppercase={true} 
+                uppercase={false} 
                 disableFocus={true}
                 subRow={false}
                 className={InfoRowTheme?.infoRow} 
@@ -55,7 +55,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 if (!jsonString || jsonString === "{}") {
                     return { 
                         none: 0, shopping: 0, leisure: 0, goingHome: 0, 
-                        goingToWork: 0, movingAway: 0, school: 0, transporting: 0, returning: 0,
+                        goingToWork: 0, movingIn: 0, movingAway: 0, school: 0, transporting: 0, returning: 0,
                         tourism: 0, other: 0, services: 0 
                     };
                 }
@@ -64,14 +64,14 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 console.error("Parse error", e);
                 return { 
                     none: 0, shopping: 0, leisure: 0, goingHome: 0, 
-                    goingToWork: 0, movingAway: 0, school: 0, transporting: 0, returning: 0,
+                    goingToWork: 0, movingIn: 0, movingAway: 0, school: 0, transporting: 0, returning: 0,
                     tourism: 0, other: 0, services: 0 
                 };
             }
         }, [jsonString]);
         
         const total = (data.none || 0) + (data.shopping || 0) + (data.leisure || 0) +
-                      (data.goingHome || 0) + (data.goingToWork || 0) + (data.movingAway || 0) +
+                      (data.goingHome || 0) + (data.goingToWork || 0) + (data.movingIn || 0) + (data.movingAway || 0) +
                       (data.school || 0) + (data.transporting || 0) + (data.returning || 0) +
                       (data.tourism || 0) + (data.other || 0) + (data.services || 0);
 
@@ -90,15 +90,16 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     className={InfoRowTheme?.infoRow} 
                 />
                 
+                {renderRow("Going Home", data.goingHome)}
                 {renderRow("Going to Work", data.goingToWork)}
                 {renderRow("Going to School", data.school)}
-                {renderRow("Returning Home", data.goingHome)}
                 {renderRow("Shopping", data.shopping)}
                 {renderRow("Leisure", data.leisure)}
                 {renderRow("Transporting / Delivery", data.transporting)}
                 {renderRow("Returning Truck", data.returning)}
                 {renderRow("Services", data.services)}
                 {renderRow("Tourism", data.tourism)}
+                {renderRow("Moving In", data.movingIn)}
                 {renderRow("Moving Away", data.movingAway)}
                 {renderRow("Other", data.other)}
                 {renderRow("None / Unknown", data.none)}

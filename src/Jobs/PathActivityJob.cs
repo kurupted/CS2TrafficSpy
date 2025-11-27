@@ -21,6 +21,7 @@ namespace TrafficSpy.Jobs
         // Citizen Lookups
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<Target> targetLookup;
+        [ReadOnly] public ComponentLookup<Household> householdLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
         [ReadOnly] public ComponentLookup<Worker> workerLookup;
         [ReadOnly] public ComponentLookup<Game.Citizens.Student> studentLookup;
@@ -50,6 +51,7 @@ namespace TrafficSpy.Jobs
         public NativeCounter.Concurrent cntLeisure;
         public NativeCounter.Concurrent cntGoingHome;
         public NativeCounter.Concurrent cntGoingToWork;
+        public NativeCounter.Concurrent cntMovingIn;
         public NativeCounter.Concurrent cntMovingAway;
         public NativeCounter.Concurrent cntSchool;
         public NativeCounter.Concurrent cntTransporting;
@@ -93,7 +95,6 @@ namespace TrafficSpy.Jobs
                 maintenanceVehicleLookup.HasComponent(entity))
             {
                 cntServices.Increment();
-                // FIXED: Directly enqueue destination for vehicles
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service);
                 return true;
             }
@@ -102,7 +103,6 @@ namespace TrafficSpy.Jobs
             if (publicTransportLookup.HasComponent(entity))
             {
                 cntOther.Increment();
-                // FIXED: Directly enqueue destination for vehicles
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.PublicTransport);
                 return true;
             }
@@ -118,7 +118,6 @@ namespace TrafficSpy.Jobs
                 {
                     cntTransporting.Increment();
                 }
-                // FIXED: Always enqueue destination regardless of returning status
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
                 return true;
             }
@@ -133,7 +132,6 @@ namespace TrafficSpy.Jobs
                 {
                     cntTransporting.Increment();
                 }
-                // FIXED: Always enqueue destination regardless of returning status
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
                 return true;
             }
@@ -173,7 +171,16 @@ namespace TrafficSpy.Jobs
                         cntLeisure.Increment();
                         break;
                     case Purpose.GoingHome:
-                        cntGoingHome.Increment();
+                        // Check if this is actually "Moving In" vs. "Going Home"
+                        if (householdMemberLookup.TryGetComponent(citizenEntity, out HouseholdMember householdMember) &&
+                            householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
+                            (household.m_Flags & HouseholdFlags.MovedIn) == 0)
+                        {
+                            cntMovingIn.Increment();
+                            currentPurpose = Purpose.MovingAway; // Use MovingAway as proxy for MovingIn for highlight rendering
+                        }else{
+                            cntGoingHome.Increment();
+                        }
                         break;
                     case Purpose.GoingToWork:
                     case Purpose.Working:
@@ -245,15 +252,15 @@ namespace TrafficSpy.Jobs
             }
             else
             {
-                // No purpose (Private cars, dummy traffic)
+                // No purpose (Private cars without citizen component, dummy traffic, etc.)
                 cntNone.Increment();
             }
 
             // Always try to visualize destination, even if no purpose found
+            // This handles personal cars and other entities with targets
             EnqueueDestination(entity, currentPurpose);
         }
 
-        // FIXED: New method specifically for vehicle destinations
         private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type)
         {
             Entity rawDest = Entity.Null;
