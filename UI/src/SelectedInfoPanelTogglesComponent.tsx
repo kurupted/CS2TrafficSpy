@@ -43,6 +43,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true}
                 subRow={false}
                 className={InfoRowTheme?.infoRow} 
+                key={label} // Added key property for React list rendering
             />
         );
     };
@@ -75,6 +76,23 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                       (data.school || 0) + (data.transporting || 0) + (data.returning || 0) +
                       (data.tourism || 0) + (data.other || 0) + (data.services || 0);
 
+        // 1. Create an array of objects for all categories EXCEPT "None/Unknown"
+        //    Use ( || 0 ) to ensure safety if a field is undefined
+        const sortedRows = [
+            { label: "Going Home", count: data.goingHome || 0 },
+            { label: "Going to Work", count: data.goingToWork || 0 },
+            { label: "Going to School", count: data.school || 0 },
+            { label: "Shopping", count: data.shopping || 0 },
+            { label: "Leisure", count: data.leisure || 0 },
+            { label: "Transporting / Delivery", count: data.transporting || 0 },
+            { label: "Returning Truck", count: data.returning || 0 },
+            { label: "Services", count: data.services || 0 },
+            { label: "Tourism", count: data.tourism || 0 },
+            { label: "Moving In", count: data.movingIn || 0 },
+            { label: "Moving Away", count: data.movingAway || 0 },
+            { label: "Other", count: data.other || 0 },
+        ].sort((a, b) => b.count - a.count); // 2. Sort Descending
+
         return (
             <InfoSection 
                 focusKey={VanillaComponentResolver.instance.FOCUS_DISABLED} 
@@ -90,19 +108,11 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     className={InfoRowTheme?.infoRow} 
                 />
                 
-                {renderRow("Going Home", data.goingHome)}
-                {renderRow("Going to Work", data.goingToWork)}
-                {renderRow("Going to School", data.school)}
-                {renderRow("Shopping", data.shopping)}
-                {renderRow("Leisure", data.leisure)}
-                {renderRow("Transporting / Delivery", data.transporting)}
-                {renderRow("Returning Truck", data.returning)}
-                {renderRow("Services", data.services)}
-                {renderRow("Tourism", data.tourism)}
-                {renderRow("Moving In", data.movingIn)}
-                {renderRow("Moving Away", data.movingAway)}
-                {renderRow("Other", data.other)}
-                {renderRow("None/Unknown", data.none)}
+                {/* 3. Render the sorted list */}
+                {sortedRows.map((row) => renderRow(row.label, row.count))}
+
+                {/* 4. Always render "None" last */}
+                {renderRow("None / Unknown", data.none)}
             </InfoSection>
         );
     };

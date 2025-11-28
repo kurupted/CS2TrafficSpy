@@ -3,6 +3,7 @@ using Colossal.Logging;
 using Game;
 using Game.Input;
 using Game.Modding;
+using Game.Rendering;
 using Game.SceneFlow;
 using TrafficSpy.ModSettings;
 using UnityEngine;
@@ -45,7 +46,7 @@ namespace TrafficSpy
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
             updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate); // info view
-            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.MainLoop); // building highlighter
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.ToolUpdate); // building highlighter
         }
 
         public void OnDispose()

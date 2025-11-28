@@ -2,9 +2,7 @@
 
 TODO
 
-show info sorted desc w none at bottom
-
-vehicle says transporting, citizen inside says shopping (not counted as shopping? route at industrial ramp, car far N /\ )
+vehicle says transporting, citizen inside says shopping (not counted as shopping)
 prob related:
 	Game.Vehicles 	PersonalCar 	
 	Properties of a personally owned car (i.e. not a taxi, police car, etc.). 	unmanaged 	m_Keeper 	
@@ -17,11 +15,11 @@ handle waiting for public transit
 
 FEATURE ROADMAP
 
-- click on count to see list of entities - reference buldingusage mod?
-- Options to include/exclude peds, delivery, etc
+- click on count to see list of entities - reference buildingusage mod?
 - ability to select which side of the road to analyze
-- show counts of vehicles vs peds separately
 - Color-coded destination based on purpose
+- Options to include/exclude peds, delivery, etc
+- show counts of vehicles vs peds separately
 - toggle for passing through VS those actually on the segment
 - Highlight origin buildings (?)
 
