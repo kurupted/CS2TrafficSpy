@@ -84,12 +84,12 @@ namespace TrafficSpy.Jobs
 
         private bool AnalyzeVehicle(Entity entity)
         {
-            // 1. Service Vehicles (TrafficType.Service)
-            if (hearseLookup.HasComponent(entity) ||
+            // 1. Service Vehicles
+            if (hearseLookup.HasComponent(entity) || 
                 garbageTruckLookup.HasComponent(entity) ||
-                policeCarLookup.HasComponent(entity) ||
+                policeCarLookup.HasComponent(entity) || 
                 fireEngineLookup.HasComponent(entity) ||
-                ambulanceLookup.HasComponent(entity) ||
+                ambulanceLookup.HasComponent(entity) || 
                 postVanLookup.HasComponent(entity) ||
                 maintenanceVehicleLookup.HasComponent(entity))
             {
@@ -98,7 +98,7 @@ namespace TrafficSpy.Jobs
                 return true;
             }
 
-            // 2. Public Transport (TrafficType.PublicTransport)
+            // 2. Public Transport
             if (publicTransportLookup.HasComponent(entity))
             {
                 cntOther.Increment();
@@ -142,70 +142,19 @@ namespace TrafficSpy.Jobs
             // 5. Personal Cars
             if (personalCarLookup.TryGetComponent(entity, out PersonalCar car))
             {
-                if (car.m_Keeper != Entity.Null)
+                Purpose driverPurpose = Purpose.None;
+
+                if (car.m_Keeper != Entity.Null && travelPurposeLookup.TryGetComponent(car.m_Keeper, out TravelPurpose purpose))
                 {
-                    Entity driverEntity = car.m_Keeper;
-                    Purpose driverPurpose = Purpose.None;
-                    if (travelPurposeLookup.TryGetComponent(driverEntity, out TravelPurpose purpose))
-                    {
-                        driverPurpose = purpose.m_Purpose;
-
-                        switch (driverPurpose)
-                        {
-                            case Purpose.None: cntNone.Increment(); break;
-                            case Purpose.Shopping: cntShopping.Increment(); break;
-                            case Purpose.Leisure:
-                            case Purpose.Sleeping:
-                            case Purpose.WaitingHome:
-                            case Purpose.Relaxing: cntLeisure.Increment(); break;
-                            case Purpose.GoingHome:
-                                if (householdMemberLookup.TryGetComponent(driverEntity, out HouseholdMember householdMember) &&
-                                    householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
-                                    (household.m_Flags & HouseholdFlags.MovedIn) == 0)
-                                {
-                                    cntMovingIn.Increment();
-                                    driverPurpose = Purpose.MovingAway;
-                                }
-                                else
-                                {
-                                    cntGoingHome.Increment();
-                                }
-                                break;
-                            case Purpose.GoingToWork:
-                            case Purpose.Working: cntGoingToWork.Increment(); break;
-                            case Purpose.MovingAway: cntMovingAway.Increment(); break;
-                            case Purpose.GoingToSchool:
-                            case Purpose.Studying: cntSchool.Increment(); break;
-                            case Purpose.Sightseeing:
-                            case Purpose.Traveling:
-                            case Purpose.VisitAttractions: cntTourism.Increment(); break;
-                            case Purpose.Delivery:
-                            case Purpose.Exporting:
-                            case Purpose.UpkeepDelivery:
-                            case Purpose.StorageTransfer:
-                            case Purpose.Collect:
-                            case Purpose.CompanyShopping: cntTransporting.Increment(); break;
-                            case Purpose.ReturnGarbage:
-                            case Purpose.Deathcare:
-                            case Purpose.InDeathcare:
-                            case Purpose.ReturnUnsortedMail:
-                            case Purpose.ReturnLocalMail:
-                            case Purpose.ReturnOutgoingMail:
-                            case Purpose.SendMail:
-                            case Purpose.Hospital:
-                            case Purpose.InHospital: cntServices.Increment(); break;
-                            default: cntOther.Increment(); break;
-                        }
-                        // todo: origin stuff if we end up supporting it
-                    }
-                    else
-                    {
-                        cntNone.Increment();
-                    }
-                    EnqueueVehicleDestination(entity, driverPurpose, TrafficType.Citizen);
-                    return true;
+                    driverPurpose = purpose.m_Purpose;
+                    IncrementCounter(driverPurpose, car.m_Keeper); // Helper to increment based on purpose
                 }
-
+                else
+                {
+                    cntNone.Increment();
+                }
+                EnqueueVehicleDestination(entity, driverPurpose, TrafficType.Citizen);
+                return true;
             }
 
             return false;
@@ -213,6 +162,11 @@ namespace TrafficSpy.Jobs
 
         private void AnalyzeCitizen(Entity entity)
         {
+            // Exclude Citizens inside vehicles ---
+            // If a citizen is in a vehicle, the Vehicle entity logic above should handle it.
+            // If we process the citizen too, we get double counts and confusing highlights.
+            if (currentVehicleLookup.HasComponent(entity)) return;
+
             Entity citizenEntity = entity;
             if (creatureResidentLookup.TryGetComponent(entity, out Game.Creatures.Resident resident))
             {
@@ -223,83 +177,64 @@ namespace TrafficSpy.Jobs
             if (travelPurposeLookup.TryGetComponent(citizenEntity, out TravelPurpose purpose))
             {
                 currentPurpose = purpose.m_Purpose;
-
-                switch (currentPurpose)
-                {
-                    case Purpose.None: cntNone.Increment(); break;
-                    case Purpose.Shopping: cntShopping.Increment(); break;
-                    case Purpose.Leisure:
-                    case Purpose.Sleeping:
-                    case Purpose.WaitingHome:
-                    case Purpose.Relaxing: cntLeisure.Increment(); break;
-                    case Purpose.GoingHome:
-                        if (householdMemberLookup.TryGetComponent(citizenEntity, out HouseholdMember householdMember) &&
-                            householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
-                            (household.m_Flags & HouseholdFlags.MovedIn) == 0)
-                        {
-                            cntMovingIn.Increment();
-                            currentPurpose = Purpose.MovingAway;
-                        }
-                        else
-                        {
-                            cntGoingHome.Increment();
-                        }
-                        break;
-                    case Purpose.GoingToWork:
-                    case Purpose.Working: cntGoingToWork.Increment(); break;
-                    case Purpose.MovingAway: cntMovingAway.Increment(); break;
-                    case Purpose.GoingToSchool:
-                    case Purpose.Studying: cntSchool.Increment(); break;
-                    case Purpose.Sightseeing:
-                    case Purpose.Traveling:
-                    case Purpose.VisitAttractions: cntTourism.Increment(); break;
-                    case Purpose.Delivery:
-                    case Purpose.Exporting:
-                    case Purpose.UpkeepDelivery:
-                    case Purpose.StorageTransfer:
-                    case Purpose.Collect:
-                    case Purpose.CompanyShopping: cntTransporting.Increment(); break;
-                    case Purpose.ReturnGarbage:
-                    case Purpose.Deathcare:
-                    case Purpose.InDeathcare:
-                    case Purpose.ReturnUnsortedMail:
-                    case Purpose.ReturnLocalMail:
-                    case Purpose.ReturnOutgoingMail:
-                    case Purpose.SendMail:
-                    case Purpose.Hospital:
-                    case Purpose.InHospital: cntServices.Increment(); break;
-                    default: cntOther.Increment(); break;
-                }
-
-                /*Entity originEntity = Entity.Null;
-                if (currentPurpose == Purpose.GoingHome)
-                {
-                    if (workerLookup.TryGetComponent(citizenEntity, out Worker workerData))
-                        originEntity = workerData.m_Workplace;
-                    else if (studentLookup.TryGetComponent(citizenEntity, out Game.Citizens.Student studentData))
-                        originEntity = studentData.m_School;
-                }
-                else if (currentPurpose == Purpose.GoingToWork || currentPurpose == Purpose.GoingToSchool)
-                {
-                    if (householdMemberLookup.TryGetComponent(citizenEntity, out HouseholdMember memberData))
-                        originEntity = memberData.m_Household;
-                }
-
-                if (originEntity != Entity.Null)
-                {
-                    Entity physicalOrigin = ResolvePhysicalEntity(originEntity);
-                    if (physicalOrigin != Entity.Null)
-                    {
-                        results.Enqueue(new TrafficRenderData { entity = physicalOrigin, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = true, isVehicle = false });
-                    }
-                }*/
+                IncrementCounter(currentPurpose, citizenEntity);
             }
             else
             {
                 cntNone.Increment();
             }
 
+            // This citizen is walking/waiting (not in vehicle), so include them.
             EnqueueDestination(entity, currentPurpose);
+        }
+
+        private void IncrementCounter(Purpose p, Entity entity)
+        {
+            switch (p)
+            {
+                case Purpose.None: cntNone.Increment(); break;
+                case Purpose.Shopping: cntShopping.Increment(); break;
+                case Purpose.Leisure:
+                case Purpose.Sleeping:
+                case Purpose.WaitingHome:
+                case Purpose.Relaxing: cntLeisure.Increment(); break;
+                case Purpose.GoingHome:
+                    if (householdMemberLookup.TryGetComponent(entity, out HouseholdMember householdMember) &&
+                        householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
+                        (household.m_Flags & HouseholdFlags.MovedIn) == 0)
+                    {
+                        cntMovingIn.Increment();
+                    }
+                    else
+                    {
+                        cntGoingHome.Increment();
+                    }
+                    break;
+                case Purpose.GoingToWork:
+                case Purpose.Working: cntGoingToWork.Increment(); break;
+                case Purpose.MovingAway: cntMovingAway.Increment(); break;
+                case Purpose.GoingToSchool:
+                case Purpose.Studying: cntSchool.Increment(); break;
+                case Purpose.Sightseeing:
+                case Purpose.Traveling:
+                case Purpose.VisitAttractions: cntTourism.Increment(); break;
+                case Purpose.Delivery:
+                case Purpose.Exporting:
+                case Purpose.UpkeepDelivery:
+                case Purpose.StorageTransfer:
+                case Purpose.Collect:
+                case Purpose.CompanyShopping: cntTransporting.Increment(); break;
+                case Purpose.ReturnGarbage:
+                case Purpose.Deathcare:
+                case Purpose.InDeathcare:
+                case Purpose.ReturnUnsortedMail:
+                case Purpose.ReturnLocalMail:
+                case Purpose.ReturnOutgoingMail:
+                case Purpose.SendMail:
+                case Purpose.Hospital:
+                case Purpose.InHospital: cntServices.Increment(); break;
+                default: cntOther.Increment(); break;
+            }
         }
 
         private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type)
@@ -307,18 +242,14 @@ namespace TrafficSpy.Jobs
             // Enqueue Vehicle (isVehicle = true)
             results.Enqueue(new TrafficRenderData { entity = vehicleEntity, purpose = purpose, type = type, isOrigin = false, isVehicle = true });
 
-            Entity rawDest = Entity.Null;
-            if (targetLookup.TryGetComponent(vehicleEntity, out Target dest))
+            // Logic to find destination building
+            if (targetLookup.TryGetComponent(vehicleEntity, out Target dest) && dest.m_Target != Entity.Null)
             {
-                rawDest = dest.m_Target;
-                if (rawDest != Entity.Null)
+                Entity physicalDest = ResolvePhysicalEntity(dest.m_Target);
+                if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                    Entity physicalDest = ResolvePhysicalEntity(rawDest);
-                    if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
-                    {
                         // Enqueue Destination (isVehicle = false)
-                        results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false, isVehicle = false });
-                    }
+                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false, isVehicle = false });
                 }
             }
         }
@@ -328,7 +259,7 @@ namespace TrafficSpy.Jobs
             Entity renderEntity = entity;
             TrafficType type = TrafficType.Citizen;
 
-            // Fix 1: Resolve the actual vehicle entity if the citizen is driving
+            // Resolve the actual vehicle entity if the citizen is driving
             bool isDriving = currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef);
             if (isDriving)
             {
@@ -351,7 +282,6 @@ namespace TrafficSpy.Jobs
                     rawDest = vehicleDest.m_Target;
                 }
             }
-
             if (rawDest != Entity.Null)
             {
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);

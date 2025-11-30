@@ -48,6 +48,8 @@ namespace TrafficSpy.Systems
 
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
+        private ValueBinding<bool> showAllVehiclesBinding;
+        private bool showAllVehicles = false;
 
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
@@ -86,9 +88,17 @@ namespace TrafficSpy.Systems
 
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
+            this.showAllVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showAllVehicles", false);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
+            AddBinding(this.showAllVehiclesBinding);
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowAllVehicles", (bool active) => {
+                this.showAllVehicles = active;
+                this.showAllVehiclesBinding.Update(active);
+                ApplyFilter(); // Re-apply filter immediately
+            }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
                 try
@@ -200,6 +210,12 @@ namespace TrafficSpy.Systems
                 {
                     if (!item.isVehicle)
                     {
+                        // Always show destinations
+                        CurrentRenderList.Add(item);
+                    }
+                    else if (this.showAllVehicles) // NEW CHECK
+                    {
+                        // Show vehicles if toggle is ON
                         CurrentRenderList.Add(item);
                     }
                 }

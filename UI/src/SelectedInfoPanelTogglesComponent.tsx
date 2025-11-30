@@ -1,9 +1,10 @@
 import { getModule } from "cs2/modding";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
-import { activityData, setTrafficFilter } from "./bindings";
+import { activityData, setTrafficFilter, showAllVehicles, setShowAllVehicles } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
 import { SegmentActivity } from "./types";
+
 
 interface InfoSectionComponent {
     group: string;
@@ -38,14 +39,13 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         if (!count || count <= 0) return null;
         
         const isSelected = activeFilter === filterKey;
-        // Fix 4: Prepend > < to selected labels
+        // Prepend > < to selected labels
         const displayLabel = isSelected ? `> ${label}` : label; 
         
-        // Fix 4: Define styles for clickable elements
-        const clickableStyle: React.CSSProperties = {
-            cursor: "pointer",
-            color: isSelected ? 'rgb(255, 255, 0)' : 'rgb(120, 190, 255)', // Yellow if selected, Blue otherwise
-            fontWeight: isSelected ? 'bold' : 'normal',
+        // Define styles for clickable elements
+        const textStyle: React.CSSProperties = {
+            color: isSelected ? 'rgba(255, 235, 100, 1)' : 'rgba(120, 200, 255, 1)', 
+            fontWeight: isSelected ? '800' : 'normal',
         };
 
         return (
@@ -56,11 +56,11 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     setActive(newValue);
                     setTrafficFilter(filterKey); 
                 }}
-                style={clickableStyle} // Apply the style to the container div
+                style={{ cursor: "pointer" }}
             >
                 <InfoRow 
-                    left={displayLabel} 
-                    right={count.toString()} 
+                    left={<span style={textStyle}>{displayLabel}</span>} 
+                    right={<span style={textStyle}>{count.toString()}</span>}
                     uppercase={false} 
                     disableFocus={true}
                     subRow={false}
@@ -71,42 +71,23 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     };
     
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
-
         const jsonString = useValue(activityData);
+        const showVehicles = useValue(showAllVehicles); // Use new binding
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const data: SegmentActivity = useMemo(() => {
-            try {
-                if (!jsonString || jsonString === "{}") {
-                    return { 
-                        none: 0, shopping: 0, leisure: 0, goingHome: 0, 
-                        goingToWork: 0, movingIn: 0, movingAway: 0, school: 0, transporting: 0, returning: 0,
-                        tourism: 0, other: 0, services: 0 
-                    };
-                }
-                return JSON.parse(jsonString);
-            } catch (e) {
-                console.error("Parse error", e);
-                return { 
-                    none: 0, shopping: 0, leisure: 0, goingHome: 0, 
-                    goingToWork: 0, movingIn: 0, movingAway: 0, school: 0, transporting: 0, returning: 0,
-                    tourism: 0, other: 0, services: 0 
-                };
-            }
+             try { return JSON.parse(jsonString || "{}"); } catch(e) { return {}; }
         }, [jsonString]);
         
         const total = (data.none || 0) + (data.shopping || 0) + (data.leisure || 0) +
                       (data.goingHome || 0) + (data.goingToWork || 0) + (data.movingIn || 0) + (data.movingAway || 0) +
                       (data.school || 0) + (data.transporting || 0) + (data.returning || 0) +
                       (data.tourism || 0) + (data.other || 0) + (data.services || 0);
-                      
-        // Fix 4: Style for the total row
-        const totalRowStyle: React.CSSProperties = {
-            cursor: "pointer",
-            color: activeFilter === "" ? 'rgb(255, 255, 0)' : 'white', // Yellow if reset, White otherwise
-            fontWeight: activeFilter === "" ? 'bold' : 'normal',
+        
+        const totalStyle: React.CSSProperties = {
+            color: activeFilter === "" ? 'rgba(255, 235, 100, 1)' : 'white',
+            fontWeight: activeFilter === "" ? '800' : 'normal',
         };
-
         const sortedRows = [
             { label: "Going Home", count: data.goingHome || 0, key: "goingHome" },
             { label: "Going to Work", count: data.goingToWork || 0, key: "goingToWork" },
@@ -122,35 +103,56 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             { label: "Other", count: data.other || 0, key: "other" },
         ].sort((a, b) => b.count - a.count);
 
+
+
         return (
             <InfoSection 
                 focusKey={VanillaComponentResolver.instance.FOCUS_DISABLED} 
                 disableFocus={true} 
                 className={InfoSectionTheme?.infoSection}
             >
-                {/* Total Row (Clickable/Reset) */}
+                {/* 1. RESET / TOTAL ROW */}
                 <div 
-                    onClick={() => {
-                        setActiveFilter("");
-                        setTrafficFilter("RESET"); 
-                    }}
-                    style={totalRowStyle}
+                    onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }}
+                    style={{ cursor: "pointer", marginBottom: "5px" }}
                 >
                     <InfoRow 
-                        left={activeFilter === "" ? "> TOTAL ACTIVITY (RESET)" : "TOTAL ACTIVITY (RESET)"}
-                        right={total.toString()} 
+                        left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}
+                        right={<span style={totalStyle}>{total.toString()}</span>}
                         uppercase={true} 
                         disableFocus={true}
                         subRow={false}
                         className={InfoRowTheme?.infoRow} 
                     />
                 </div>
-                
-                {/* Filterable Rows */}
-                {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
 
-                {/* None/Unknown Row */}
+                {/* 2. TOGGLE FOR VEHICLES (Visible only when no specific filter active) */}
+                {activeFilter === "" && (
+                    <div 
+                        onClick={() => setShowAllVehicles(!showVehicles)}
+                        style={{ cursor: "pointer", marginBottom: "10px" }}
+                    >
+                         <InfoRow 
+                            left={<span style={{ color: "white", fontSize: "0.8em", opacity: 0.8 }}>Show All Vehicles</span>}
+                            right={
+                                <div style={{ 
+                                    width: "12px", height: "12px", 
+                                    borderRadius: "50%", 
+                                    border: "1px solid white",
+                                    backgroundColor: showVehicles ? "rgb(100, 255, 100)" : "transparent"
+                                }}></div>
+                            }
+                            uppercase={false} 
+                            subRow={true}
+                            className={InfoRowTheme?.infoRow} 
+                        />
+                    </div>
+                )}
+                
+                {/* 3. DATA ROWS */}
+                {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
                 {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
+
             </InfoSection>
         );
     };
