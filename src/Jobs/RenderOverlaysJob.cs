@@ -10,7 +10,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Colossal.Mathematics;
-using TrafficSpy.Systems; // FIXED: Needed for TrafficRenderData
+using TrafficSpy.Systems;
 
 namespace TrafficSpy.Jobs
 {
@@ -30,6 +30,12 @@ namespace TrafficSpy.Jobs
             for (int i = 0; i < renderList.Length; i++)
             {
                 TrafficRenderData data = renderList[i];
+
+                // Skip drawing overlays (lines/circles) on the Vehicles themselves
+                // The TrafficHighlightSystem will handle the highlighting (shader/glowing)
+                // This keeps the view clean.
+                if (data.isVehicle) continue;
+
                 UnityEngine.Color color = GetColor(data);
                 DrawEntityOutline(data.entity, color);
             }

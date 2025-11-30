@@ -85,7 +85,7 @@ namespace TrafficSpy.Jobs
 
         private bool AnalyzeVehicle(Entity entity)
         {
-            // 1. Service Vehicles (Check these first to catch returning hearses etc)
+            // 1. Service Vehicles
             if (hearseLookup.HasComponent(entity) ||
                 garbageTruckLookup.HasComponent(entity) ||
                 policeCarLookup.HasComponent(entity) ||
@@ -246,7 +246,7 @@ namespace TrafficSpy.Jobs
                     Entity physicalOrigin = ResolvePhysicalEntity(originEntity);
                     if (physicalOrigin != Entity.Null)
                     {
-                        results.Enqueue(new TrafficRenderData { entity = physicalOrigin, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = true });
+                        results.Enqueue(new TrafficRenderData { entity = physicalOrigin, purpose = currentPurpose, type = TrafficType.Citizen, isOrigin = true, isVehicle = false });
                     }
                 }
             }
@@ -256,16 +256,16 @@ namespace TrafficSpy.Jobs
                 cntNone.Increment();
             }
 
-            // Always try to visualize destination, even if no purpose found
-            // This handles personal cars and other entities with targets
+            // Visualize destination
             EnqueueDestination(entity, currentPurpose);
         }
 
         private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type)
         {
-            Entity rawDest = Entity.Null;
+            // NEW: Add the vehicle itself to results so it can be highlighted
+            results.Enqueue(new TrafficRenderData { entity = vehicleEntity, purpose = purpose, type = type, isOrigin = false, isVehicle = true });
 
-            // Vehicles have Target component directly on them
+            Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(vehicleEntity, out Target dest))
             {
                 rawDest = dest.m_Target;
@@ -275,7 +275,7 @@ namespace TrafficSpy.Jobs
                     Entity physicalDest = ResolvePhysicalEntity(rawDest);
                     if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                     {
-                        results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false });
+                        results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false, isVehicle = false });
                     }
                 }
             }
@@ -283,6 +283,9 @@ namespace TrafficSpy.Jobs
 
         private void EnqueueDestination(Entity entity, Purpose purpose)
         {
+            // NEW: Add the entity (citizen/vehicle) itself to results
+            results.Enqueue(new TrafficRenderData { entity = entity, purpose = purpose, type = TrafficType.Citizen, isOrigin = false, isVehicle = true });
+
             Entity rawDest = Entity.Null;
 
             // 1. Check direct target (Citizens, Pedestrians)
@@ -304,7 +307,7 @@ namespace TrafficSpy.Jobs
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = TrafficType.Citizen, isOrigin = false });
+                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = TrafficType.Citizen, isOrigin = false, isVehicle = false });
                 }
             }
         }

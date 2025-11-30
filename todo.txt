@@ -17,7 +17,9 @@ FEATURE ROADMAP
 
 - click on count to see list of entities - reference buildingusage mod?
 - ability to select which side of the road to analyze
+- color-code the vehicles themselves
 - Color-coded destination based on purpose
+
 - Options to include/exclude peds, delivery, etc
 - show counts of vehicles vs peds separately
 - toggle for passing through VS those actually on the segment

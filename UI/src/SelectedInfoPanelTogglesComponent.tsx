@@ -1,8 +1,8 @@
 import { getModule } from "cs2/modding";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
-import { activityData } from "./bindings";
+import { activityData, setTrafficFilter } from "./bindings";
 import { useValue } from "cs2/api";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SegmentActivity } from "./types";
 
 interface InfoSectionComponent {
@@ -33,24 +33,42 @@ const InfoRow: any = getModule(
 
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
 
-    const renderRow = (label: string, count: number) => {
+    // Helper to render rows with click handlers
+    const renderRow = (label: string, count: number, filterKey: string, activeFilter: string, setActive: any) => {
         if (!count || count <= 0) return null;
+        
+        const isSelected = activeFilter === filterKey;
+        const displayLabel = isSelected ? `> ${label} <` : label;
+
         return (
-            <InfoRow 
-                left={label} 
-                right={count.toString()} 
-                uppercase={false} 
-                disableFocus={true}
-                subRow={false}
-                className={InfoRowTheme?.infoRow} 
-                key={label} // Added key property for React list rendering
-            />
+            <div 
+                key={label}
+                onClick={() => {
+                    // Update local UI state for immediate feedback
+                    const newValue = isSelected ? "" : filterKey;
+                    setActive(newValue);
+                    setTrafficFilter(filterKey); 
+                }}
+                style={{ cursor: "pointer" }}
+            >
+                <InfoRow 
+                    left={displayLabel} 
+                    right={count.toString()} 
+                    uppercase={false} 
+                    disableFocus={true}
+                    subRow={false}
+                    className={InfoRowTheme?.infoRow} 
+                />
+            </div>
         );
     };
     
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
 
         const jsonString = useValue(activityData);
+        // Track local active filter state to update UI immediately
+        const [activeFilter, setActiveFilter] = useState<string>("");
+
         const data: SegmentActivity = useMemo(() => {
             try {
                 if (!jsonString || jsonString === "{}") {
@@ -76,22 +94,21 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                       (data.school || 0) + (data.transporting || 0) + (data.returning || 0) +
                       (data.tourism || 0) + (data.other || 0) + (data.services || 0);
 
-        // 1. Create an array of objects for all categories EXCEPT "None/Unknown"
-        //    Use ( || 0 ) to ensure safety if a field is undefined
+        // Define mapping of Label -> Filter Key
         const sortedRows = [
-            { label: "Going Home", count: data.goingHome || 0 },
-            { label: "Going to Work", count: data.goingToWork || 0 },
-            { label: "Going to School", count: data.school || 0 },
-            { label: "Shopping", count: data.shopping || 0 },
-            { label: "Leisure", count: data.leisure || 0 },
-            { label: "Transporting / Delivery", count: data.transporting || 0 },
-            { label: "Returning Truck", count: data.returning || 0 },
-            { label: "Services", count: data.services || 0 },
-            { label: "Tourism", count: data.tourism || 0 },
-            { label: "Moving In", count: data.movingIn || 0 },
-            { label: "Moving Away", count: data.movingAway || 0 },
-            { label: "Other", count: data.other || 0 },
-        ].sort((a, b) => b.count - a.count); // 2. Sort Descending
+            { label: "Going Home", count: data.goingHome || 0, key: "goingHome" },
+            { label: "Going to Work", count: data.goingToWork || 0, key: "goingToWork" },
+            { label: "Going to School", count: data.school || 0, key: "school" },
+            { label: "Shopping", count: data.shopping || 0, key: "shopping" },
+            { label: "Leisure", count: data.leisure || 0, key: "leisure" },
+            { label: "Transporting / Delivery", count: data.transporting || 0, key: "transporting" },
+            { label: "Returning Truck", count: data.returning || 0, key: "returning" },
+            { label: "Services", count: data.services || 0, key: "services" },
+            { label: "Tourism", count: data.tourism || 0, key: "tourism" },
+            { label: "Moving In", count: data.movingIn || 0, key: "movingIn" },
+            { label: "Moving Away", count: data.movingAway || 0, key: "movingAway" },
+            { label: "Other", count: data.other || 0, key: "other" },
+        ].sort((a, b) => b.count - a.count);
 
         return (
             <InfoSection 
@@ -99,20 +116,27 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true} 
                 className={InfoSectionTheme?.infoSection}
             >
-                <InfoRow 
-                    left="TOTAL ACTIVITY" 
-                    right={total.toString()} 
-                    uppercase={true} 
-                    disableFocus={true}
-                    subRow={false}
-                    className={InfoRowTheme?.infoRow} 
-                />
+                {/* Clicking Total resets the filter */}
+                <div 
+                    onClick={() => {
+                        setActiveFilter("");
+                        setTrafficFilter("RESET"); 
+                    }}
+                    style={{ cursor: "pointer" }}
+                >
+                    <InfoRow 
+                        left="TOTAL ACTIVITY (RESET)" 
+                        right={total.toString()} 
+                        uppercase={true} 
+                        disableFocus={true}
+                        subRow={false}
+                        className={InfoRowTheme?.infoRow} 
+                    />
+                </div>
                 
-                {/* 3. Render the sorted list */}
-                {sortedRows.map((row) => renderRow(row.label, row.count))}
+                {sortedRows.map((row) => renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter))}
 
-                {/* 4. Always render "None" last */}
-                {renderRow("None / Unknown", data.none)}
+                {renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter)}
             </InfoSection>
         );
     };
