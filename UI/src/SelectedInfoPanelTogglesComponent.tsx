@@ -38,18 +38,25 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         if (!count || count <= 0) return null;
         
         const isSelected = activeFilter === filterKey;
-        const displayLabel = isSelected ? `> ${label} <` : label;
+        // Fix 4: Prepend > < to selected labels
+        const displayLabel = isSelected ? `> ${label}` : label; 
+        
+        // Fix 4: Define styles for clickable elements
+        const clickableStyle: React.CSSProperties = {
+            cursor: "pointer",
+            color: isSelected ? 'rgb(255, 255, 0)' : 'rgb(120, 190, 255)', // Yellow if selected, Blue otherwise
+            fontWeight: isSelected ? 'bold' : 'normal',
+        };
 
         return (
             <div 
                 key={label}
                 onClick={() => {
-                    // Update local UI state for immediate feedback
                     const newValue = isSelected ? "" : filterKey;
                     setActive(newValue);
                     setTrafficFilter(filterKey); 
                 }}
-                style={{ cursor: "pointer" }}
+                style={clickableStyle} // Apply the style to the container div
             >
                 <InfoRow 
                     left={displayLabel} 
@@ -66,7 +73,6 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
 
         const jsonString = useValue(activityData);
-        // Track local active filter state to update UI immediately
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const data: SegmentActivity = useMemo(() => {
@@ -93,8 +99,14 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                       (data.goingHome || 0) + (data.goingToWork || 0) + (data.movingIn || 0) + (data.movingAway || 0) +
                       (data.school || 0) + (data.transporting || 0) + (data.returning || 0) +
                       (data.tourism || 0) + (data.other || 0) + (data.services || 0);
+                      
+        // Fix 4: Style for the total row
+        const totalRowStyle: React.CSSProperties = {
+            cursor: "pointer",
+            color: activeFilter === "" ? 'rgb(255, 255, 0)' : 'white', // Yellow if reset, White otherwise
+            fontWeight: activeFilter === "" ? 'bold' : 'normal',
+        };
 
-        // Define mapping of Label -> Filter Key
         const sortedRows = [
             { label: "Going Home", count: data.goingHome || 0, key: "goingHome" },
             { label: "Going to Work", count: data.goingToWork || 0, key: "goingToWork" },
@@ -116,16 +128,16 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true} 
                 className={InfoSectionTheme?.infoSection}
             >
-                {/* Clicking Total resets the filter */}
+                {/* Total Row (Clickable/Reset) */}
                 <div 
                     onClick={() => {
                         setActiveFilter("");
                         setTrafficFilter("RESET"); 
                     }}
-                    style={{ cursor: "pointer" }}
+                    style={totalRowStyle}
                 >
                     <InfoRow 
-                        left="TOTAL ACTIVITY (RESET)" 
+                        left={activeFilter === "" ? "> TOTAL ACTIVITY (RESET)" : "TOTAL ACTIVITY (RESET)"}
                         right={total.toString()} 
                         uppercase={true} 
                         disableFocus={true}
@@ -134,9 +146,11 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     />
                 </div>
                 
-                {sortedRows.map((row) => renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter))}
+                {/* Filterable Rows */}
+                {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
 
-                {renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter)}
+                {/* None/Unknown Row */}
+                {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
             </InfoSection>
         );
     };

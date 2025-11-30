@@ -6,7 +6,6 @@ using Game.Citizens;
 using Game.Common;
 using Game.Creatures;
 using Game.Net;
-//using Game.Objects;
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -38,7 +37,7 @@ namespace TrafficSpy.Systems
         public Game.Citizens.Purpose purpose;
         public TrafficType type;
         public bool isOrigin;
-        public bool isVehicle; // New flag to distinguish the vehicle itself
+        public bool isVehicle;
     }
 
     [UpdateAfter(typeof(ToolSystem))]
@@ -54,13 +53,11 @@ namespace TrafficSpy.Systems
         private bool defaultDebugSelectState = false;
         private bool usePathBasedAnalysis = true;
 
-        // Stores the FULL list of results from the latest job
         private List<TrafficRenderData> allAnalysisResults = new List<TrafficRenderData>();
-        // Stores the filtered list currently being rendered
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
         public static bool IsDirty = false;
 
-        private string currentFilter = ""; // "" means show all (default view)
+        private string currentFilter = "";
 
         private Entity lastSelectedEntity = Entity.Null;
         private EntityQuery pathOwnerQuery;
@@ -93,28 +90,32 @@ namespace TrafficSpy.Systems
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
 
-            // Binding to receive filter clicks from UI
-            AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (filter) => {
-                // Handle Reset
-                if (filter == "RESET" || string.IsNullOrEmpty(filter))
+            AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
+                try
                 {
-                    this.currentFilter = "";
-                }
-                // Toggle behavior: if clicking the same filter, clear it
-                else if (this.currentFilter == filter)
-                {
-                    this.currentFilter = "";
-                }
-                else
-                {
-                    this.currentFilter = filter;
-                }
+                    if (filter == "RESET" || string.IsNullOrEmpty(filter))
+                    {
+                        this.currentFilter = "";
+                    }
+                    else if (this.currentFilter == filter)
+                    {
+                        this.currentFilter = "";
+                    }
+                    else
+                    {
+                        this.currentFilter = filter;
+                    }
 
-                Mod.log.Info($"TrafficSpy: Filter set to '{(string.IsNullOrEmpty(currentFilter) ? "ALL" : currentFilter)}'");
-                ApplyFilter();
+                    Mod.log.Info($"TrafficSpy: Filter set to '{(string.IsNullOrEmpty(currentFilter) ? "ALL" : currentFilter)}'");
+                    ApplyFilter();
+                }
+                catch (Exception ex)
+                {
+                    Mod.log.Error($"TrafficSpy: Error setting filter: {ex.Message}");
+                }
             }));
 
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (active) => {
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (bool active) => {
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
                 if (active)
@@ -167,7 +168,6 @@ namespace TrafficSpy.Systems
             if (selected != lastSelectedEntity)
             {
                 lastSelectedEntity = selected;
-                // Reset filter on new selection
                 currentFilter = "";
                 Mod.log.Info($"TrafficSpy: Selection changed to {selected.Index}. Running analysis...");
                 RunAnalysis(selected);
@@ -191,9 +191,11 @@ namespace TrafficSpy.Systems
         {
             CurrentRenderList.Clear();
 
+            if (allAnalysisResults == null) return;
+
             if (string.IsNullOrEmpty(currentFilter))
             {
-                // DEFAULT VIEW: Show only Destinations. Hide Vehicles.
+                // DEFAULT: Show Destinations only, Hide Vehicles
                 foreach (var item in allAnalysisResults)
                 {
                     if (!item.isVehicle)
@@ -204,7 +206,7 @@ namespace TrafficSpy.Systems
             }
             else
             {
-                // FILTERED VIEW: Show Destinations AND Vehicles that match the filter.
+                // FILTERED: Show Destinations AND Vehicles matching filter
                 foreach (var item in allAnalysisResults)
                 {
                     if (MatchesFilter(item, currentFilter))
@@ -226,27 +228,51 @@ namespace TrafficSpy.Systems
                 case "leisure": return item.purpose == Purpose.Leisure || item.purpose == Purpose.Relaxing || item.purpose == Purpose.Sleeping || item.purpose == Purpose.WaitingHome;
                 case "goingHome": return item.purpose == Purpose.GoingHome;
                 case "goingToWork": return item.purpose == Purpose.GoingToWork || item.purpose == Purpose.Working;
-                case "movingIn": return item.purpose == Purpose.MovingAway && item.type == TrafficType.Citizen; // Proxy used in Job
+                case "movingIn": return item.purpose == Purpose.MovingAway && item.type == TrafficType.Citizen;
                 case "movingAway": return item.purpose == Purpose.MovingAway;
                 case "school": return item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying;
+
+                // Fix 2: Explicitly check for Cargo Type and the Purpose tag set in the Job
                 case "transporting":
-                    // Includes Cargo trucks and Citizen transport purposes
-                    return item.type == TrafficType.Cargo ||
-                           item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery;
-                case "returning": return item.type == TrafficType.Cargo && item.purpose == Purpose.None; // Rough proxy for returning trucks, based on Job logic
+                    // Cargo vehicle marked as transporting (Purpose.Delivery from Job), or a Citizen purpose related to transport
+                    return (item.type == TrafficType.Cargo && item.purpose == Purpose.Delivery) ||
+                           (item.type == TrafficType.Citizen && (item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping));
+
+                case "returning":
+                    // Cargo vehicle marked as returning (Purpose.None from Job)
+                    return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
+
                 case "tourism": return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions;
+
                 case "services":
+                    // Service Vehicles OR Citizen services purpose
                     return item.type == TrafficType.Service ||
                            item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital ||
-                           item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage;
+                           item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage ||
+                           item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail ||
+                           item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail;
+
+                // Fix 3: Strict catch-all for anything not explicitly covered (Public Transport + truly 'other' citizen purposes)
                 case "other":
-                    return item.type == TrafficType.PublicTransport ||
-                           (item.purpose != Purpose.None &&
-                            item.purpose != Purpose.Shopping &&
-                            item.purpose != Purpose.Leisure &&
-                            item.purpose != Purpose.GoingHome &&
-                            item.purpose != Purpose.GoingToWork &&
-                            item.purpose != Purpose.GoingToSchool);
+                    // Exclude types handled by dedicated filters
+                    if (item.type == TrafficType.Cargo || item.type == TrafficType.Service) return false;
+
+                    // Public Transport is counted as 'other' in the job
+                    if (item.type == TrafficType.PublicTransport) return true;
+
+                    // Exclude all specific citizen purposes that have their own filter (including sub-purposes)
+                    return item.type == TrafficType.Citizen &&
+                           item.purpose != Purpose.None &&
+                           item.purpose != Purpose.Shopping &&
+                           !(item.purpose == Purpose.Leisure || item.purpose == Purpose.Relaxing || item.purpose == Purpose.Sleeping || item.purpose == Purpose.WaitingHome) &&
+                           item.purpose != Purpose.GoingHome &&
+                           !(item.purpose == Purpose.GoingToWork || item.purpose == Purpose.Working) &&
+                           item.purpose != Purpose.MovingAway &&
+                           !(item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying) &&
+                           !(item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions) &&
+                           !(item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping) &&
+                           !(item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital || item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage || item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail || item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail);
+
                 default: return false;
             }
         }
@@ -303,6 +329,7 @@ namespace TrafficSpy.Systems
                     deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
                     cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
                     publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
+                    personalCarLookup = SystemAPI.GetComponentLookup<PersonalCar>(true),
 
                     hearseLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Hearse>(true),
                     garbageTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.GarbageTruck>(true),
@@ -331,7 +358,6 @@ namespace TrafficSpy.Systems
 
                 pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
 
-                // Save ALL results (both vehicles and destinations)
                 allAnalysisResults.Clear();
                 int queueCount = 0;
                 while (resultsQueue.TryDequeue(out TrafficRenderData item))
@@ -346,7 +372,6 @@ namespace TrafficSpy.Systems
                 resultsQueue.Dispose();
             }
 
-            // Apply filter (will default to "" and hide vehicles)
             ApplyFilter();
 
             string json = $@"{{
