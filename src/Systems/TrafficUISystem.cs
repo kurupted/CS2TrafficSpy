@@ -37,8 +37,11 @@ namespace TrafficSpy.Systems
         public Game.Citizens.Purpose purpose;
         public TrafficType type;
         public bool isOrigin;
-        public bool isVehicle;
-        public bool isPedestrian;
+
+        public bool isVehicle;     // True ONLY for Vehicles (Cars/Trucks/Trains)
+        public bool isPedestrian;  // True for Pedestrians (and destinations derived from peds)
+        public bool isDestination; // True ONLY for Buildings/Targets
+        public bool isMovingIn;
     }
 
     [UpdateAfter(typeof(ToolSystem))]
@@ -49,10 +52,10 @@ namespace TrafficSpy.Systems
 
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
-        private ValueBinding<bool> showAllVehiclesBinding;
+        private ValueBinding<bool> highlightAgentsBinding;
         private ValueBinding<bool> showPedestriansBinding;
 
-        private bool showAllVehicles = false;
+        private bool highlightAgents = false;
         private bool showPedestrians = false;
 
         private bool isToolActive = false;
@@ -92,24 +95,24 @@ namespace TrafficSpy.Systems
 
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
-            this.showAllVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showAllVehicles", false);
-            this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false); // New
+            this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
+            this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
-            AddBinding(this.showAllVehiclesBinding);
-            AddBinding(this.showPedestriansBinding); // New
+            AddBinding(this.highlightAgentsBinding);
+            AddBinding(this.showPedestriansBinding);
 
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowAllVehicles", (bool active) => {
-                this.showAllVehicles = active;
-                this.showAllVehiclesBinding.Update(active);
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
+                this.highlightAgents = active;
+                this.highlightAgentsBinding.Update(active);
                 ApplyFilter();
             }));
 
-            // New Trigger
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowPedestrians", (bool active) => {
                 this.showPedestrians = active;
                 this.showPedestriansBinding.Update(active);
+                CalculateStats();
                 ApplyFilter();
             }));
 
@@ -216,44 +219,43 @@ namespace TrafficSpy.Systems
 
             if (allAnalysisResults == null) return;
 
-            // Revised Filtering Logic
             foreach (var item in allAnalysisResults)
             {
-                bool include = false;
+                // 1. DATA SOURCE FILTER: Exclude Pedestrians if checkbox OFF
+                // This checks "isPedestrian" (which is true for walking agents AND their destinations)
+                if (item.isPedestrian && !this.showPedestrians) continue;
 
-                // 1. Standard Logic (Filter Match vs Default View)
+                // 2. CATEGORY FILTER
+                bool matchesFilter = false;
                 if (string.IsNullOrEmpty(currentFilter))
                 {
-                    if (!item.isVehicle)
-                    {
-                        // Always show destinations if no filter
-                        include = true;
-                    }
-                    else if (this.showAllVehicles && !item.isPedestrian)
-                    {
-                        // Show vehicles if toggle ON (excluding pedestrians to keep toggles distinct)
-                        include = true;
-                    }
+                    matchesFilter = true;
                 }
                 else
                 {
-                    // Filter is Active
-                    if (MatchesFilter(item, currentFilter))
-                    {
-                        include = true;
-                    }
+                    matchesFilter = MatchesFilter(item, currentFilter);
                 }
 
-                // 2. Pedestrian Override
-                // Apply ONLY if it's a pedestrian, regardless of current filter status
-                if (this.showPedestrians && item.isPedestrian)
-                {
-                    include = true;
-                }
+                if (!matchesFilter) continue;
 
-                if (include)
+                // 3. VISIBILITY/HIGHLIGHT LOGIC
+                // Distinguish between Static Buildings (isDestination=true) and Moving Agents (isDestination=false)
+
+                if (item.isDestination)
                 {
+                    // Always show destination buildings if they match the filter
                     CurrentRenderList.Add(item);
+                }
+                else
+                {
+                    // It is an Agent (Vehicle OR Pedestrian)
+                    // Show it if:
+                    // A) A specific filter is active (show what we are filtering for)
+                    // B) OR The "Highlight Vehicles/Peds" toggle is ON
+                    if (!string.IsNullOrEmpty(currentFilter) || this.highlightAgents)
+                    {
+                        CurrentRenderList.Add(item);
+                    }
                 }
             }
 
@@ -262,7 +264,6 @@ namespace TrafficSpy.Systems
 
         private bool MatchesFilter(TrafficRenderData item, string filter)
         {
-            // (Same implementation as before)
             switch (filter)
             {
                 case "none": return item.purpose == Purpose.None && item.type != TrafficType.Service && item.type != TrafficType.Cargo && item.type != TrafficType.PublicTransport;
@@ -270,24 +271,30 @@ namespace TrafficSpy.Systems
                 case "leisure": return item.purpose == Purpose.Leisure || item.purpose == Purpose.Relaxing || item.purpose == Purpose.Sleeping || item.purpose == Purpose.WaitingHome;
                 case "goingHome": return item.purpose == Purpose.GoingHome;
                 case "goingToWork": return item.purpose == Purpose.GoingToWork || item.purpose == Purpose.Working;
-                case "movingIn": return item.purpose == Purpose.MovingAway && item.type == TrafficType.Citizen;
+                case "movingIn": return item.isMovingIn;
                 case "movingAway": return item.purpose == Purpose.MovingAway;
                 case "school": return item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying;
+
                 case "transporting":
                     return (item.type == TrafficType.Cargo && item.purpose == Purpose.Delivery) ||
                            (item.type == TrafficType.Citizen && (item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping));
+
                 case "returning":
                     return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
+
                 case "tourism": return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions;
+
                 case "services":
                     return item.type == TrafficType.Service ||
                            item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital ||
                            item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage ||
                            item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail ||
                            item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail;
+
                 case "other":
                     if (item.type == TrafficType.Cargo || item.type == TrafficType.Service) return false;
                     if (item.type == TrafficType.PublicTransport) return true;
+
                     return item.type == TrafficType.Citizen &&
                            item.purpose != Purpose.None &&
                            item.purpose != Purpose.Shopping &&
@@ -316,22 +323,109 @@ namespace TrafficSpy.Systems
             return targets;
         }
 
+        private void CalculateStats()
+        {
+            int cntNone = 0;
+            int cntShopping = 0;
+            int cntLeisure = 0;
+            int cntGoingHome = 0;
+            int cntGoingToWork = 0;
+            int cntMovingIn = 0;
+            int cntMovingAway = 0;
+            int cntSchool = 0;
+            int cntTransporting = 0;
+            int cntReturning = 0;
+            int cntTourism = 0;
+            int cntOther = 0;
+            int cntServices = 0;
+
+            foreach (var item in allAnalysisResults)
+            {
+                // Only count Agents (non-destinations)
+                if (item.isDestination) continue;
+
+                // Data Filter: If ped checkbox is OFF, skip pedestrians
+                if (item.isPedestrian && !this.showPedestrians) continue;
+
+                if (item.type == TrafficType.Service)
+                {
+                    cntServices++;
+                    continue;
+                }
+
+                if (item.type == TrafficType.PublicTransport)
+                {
+                    cntOther++;
+                    continue;
+                }
+
+                if (item.type == TrafficType.Cargo)
+                {
+                    if (item.purpose == Purpose.Delivery) cntTransporting++;
+                    else cntReturning++;
+                    continue;
+                }
+
+                switch (item.purpose)
+                {
+                    case Purpose.None: cntNone++; break;
+                    case Purpose.Shopping: cntShopping++; break;
+                    case Purpose.Leisure:
+                    case Purpose.Sleeping:
+                    case Purpose.WaitingHome:
+                    case Purpose.Relaxing: cntLeisure++; break;
+                    case Purpose.GoingHome:
+                        if (item.isMovingIn) cntMovingIn++;
+                        else cntGoingHome++;
+                        break;
+                    case Purpose.GoingToWork:
+                    case Purpose.Working: cntGoingToWork++; break;
+                    case Purpose.MovingAway: cntMovingAway++; break;
+                    case Purpose.GoingToSchool:
+                    case Purpose.Studying: cntSchool++; break;
+                    case Purpose.Sightseeing:
+                    case Purpose.Traveling:
+                    case Purpose.VisitAttractions: cntTourism++; break;
+                    case Purpose.Delivery:
+                    case Purpose.Exporting:
+                    case Purpose.UpkeepDelivery:
+                    case Purpose.StorageTransfer:
+                    case Purpose.Collect:
+                    case Purpose.CompanyShopping: cntTransporting++; break;
+                    case Purpose.ReturnGarbage:
+                    case Purpose.Deathcare:
+                    case Purpose.InDeathcare:
+                    case Purpose.ReturnUnsortedMail:
+                    case Purpose.ReturnLocalMail:
+                    case Purpose.ReturnOutgoingMail:
+                    case Purpose.SendMail:
+                    case Purpose.Hospital:
+                    case Purpose.InHospital: cntServices++; break;
+                    default: cntOther++; break;
+                }
+            }
+
+            string json = $@"{{
+                ""none"": {cntNone},
+                ""shopping"": {cntShopping},
+                ""leisure"": {cntLeisure},
+                ""goingHome"": {cntGoingHome},
+                ""goingToWork"": {cntGoingToWork},
+                ""movingIn"": {cntMovingIn},
+                ""movingAway"": {cntMovingAway},
+                ""school"": {cntSchool},
+                ""transporting"": {cntTransporting},
+                ""returning"": {cntReturning},
+                ""tourism"": {cntTourism},
+                ""other"": {cntOther},
+                ""services"": {cntServices}
+            }}";
+
+            this.activityDataBinding.Update(json);
+        }
+
         private void RunAnalysis(Entity selectedSegment)
         {
-            NativeCounter cntNone = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntShopping = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntLeisure = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntGoingHome = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntGoingToWork = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntMovingIn = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntMovingAway = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntSchool = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntTransporting = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntReturning = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntTourism = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntOther = new NativeCounter(Allocator.TempJob);
-            NativeCounter cntServices = new NativeCounter(Allocator.TempJob);
-
             if (usePathBasedAnalysis)
             {
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
@@ -366,20 +460,6 @@ namespace TrafficSpy.Systems
                     postVanLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PostVan>(true),
                     maintenanceVehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.MaintenanceVehicle>(true),
 
-                    cntNone = cntNone.ToConcurrent(),
-                    cntShopping = cntShopping.ToConcurrent(),
-                    cntLeisure = cntLeisure.ToConcurrent(),
-                    cntGoingHome = cntGoingHome.ToConcurrent(),
-                    cntGoingToWork = cntGoingToWork.ToConcurrent(),
-                    cntMovingIn = cntMovingIn.ToConcurrent(),
-                    cntMovingAway = cntMovingAway.ToConcurrent(),
-                    cntSchool = cntSchool.ToConcurrent(),
-                    cntTransporting = cntTransporting.ToConcurrent(),
-                    cntReturning = cntReturning.ToConcurrent(),
-                    cntTourism = cntTourism.ToConcurrent(),
-                    cntOther = cntOther.ToConcurrent(),
-                    cntServices = cntServices.ToConcurrent(),
-
                     results = resultsQueue.AsParallelWriter()
                 };
 
@@ -399,39 +479,8 @@ namespace TrafficSpy.Systems
                 resultsQueue.Dispose();
             }
 
+            CalculateStats();
             ApplyFilter();
-
-            string json = $@"{{
-                ""none"": {cntNone.Count},
-                ""shopping"": {cntShopping.Count},
-                ""leisure"": {cntLeisure.Count},
-                ""goingHome"": {cntGoingHome.Count},
-                ""goingToWork"": {cntGoingToWork.Count},
-                ""movingIn"": {cntMovingIn.Count},
-                ""movingAway"": {cntMovingAway.Count},
-                ""school"": {cntSchool.Count},
-                ""transporting"": {cntTransporting.Count},
-                ""returning"": {cntReturning.Count},
-                ""tourism"": {cntTourism.Count},
-                ""other"": {cntOther.Count},
-                ""services"": {cntServices.Count}
-            }}";
-
-            this.activityDataBinding.Update(json);
-
-            cntNone.Dispose();
-            cntShopping.Dispose();
-            cntLeisure.Dispose();
-            cntGoingHome.Dispose();
-            cntGoingToWork.Dispose();
-            cntMovingIn.Dispose();
-            cntMovingAway.Dispose();
-            cntSchool.Dispose();
-            cntTransporting.Dispose();
-            cntReturning.Dispose();
-            cntTourism.Dispose();
-            cntOther.Dispose();
-            cntServices.Dispose();
         }
     }
 }

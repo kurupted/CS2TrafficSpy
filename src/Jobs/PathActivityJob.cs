@@ -17,6 +17,7 @@ namespace TrafficSpy.Jobs
     public partial struct PathActivityJob : IJobEntity
     {
         [ReadOnly] public NativeHashSet<Entity> targets;
+
         // Citizen Lookups
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<Target> targetLookup;
@@ -29,11 +30,13 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
+
         // Vehicle Lookups
         [ReadOnly] public ComponentLookup<PersonalCar> personalCarLookup;
         [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
         [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
         [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
+
         // Service Vehicle Lookups
         [ReadOnly] public ComponentLookup<Game.Vehicles.Hearse> hearseLookup;
         [ReadOnly] public ComponentLookup<Game.Vehicles.GarbageTruck> garbageTruckLookup;
@@ -42,21 +45,6 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Game.Vehicles.Ambulance> ambulanceLookup;
         [ReadOnly] public ComponentLookup<Game.Vehicles.PostVan> postVanLookup;
         [ReadOnly] public ComponentLookup<Game.Vehicles.MaintenanceVehicle> maintenanceVehicleLookup;
-
-        // Counters
-        public NativeCounter.Concurrent cntNone;
-        public NativeCounter.Concurrent cntShopping;
-        public NativeCounter.Concurrent cntLeisure;
-        public NativeCounter.Concurrent cntGoingHome;
-        public NativeCounter.Concurrent cntGoingToWork;
-        public NativeCounter.Concurrent cntMovingIn;
-        public NativeCounter.Concurrent cntMovingAway;
-        public NativeCounter.Concurrent cntSchool;
-        public NativeCounter.Concurrent cntTransporting;
-        public NativeCounter.Concurrent cntReturning;
-        public NativeCounter.Concurrent cntTourism;
-        public NativeCounter.Concurrent cntOther;
-        public NativeCounter.Concurrent cntServices;
 
         public NativeQueue<TrafficRenderData>.ParallelWriter results;
 
@@ -81,7 +69,6 @@ namespace TrafficSpy.Jobs
 
         private bool AnalyzeVehicle(Entity entity)
         {
-
             // 1. Service Vehicles
             if (hearseLookup.HasComponent(entity) ||
                 garbageTruckLookup.HasComponent(entity) ||
@@ -91,7 +78,6 @@ namespace TrafficSpy.Jobs
                 postVanLookup.HasComponent(entity) ||
                 maintenanceVehicleLookup.HasComponent(entity))
             {
-                cntServices.Increment();
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service);
                 return true;
             }
@@ -99,24 +85,20 @@ namespace TrafficSpy.Jobs
             // 2. Public Transport
             if (publicTransportLookup.HasComponent(entity))
             {
-                cntOther.Increment();
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.PublicTransport);
                 return true;
             }
 
             // 3. Delivery / Cargo
-            // Use Purpose.Delivery for transporting, Purpose.None for returning
             if (deliveryTruckLookup.TryGetComponent(entity, out DeliveryTruck truck))
             {
                 if ((truck.m_State & DeliveryTruckFlags.Returning) != 0)
                 {
-                    cntReturning.Increment();
-                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo); // Returning
+                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
                 }
                 else
                 {
-                    cntTransporting.Increment();
-                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo); // Transporting
+                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo);
                 }
                 return true;
             }
@@ -126,13 +108,11 @@ namespace TrafficSpy.Jobs
             {
                 if ((cargo.m_State & CargoTransportFlags.Returning) != 0)
                 {
-                    cntReturning.Increment();
-                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo); // Returning
+                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
                 }
                 else
                 {
-                    cntTransporting.Increment();
-                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo); // Transporting
+                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo);
                 }
                 return true;
             }
@@ -141,17 +121,22 @@ namespace TrafficSpy.Jobs
             if (personalCarLookup.TryGetComponent(entity, out PersonalCar car))
             {
                 Purpose driverPurpose = Purpose.None;
+                bool isMovingIn = false;
 
                 if (car.m_Keeper != Entity.Null && travelPurposeLookup.TryGetComponent(car.m_Keeper, out TravelPurpose purpose))
                 {
                     driverPurpose = purpose.m_Purpose;
-                    IncrementCounter(driverPurpose, car.m_Keeper);
+                    if (driverPurpose == Purpose.GoingHome)
+                    {
+                        if (householdMemberLookup.TryGetComponent(car.m_Keeper, out HouseholdMember householdMember) &&
+                            householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
+                            (household.m_Flags & HouseholdFlags.MovedIn) == 0)
+                        {
+                            isMovingIn = true;
+                        }
+                    }
                 }
-                else
-                {
-                    cntNone.Increment();
-                }
-                EnqueueVehicleDestination(entity, driverPurpose, TrafficType.Citizen);
+                EnqueueVehicleDestination(entity, driverPurpose, TrafficType.Citizen, isMovingIn);
                 return true;
             }
 
@@ -160,9 +145,6 @@ namespace TrafficSpy.Jobs
 
         private void AnalyzeCitizen(Entity entity)
         {
-            // Exclude Citizens inside vehicles ---
-            // If a citizen is in a vehicle, the Vehicle entity logic above should handle it.
-            // If we process the citizen too, we get double counts and confusing highlights.
             if (currentVehicleLookup.HasComponent(entity)) return;
 
             Entity citizenEntity = entity;
@@ -172,72 +154,29 @@ namespace TrafficSpy.Jobs
             }
 
             Purpose currentPurpose = Purpose.None;
+            bool isMovingIn = false;
+
             if (travelPurposeLookup.TryGetComponent(citizenEntity, out TravelPurpose purpose))
             {
                 currentPurpose = purpose.m_Purpose;
-                IncrementCounter(currentPurpose, citizenEntity);
-            }
-            else
-            {
-                cntNone.Increment();
-            }
-
-            // This citizen is walking/waiting (not in vehicle), so include them.
-            EnqueueDestination(entity, currentPurpose);
-        }
-
-        private void IncrementCounter(Purpose p, Entity entity)
-        {
-            switch (p)
-            {
-                case Purpose.None: cntNone.Increment(); break;
-                case Purpose.Shopping: cntShopping.Increment(); break;
-                case Purpose.Leisure:
-                case Purpose.Sleeping:
-                case Purpose.WaitingHome:
-                case Purpose.Relaxing: cntLeisure.Increment(); break;
-                case Purpose.GoingHome:
+                if (currentPurpose == Purpose.GoingHome)
+                {
                     if (householdMemberLookup.TryGetComponent(entity, out HouseholdMember householdMember) &&
                         householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
                         (household.m_Flags & HouseholdFlags.MovedIn) == 0)
                     {
-                        cntMovingIn.Increment();
+                        isMovingIn = true;
                     }
-                    else
-                    {
-                        cntGoingHome.Increment();
-                    }
-                    break;
-                case Purpose.GoingToWork:
-                case Purpose.Working: cntGoingToWork.Increment(); break;
-                case Purpose.MovingAway: cntMovingAway.Increment(); break;
-                case Purpose.GoingToSchool:
-                case Purpose.Studying: cntSchool.Increment(); break;
-                case Purpose.Sightseeing:
-                case Purpose.Traveling:
-                case Purpose.VisitAttractions: cntTourism.Increment(); break;
-                case Purpose.Delivery:
-                case Purpose.Exporting:
-                case Purpose.UpkeepDelivery:
-                case Purpose.StorageTransfer:
-                case Purpose.Collect:
-                case Purpose.CompanyShopping: cntTransporting.Increment(); break;
-                case Purpose.ReturnGarbage:
-                case Purpose.Deathcare:
-                case Purpose.InDeathcare:
-                case Purpose.ReturnUnsortedMail:
-                case Purpose.ReturnLocalMail:
-                case Purpose.ReturnOutgoingMail:
-                case Purpose.SendMail:
-                case Purpose.Hospital:
-                case Purpose.InHospital: cntServices.Increment(); break;
-                default: cntOther.Increment(); break;
+                }
             }
+
+            EnqueueDestination(entity, currentPurpose, isMovingIn);
         }
 
-        private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type)
+        private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type, bool isMovingIn = false)
         {
-            // Enqueue Vehicle (isVehicle = true)
+            // Vehicle Agent
+            // isVehicle = true, isDestination = false
             results.Enqueue(new TrafficRenderData
             {
                 entity = vehicleEntity,
@@ -245,16 +184,18 @@ namespace TrafficSpy.Jobs
                 type = type,
                 isOrigin = false,
                 isVehicle = true,
-                isPedestrian = false
+                isPedestrian = false,
+                isDestination = false,
+                isMovingIn = isMovingIn
             });
 
-            // Logic to find destination building
+            // Vehicle Destination (Building)
             if (targetLookup.TryGetComponent(vehicleEntity, out Target dest) && dest.m_Target != Entity.Null)
             {
                 Entity physicalDest = ResolvePhysicalEntity(dest.m_Target);
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                    // Enqueue Destination (isVehicle = false)
+                    // isVehicle = false, isDestination = true
                     results.Enqueue(new TrafficRenderData
                     {
                         entity = physicalDest,
@@ -262,35 +203,41 @@ namespace TrafficSpy.Jobs
                         type = type,
                         isOrigin = false,
                         isVehicle = false,
-                        isPedestrian = false
+                        isPedestrian = false,
+                        isDestination = true,
+                        isMovingIn = isMovingIn
                     });
                 }
             }
         }
 
-        private void EnqueueDestination(Entity entity, Purpose purpose)
+        private void EnqueueDestination(Entity entity, Purpose purpose, bool isMovingIn = false)
         {
             Entity renderEntity = entity;
             TrafficType type = TrafficType.Citizen;
-            bool isPedestrian = true; // Default to true (walker)
+            bool isPedestrian = true;
+            bool isVehicle = false;
 
-            // Resolve the actual vehicle entity if the citizen is driving
             bool isDriving = currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef);
             if (isDriving)
             {
                 renderEntity = vehicleRef.m_Vehicle;
-                isPedestrian = false; // They are in a car
+                isPedestrian = false; // Driving -> Not a Pedestrian (for type classification)
+                isVehicle = true;     // Driving -> Is a Vehicle
             }
 
-            // Enqueue the moving agent (pedestrian or vehicle) for highlighting
+            // Citizen Agent
+            // isDestination = false
             results.Enqueue(new TrafficRenderData
             {
                 entity = renderEntity,
                 purpose = purpose,
                 type = type,
                 isOrigin = false,
-                isVehicle = true,
-                isPedestrian = isPedestrian
+                isVehicle = isVehicle,
+                isPedestrian = isPedestrian,
+                isDestination = false,
+                isMovingIn = isMovingIn
             });
 
             Entity rawDest = Entity.Null;
@@ -300,18 +247,20 @@ namespace TrafficSpy.Jobs
             }
             else if (isDriving)
             {
-                // If a driver, check the vehicle's target
                 if (targetLookup.TryGetComponent(vehicleRef.m_Vehicle, out Target vehicleDest))
                 {
                     rawDest = vehicleDest.m_Target;
                 }
             }
+
             if (rawDest != Entity.Null)
             {
                 Entity physicalDest = ResolvePhysicalEntity(rawDest);
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                    // Enqueue the Destination (isVehicle = false)
+                    // Destination Building
+                    // isVehicle = false, isDestination = true
+                    // Keep isPedestrian = true (if they were walking) to allow filtering "Pedestrian Destinations" out.
                     results.Enqueue(new TrafficRenderData
                     {
                         entity = physicalDest,
@@ -319,7 +268,9 @@ namespace TrafficSpy.Jobs
                         type = type,
                         isOrigin = false,
                         isVehicle = false,
-                        isPedestrian = false
+                        isPedestrian = isPedestrian,
+                        isDestination = true,
+                        isMovingIn = isMovingIn
                     });
                 }
             }

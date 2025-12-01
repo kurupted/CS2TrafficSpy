@@ -1,6 +1,6 @@
 import { getModule } from "cs2/modding";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
-import { activityData, setTrafficFilter, showAllVehicles, setShowAllVehicles, showPedestrians, setShowPedestrians } from "./bindings";
+import { activityData, setTrafficFilter, highlightAgents, sethighlightAgents, showPedestrians, setShowPedestrians } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
 import { SegmentActivity } from "./types";
@@ -72,8 +72,8 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
         const jsonString = useValue(activityData);
-        const showVehicles = useValue(showAllVehicles); 
-        const showPeds = useValue(showPedestrians); // New Value
+        const showVehicles = useValue(highlightAgents);
+        const showPeds = useValue(showPedestrians);
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const data: SegmentActivity = useMemo(() => {
@@ -127,14 +127,14 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     />
                 </div>
 
-                {/* 2. TOGGLE FOR VEHICLES (Visible only when no specific filter active) */}
+                {/* 2. TOGGLE FOR AGENT HIGHLIGHTING (Visible only when no specific filter active) */}
                 {activeFilter === "" && (
                     <div 
-                        onClick={() => setShowAllVehicles(!showVehicles)}
+                        onClick={() => sethighlightAgents(!showVehicles)}
                         style={{ cursor: "pointer", marginBottom: "0px" }}
                     >
                          <InfoRow 
-                            left={<span style={{ color: "white", fontSize: "0.8em", opacity: 0.8 }}>Highlight Vehicles</span>}
+                            left={<span style={{ color: "white", fontSize: "0.8em", opacity: 0.8 }}>Highlight Vehicles/Peds</span>}
                             right={
                                 <div style={{ 
                                     width: "12px", height: "12px", 
@@ -149,8 +149,8 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                         />
                     </div>
                 )}
-                
-                {/* 3. NEW: TOGGLE FOR PEDESTRIANS (Always Visible) */}
+
+                {/* 3. TOGGLE FOR PEDESTRIAN DATA (Always Visible) */}
                 <div 
                     onClick={() => setShowPedestrians(!showPeds)}
                     style={{ cursor: "pointer", marginBottom: "10px" }}

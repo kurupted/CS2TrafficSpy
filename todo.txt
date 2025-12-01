@@ -1,12 +1,11 @@
 ﻿
-taxis > other (/ public transit & taxis)
-	or get passenger info/purpose?
-"include peds" should update counts
-
-
-
-
 TODO
+
+include vehicles option. can toggle both on, if try to toggle off the only one, it toggles on the other
+in all info panels not just roads
+"peds" is including people on buses and trams
+
+
 
 
 FEATURE ROADMAP
