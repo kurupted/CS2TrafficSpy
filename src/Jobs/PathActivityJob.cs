@@ -65,6 +65,7 @@ namespace TrafficSpy.Jobs
 
         public void Execute(Entity entity, DynamicBuffer<PathElement> path)
         {
+            // ... (Keep logic) ...
             bool passesThrough = false;
             for (int i = 0; i < path.Length; i++)
             {
