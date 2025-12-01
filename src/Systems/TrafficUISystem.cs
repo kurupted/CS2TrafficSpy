@@ -38,6 +38,7 @@ namespace TrafficSpy.Systems
         public TrafficType type;
         public bool isOrigin;
         public bool isVehicle;
+        public bool isPedestrian;
     }
 
     [UpdateAfter(typeof(ToolSystem))]
@@ -49,7 +50,10 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> showAllVehiclesBinding;
+        private ValueBinding<bool> showPedestriansBinding;
+
         private bool showAllVehicles = false;
+        private bool showPedestrians = false;
 
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
@@ -89,15 +93,24 @@ namespace TrafficSpy.Systems
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
             this.showAllVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showAllVehicles", false);
+            this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false); // New
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
             AddBinding(this.showAllVehiclesBinding);
+            AddBinding(this.showPedestriansBinding); // New
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowAllVehicles", (bool active) => {
                 this.showAllVehicles = active;
                 this.showAllVehiclesBinding.Update(active);
-                ApplyFilter(); // Re-apply filter immediately
+                ApplyFilter();
+            }));
+
+            // New Trigger
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowPedestrians", (bool active) => {
+                this.showPedestrians = active;
+                this.showPedestriansBinding.Update(active);
+                ApplyFilter();
             }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
@@ -203,32 +216,44 @@ namespace TrafficSpy.Systems
 
             if (allAnalysisResults == null) return;
 
-            if (string.IsNullOrEmpty(currentFilter))
+            // Revised Filtering Logic
+            foreach (var item in allAnalysisResults)
             {
-                // DEFAULT: Show Destinations only, Hide Vehicles
-                foreach (var item in allAnalysisResults)
+                bool include = false;
+
+                // 1. Standard Logic (Filter Match vs Default View)
+                if (string.IsNullOrEmpty(currentFilter))
                 {
                     if (!item.isVehicle)
                     {
-                        // Always show destinations
-                        CurrentRenderList.Add(item);
+                        // Always show destinations if no filter
+                        include = true;
                     }
-                    else if (this.showAllVehicles) // NEW CHECK
+                    else if (this.showAllVehicles && !item.isPedestrian)
                     {
-                        // Show vehicles if toggle is ON
-                        CurrentRenderList.Add(item);
+                        // Show vehicles if toggle ON (excluding pedestrians to keep toggles distinct)
+                        include = true;
                     }
                 }
-            }
-            else
-            {
-                // FILTERED: Show Destinations AND Vehicles matching filter
-                foreach (var item in allAnalysisResults)
+                else
                 {
+                    // Filter is Active
                     if (MatchesFilter(item, currentFilter))
                     {
-                        CurrentRenderList.Add(item);
+                        include = true;
                     }
+                }
+
+                // 2. Pedestrian Override
+                // Apply ONLY if it's a pedestrian, regardless of current filter status
+                if (this.showPedestrians && item.isPedestrian)
+                {
+                    include = true;
+                }
+
+                if (include)
+                {
+                    CurrentRenderList.Add(item);
                 }
             }
 
@@ -237,6 +262,7 @@ namespace TrafficSpy.Systems
 
         private bool MatchesFilter(TrafficRenderData item, string filter)
         {
+            // (Same implementation as before)
             switch (filter)
             {
                 case "none": return item.purpose == Purpose.None && item.type != TrafficType.Service && item.type != TrafficType.Cargo && item.type != TrafficType.PublicTransport;
@@ -247,36 +273,21 @@ namespace TrafficSpy.Systems
                 case "movingIn": return item.purpose == Purpose.MovingAway && item.type == TrafficType.Citizen;
                 case "movingAway": return item.purpose == Purpose.MovingAway;
                 case "school": return item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying;
-
-                // Fix 2: Explicitly check for Cargo Type and the Purpose tag set in the Job
                 case "transporting":
-                    // Cargo vehicle marked as transporting (Purpose.Delivery from Job), or a Citizen purpose related to transport
                     return (item.type == TrafficType.Cargo && item.purpose == Purpose.Delivery) ||
                            (item.type == TrafficType.Citizen && (item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping));
-
                 case "returning":
-                    // Cargo vehicle marked as returning (Purpose.None from Job)
                     return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
-
                 case "tourism": return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions;
-
                 case "services":
-                    // Service Vehicles OR Citizen services purpose
                     return item.type == TrafficType.Service ||
                            item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital ||
                            item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage ||
                            item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail ||
                            item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail;
-
-                // Fix 3: Strict catch-all for anything not explicitly covered (Public Transport + truly 'other' citizen purposes)
                 case "other":
-                    // Exclude types handled by dedicated filters
                     if (item.type == TrafficType.Cargo || item.type == TrafficType.Service) return false;
-
-                    // Public Transport is counted as 'other' in the job
                     if (item.type == TrafficType.PublicTransport) return true;
-
-                    // Exclude all specific citizen purposes that have their own filter (including sub-purposes)
                     return item.type == TrafficType.Citizen &&
                            item.purpose != Purpose.None &&
                            item.purpose != Purpose.Shopping &&

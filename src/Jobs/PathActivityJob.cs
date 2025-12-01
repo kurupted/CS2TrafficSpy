@@ -17,7 +17,6 @@ namespace TrafficSpy.Jobs
     public partial struct PathActivityJob : IJobEntity
     {
         [ReadOnly] public NativeHashSet<Entity> targets;
-
         // Citizen Lookups
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<Target> targetLookup;
@@ -30,13 +29,11 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
-
         // Vehicle Lookups
         [ReadOnly] public ComponentLookup<PersonalCar> personalCarLookup;
         [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
         [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
         [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
-
         // Service Vehicle Lookups
         [ReadOnly] public ComponentLookup<Game.Vehicles.Hearse> hearseLookup;
         [ReadOnly] public ComponentLookup<Game.Vehicles.GarbageTruck> garbageTruckLookup;
@@ -65,7 +62,6 @@ namespace TrafficSpy.Jobs
 
         public void Execute(Entity entity, DynamicBuffer<PathElement> path)
         {
-            // ... (Keep logic) ...
             bool passesThrough = false;
             for (int i = 0; i < path.Length; i++)
             {
@@ -85,12 +81,13 @@ namespace TrafficSpy.Jobs
 
         private bool AnalyzeVehicle(Entity entity)
         {
+
             // 1. Service Vehicles
-            if (hearseLookup.HasComponent(entity) || 
+            if (hearseLookup.HasComponent(entity) ||
                 garbageTruckLookup.HasComponent(entity) ||
-                policeCarLookup.HasComponent(entity) || 
+                policeCarLookup.HasComponent(entity) ||
                 fireEngineLookup.HasComponent(entity) ||
-                ambulanceLookup.HasComponent(entity) || 
+                ambulanceLookup.HasComponent(entity) ||
                 postVanLookup.HasComponent(entity) ||
                 maintenanceVehicleLookup.HasComponent(entity))
             {
@@ -107,7 +104,7 @@ namespace TrafficSpy.Jobs
                 return true;
             }
 
-            // 3. Delivery / Cargo (TrafficType.Cargo)
+            // 3. Delivery / Cargo
             // Use Purpose.Delivery for transporting, Purpose.None for returning
             if (deliveryTruckLookup.TryGetComponent(entity, out DeliveryTruck truck))
             {
@@ -148,7 +145,7 @@ namespace TrafficSpy.Jobs
                 if (car.m_Keeper != Entity.Null && travelPurposeLookup.TryGetComponent(car.m_Keeper, out TravelPurpose purpose))
                 {
                     driverPurpose = purpose.m_Purpose;
-                    IncrementCounter(driverPurpose, car.m_Keeper); // Helper to increment based on purpose
+                    IncrementCounter(driverPurpose, car.m_Keeper);
                 }
                 else
                 {
@@ -241,7 +238,15 @@ namespace TrafficSpy.Jobs
         private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type)
         {
             // Enqueue Vehicle (isVehicle = true)
-            results.Enqueue(new TrafficRenderData { entity = vehicleEntity, purpose = purpose, type = type, isOrigin = false, isVehicle = true });
+            results.Enqueue(new TrafficRenderData
+            {
+                entity = vehicleEntity,
+                purpose = purpose,
+                type = type,
+                isOrigin = false,
+                isVehicle = true,
+                isPedestrian = false
+            });
 
             // Logic to find destination building
             if (targetLookup.TryGetComponent(vehicleEntity, out Target dest) && dest.m_Target != Entity.Null)
@@ -249,8 +254,16 @@ namespace TrafficSpy.Jobs
                 Entity physicalDest = ResolvePhysicalEntity(dest.m_Target);
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                        // Enqueue Destination (isVehicle = false)
-                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false, isVehicle = false });
+                    // Enqueue Destination (isVehicle = false)
+                    results.Enqueue(new TrafficRenderData
+                    {
+                        entity = physicalDest,
+                        purpose = purpose,
+                        type = type,
+                        isOrigin = false,
+                        isVehicle = false,
+                        isPedestrian = false
+                    });
                 }
             }
         }
@@ -259,16 +272,26 @@ namespace TrafficSpy.Jobs
         {
             Entity renderEntity = entity;
             TrafficType type = TrafficType.Citizen;
+            bool isPedestrian = true; // Default to true (walker)
 
             // Resolve the actual vehicle entity if the citizen is driving
             bool isDriving = currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef);
             if (isDriving)
             {
                 renderEntity = vehicleRef.m_Vehicle;
+                isPedestrian = false; // They are in a car
             }
 
             // Enqueue the moving agent (pedestrian or vehicle) for highlighting
-            results.Enqueue(new TrafficRenderData { entity = renderEntity, purpose = purpose, type = type, isOrigin = false, isVehicle = true });
+            results.Enqueue(new TrafficRenderData
+            {
+                entity = renderEntity,
+                purpose = purpose,
+                type = type,
+                isOrigin = false,
+                isVehicle = true,
+                isPedestrian = isPedestrian
+            });
 
             Entity rawDest = Entity.Null;
             if (targetLookup.TryGetComponent(entity, out Target dest))
@@ -289,7 +312,15 @@ namespace TrafficSpy.Jobs
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
                     // Enqueue the Destination (isVehicle = false)
-                    results.Enqueue(new TrafficRenderData { entity = physicalDest, purpose = purpose, type = type, isOrigin = false, isVehicle = false });
+                    results.Enqueue(new TrafficRenderData
+                    {
+                        entity = physicalDest,
+                        purpose = purpose,
+                        type = type,
+                        isOrigin = false,
+                        isVehicle = false,
+                        isPedestrian = false
+                    });
                 }
             }
         }

@@ -1,30 +1,18 @@
 ﻿
+taxis > other (/ public transit & taxis)
+	or get passenger info/purpose?
+"include peds" should update counts
+
+
+
 
 TODO
-
-vehicle says transporting, citizen inside says shopping (not counted as shopping)
-prob related:
-	Game.Vehicles 	PersonalCar 	
-	Properties of a personally owned car (i.e. not a taxi, police car, etc.). 	unmanaged 	m_Keeper 	
-	Entity 	Reference to the "citizen" entity who is owning the car.
-	m_State 	PersonalCarFlags 	Status flags like Transporting, Boarding, Disembarking, DummyTraffic, HomeTarget. 
-
-
-handle waiting for public transit
 
 
 FEATURE ROADMAP
 
-- click on count to see list of entities - reference buildingusage mod?
+- also include vehicles ON the current segment (option for exclusively?)
 - ability to select which side of the road to analyze
-- color-code the vehicles themselves
-- Color-coded destination based on purpose
-
-- Options to include/exclude peds, delivery, etc
-- show counts of vehicles vs peds separately
-- toggle for passing through VS those actually on the segment
-- Highlight origin buildings (?)
-
 
 
 DONE
@@ -39,6 +27,10 @@ DONE
 
 
 ==========
+
+
+handle waiting for public transit
+
 
 
 

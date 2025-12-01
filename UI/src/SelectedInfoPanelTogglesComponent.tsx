@@ -1,6 +1,6 @@
 import { getModule } from "cs2/modding";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
-import { activityData, setTrafficFilter, showAllVehicles, setShowAllVehicles } from "./bindings";
+import { activityData, setTrafficFilter, showAllVehicles, setShowAllVehicles, showPedestrians, setShowPedestrians } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
 import { SegmentActivity } from "./types";
@@ -72,7 +72,8 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
         const jsonString = useValue(activityData);
-        const showVehicles = useValue(showAllVehicles); // Use new binding
+        const showVehicles = useValue(showAllVehicles); 
+        const showPeds = useValue(showPedestrians); // New Value
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const data: SegmentActivity = useMemo(() => {
@@ -130,10 +131,10 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 {activeFilter === "" && (
                     <div 
                         onClick={() => setShowAllVehicles(!showVehicles)}
-                        style={{ cursor: "pointer", marginBottom: "10px" }}
+                        style={{ cursor: "pointer", marginBottom: "0px" }}
                     >
                          <InfoRow 
-                            left={<span style={{ color: "white", fontSize: "0.8em", opacity: 0.8 }}>Show All Vehicles</span>}
+                            left={<span style={{ color: "white", fontSize: "0.8em", opacity: 0.8 }}>Highlight Vehicles</span>}
                             right={
                                 <div style={{ 
                                     width: "12px", height: "12px", 
@@ -149,7 +150,28 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     </div>
                 )}
                 
-                {/* 3. DATA ROWS */}
+                {/* 3. NEW: TOGGLE FOR PEDESTRIANS (Always Visible) */}
+                <div 
+                    onClick={() => setShowPedestrians(!showPeds)}
+                    style={{ cursor: "pointer", marginBottom: "10px" }}
+                >
+                        <InfoRow 
+                        left={<span style={{ color: "white", fontSize: "0.8em", opacity: 0.8 }}>Include Pedestrians</span>}
+                        right={
+                            <div style={{ 
+                                width: "12px", height: "12px", 
+                                borderRadius: "50%", 
+                                border: "1px solid white",
+                                backgroundColor: showPeds ? "rgb(100, 255, 100)" : "transparent"
+                            }}></div>
+                        }
+                        uppercase={false} 
+                        subRow={true}
+                        className={InfoRowTheme?.infoRow} 
+                    />
+                </div>
+                
+                {/* 4. DATA ROWS */}
                 {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
                 {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
 
