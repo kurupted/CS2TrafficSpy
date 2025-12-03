@@ -8,6 +8,8 @@
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
 		<PDXAccountDataPath>C:\Users\Jeremy\source\repos\pdx_account.txt</PDXAccountDataPath>
 		<DefaultItemExcludes>UI\node_modules\**;$(DefaultItemExcludes)</DefaultItemExcludes>
+		<AssemblyTitle>Traffic Spy</AssemblyTitle>
+		<Description>Provides detailed traffic analysis for selected road segments. Displays a breakdown of all agents passing through, categorized by their travel purpose, and also highlights the destination buildings.</Description>
 	</PropertyGroup>
 	
 	<!--Imports must be after PropertyGroup block-->
@@ -83,6 +85,7 @@
 	<Import Project="ModAssemblyInfo\ModAssemblyInfo.csproj" />
 	<ItemGroup>
 		<None Include="ModAssemblyInfo\ModAssemblyInfo.csproj" />
+		<None Include="properties\PublishConfiguration.csproj" />
 	</ItemGroup>
 
 	<!-- Automatically build mod.json file. -->
@@ -90,9 +93,16 @@
 	<ItemGroup>
 		<None Include="UI\mod.json.csproj" />
 	</ItemGroup>
+	
 	<!-- Automatically build the UI with the project. -->
 	<Target Name="BuildUI" AfterTargets="AfterBuild">
 		<Exec Command="npm run build" WorkingDirectory="$(ProjectDir)/UI" />
 	</Target>
+	
+	<!-- Automatically build PublishConfiguration.xml file. -->
+	<Import Project="Properties\PublishConfiguration.csproj" />
+	<ItemGroup>
+		<None Include="Properties\PublishConfiguration.csproj" />
+	</ItemGroup>
 
 </Project>
