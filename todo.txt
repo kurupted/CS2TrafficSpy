@@ -1,10 +1,8 @@
 ﻿
 TODO
 
-include vehicles option. can toggle both on, if try to toggle off the only one, it toggles on the other
-in all info panels not just roads
-"peds" is including people on buses and trams
-
+"peds" num seems high. taxis are def included. buses are under Vehicles correctly. if needed, see code below
+icons for checkboxes
 
 
 
@@ -12,14 +10,6 @@ FEATURE ROADMAP
 
 - also include vehicles ON the current segment (option for exclusively?)
 - ability to select which side of the road to analyze
-
-
-DONE
-
-- Highlights destination buildings of vehicles/citizens
-- show summary of trip purposes in info panel
-
-
 
 
 

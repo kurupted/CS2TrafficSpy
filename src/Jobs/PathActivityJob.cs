@@ -30,6 +30,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
         [ReadOnly] public ComponentLookup<CurrentVehicle> currentVehicleLookup;
+        [ReadOnly] public ComponentLookup<CurrentTransport> currentTransportLookup;
 
         // Vehicle Lookups
         [ReadOnly] public ComponentLookup<PersonalCar> personalCarLookup;
@@ -145,7 +146,9 @@ namespace TrafficSpy.Jobs
 
         private void AnalyzeCitizen(Entity entity)
         {
-            if (currentVehicleLookup.HasComponent(entity)) return;
+            // 1. Check if they are driving (CurrentVehicle) OR riding Public Transport (CurrentTransport)
+            // If they have either, they are not "Pedestrians" on the road surface, so we skip them.
+            if (currentVehicleLookup.HasComponent(entity) || currentTransportLookup.HasComponent(entity)) return;
 
             Entity citizenEntity = entity;
             if (creatureResidentLookup.TryGetComponent(entity, out Game.Creatures.Resident resident))
@@ -215,16 +218,11 @@ namespace TrafficSpy.Jobs
         {
             Entity renderEntity = entity;
             TrafficType type = TrafficType.Citizen;
+
+            // Note: Since we return early for CurrentVehicle/CurrentTransport in AnalyzeCitizen, 
+            // we can assume anyone reaching here is a pedestrian.
             bool isPedestrian = true;
             bool isVehicle = false;
-
-            bool isDriving = currentVehicleLookup.TryGetComponent(entity, out CurrentVehicle vehicleRef);
-            if (isDriving)
-            {
-                renderEntity = vehicleRef.m_Vehicle;
-                isPedestrian = false; // Driving -> Not a Pedestrian (for type classification)
-                isVehicle = true;     // Driving -> Is a Vehicle
-            }
 
             // Citizen Agent
             // isDestination = false
@@ -244,13 +242,6 @@ namespace TrafficSpy.Jobs
             if (targetLookup.TryGetComponent(entity, out Target dest))
             {
                 rawDest = dest.m_Target;
-            }
-            else if (isDriving)
-            {
-                if (targetLookup.TryGetComponent(vehicleRef.m_Vehicle, out Target vehicleDest))
-                {
-                    rawDest = vehicleDest.m_Target;
-                }
             }
 
             if (rawDest != Entity.Null)

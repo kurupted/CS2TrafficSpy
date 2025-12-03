@@ -5,6 +5,7 @@ using Game.Buildings;
 using Game.Citizens;
 using Game.Common;
 using Game.Creatures;
+using Game.Input;
 using Game.Net;
 using Game.Pathfind;
 using Game.Tools;
@@ -38,9 +39,9 @@ namespace TrafficSpy.Systems
         public TrafficType type;
         public bool isOrigin;
 
-        public bool isVehicle;     // True ONLY for Vehicles (Cars/Trucks/Trains)
-        public bool isPedestrian;  // True for Pedestrians (and destinations derived from peds)
-        public bool isDestination; // True ONLY for Buildings/Targets
+        public bool isVehicle;
+        public bool isPedestrian;
+        public bool isDestination;
         public bool isMovingIn;
     }
 
@@ -54,13 +55,17 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> highlightAgentsBinding;
         private ValueBinding<bool> showPedestriansBinding;
+        private ValueBinding<bool> showVehiclesBinding;
 
         private bool highlightAgents = false;
         private bool showPedestrians = false;
+        private bool showVehicles = true;
 
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
         private bool usePathBasedAnalysis = true;
+
+        private bool wasToggleKeyDown = false;
 
         private List<TrafficRenderData> allAnalysisResults = new List<TrafficRenderData>();
         public static List<TrafficRenderData> CurrentRenderList = new List<TrafficRenderData>();
@@ -97,11 +102,13 @@ namespace TrafficSpy.Systems
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
             this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false);
+            this.showVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showVehicles", true);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
             AddBinding(this.highlightAgentsBinding);
             AddBinding(this.showPedestriansBinding);
+            AddBinding(this.showVehiclesBinding);
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
                 this.highlightAgents = active;
@@ -112,6 +119,13 @@ namespace TrafficSpy.Systems
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowPedestrians", (bool active) => {
                 this.showPedestrians = active;
                 this.showPedestriansBinding.Update(active);
+                CalculateStats();
+                ApplyFilter();
+            }));
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowVehicles", (bool active) => {
+                this.showVehicles = active;
+                this.showVehiclesBinding.Update(active);
                 CalculateStats();
                 ApplyFilter();
             }));
@@ -141,26 +155,7 @@ namespace TrafficSpy.Systems
                 }
             }));
 
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", (bool active) => {
-                this.isToolActive = active;
-                this.toolActiveBinding.Update(active);
-                if (active)
-                {
-                    if (defaultToolSystem != null)
-                    {
-                        this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
-                        this.defaultToolSystem.debugSelect = true;
-                    }
-                }
-                else
-                {
-                    if (defaultToolSystem != null)
-                    {
-                        this.defaultToolSystem.debugSelect = this.defaultDebugSelectState;
-                    }
-                    ClearData();
-                }
-            }));
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", SetToolActive));
         }
 
         protected override string group => "TrafficSpy.Systems.TrafficUISystem";
@@ -170,12 +165,29 @@ namespace TrafficSpy.Systems
 
         protected bool ShouldBeVisible(Entity entity)
         {
-            return EntityManager.Exists(entity) && EntityManager.HasBuffer<SubLane>(entity);
+            return EntityManager.Exists(entity)
+                && EntityManager.HasBuffer<SubLane>(entity)
+                && !EntityManager.HasComponent<Building>(entity)
+                // Allow either Road Segments (Edges) OR Intersections (Nodes)
+                && (EntityManager.HasComponent<Game.Net.Edge>(entity) || EntityManager.HasComponent<Game.Net.Node>(entity));
         }
 
         protected override void OnUpdate()
         {
             if (!Enabled) Enabled = true;
+
+            // 1. CHECK KEYBOARD INPUT
+            if (Mod.m_ToggleAction != null)
+            {
+                bool isPressed = Mod.m_ToggleAction.IsPressed();
+                // Only trigger if pressed NOW but wasn't pressed LAST frame
+                if (isPressed && !wasToggleKeyDown)
+                {
+                    SetToolActive(!isToolActive);
+                }
+                wasToggleKeyDown = isPressed;
+            }
+
             base.OnUpdate();
 
             Entity selected = this.toolSystem.selected;
@@ -200,6 +212,29 @@ namespace TrafficSpy.Systems
             }
         }
 
+        private void SetToolActive(bool active)
+        {
+            this.isToolActive = active;
+            this.toolActiveBinding.Update(active);
+
+            if (active)
+            {
+                if (defaultToolSystem != null)
+                {
+                    this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
+                    this.defaultToolSystem.debugSelect = true;
+                }
+            }
+            else
+            {
+                if (defaultToolSystem != null)
+                {
+                    this.defaultToolSystem.debugSelect = this.defaultDebugSelectState;
+                }
+                ClearData();
+            }
+        }
+
         private void ClearData()
         {
             lastSelectedEntity = Entity.Null;
@@ -221,11 +256,9 @@ namespace TrafficSpy.Systems
 
             foreach (var item in allAnalysisResults)
             {
-                // 1. DATA SOURCE FILTER: Exclude Pedestrians if checkbox OFF
-                // This checks "isPedestrian" (which is true for walking agents AND their destinations)
                 if (item.isPedestrian && !this.showPedestrians) continue;
+                if (item.isVehicle && !this.showVehicles) continue;
 
-                // 2. CATEGORY FILTER
                 bool matchesFilter = false;
                 if (string.IsNullOrEmpty(currentFilter))
                 {
@@ -238,20 +271,12 @@ namespace TrafficSpy.Systems
 
                 if (!matchesFilter) continue;
 
-                // 3. VISIBILITY/HIGHLIGHT LOGIC
-                // Distinguish between Static Buildings (isDestination=true) and Moving Agents (isDestination=false)
-
                 if (item.isDestination)
                 {
-                    // Always show destination buildings if they match the filter
                     CurrentRenderList.Add(item);
                 }
                 else
                 {
-                    // It is an Agent (Vehicle OR Pedestrian)
-                    // Show it if:
-                    // A) A specific filter is active (show what we are filtering for)
-                    // B) OR The "Highlight Vehicles/Peds" toggle is ON
                     if (!string.IsNullOrEmpty(currentFilter) || this.highlightAgents)
                     {
                         CurrentRenderList.Add(item);
@@ -341,11 +366,9 @@ namespace TrafficSpy.Systems
 
             foreach (var item in allAnalysisResults)
             {
-                // Only count Agents (non-destinations)
                 if (item.isDestination) continue;
-
-                // Data Filter: If ped checkbox is OFF, skip pedestrians
                 if (item.isPedestrian && !this.showPedestrians) continue;
+                if (item.isVehicle && !this.showVehicles) continue;
 
                 if (item.type == TrafficType.Service)
                 {
@@ -446,6 +469,7 @@ namespace TrafficSpy.Systems
                     ownerLookup = SystemAPI.GetComponentLookup<Owner>(true),
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
                     currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
+                    currentTransportLookup = SystemAPI.GetComponentLookup<CurrentTransport>(true),
 
                     deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
                     cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),

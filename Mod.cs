@@ -3,10 +3,8 @@ using Colossal.Logging;
 using Game;
 using Game.Input;
 using Game.Modding;
-using Game.Rendering;
 using Game.SceneFlow;
 using TrafficSpy.ModSettings;
-using UnityEngine;
 
 namespace TrafficSpy
 {
@@ -14,13 +12,9 @@ namespace TrafficSpy
     {
         public static ILog log = LogManager.GetLogger($"{nameof(TrafficSpy)}.{nameof(Mod)}").SetShowsErrorsInUI(false);
         private ModSettings.ModSettings m_Setting;
-        public static ProxyAction m_ButtonAction;
-        public static ProxyAction m_AxisAction;
-        public static ProxyAction m_VectorAction;
 
-        public const string kButtonActionName = "ButtonBinding";
-        public const string kAxisActionName = "FloatBinding";
-        public const string kVectorActionName = "Vector2Binding";
+        public static ProxyAction m_ToggleAction;
+        public const string kToggleActionName = "TrafficSpy_Toggle";
 
         public void OnLoad(UpdateSystem updateSystem)
         {
@@ -35,18 +29,14 @@ namespace TrafficSpy
 
             m_Setting.RegisterKeyBindings();
 
-            m_ButtonAction = m_Setting.GetAction(kButtonActionName);
-            m_AxisAction = m_Setting.GetAction(kAxisActionName);
-            m_VectorAction = m_Setting.GetAction(kVectorActionName);
-
-            m_ButtonAction.shouldBeEnabled = true;
-            m_AxisAction.shouldBeEnabled = true;
-            m_VectorAction.shouldBeEnabled = true;
+            // Load the specific action defined in ModSettings
+            m_ToggleAction = m_Setting.GetAction(kToggleActionName);
+            m_ToggleAction.shouldBeEnabled = true;
 
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
-            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate); // info view
-            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.ToolUpdate); // building highlighter
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.ToolUpdate);
         }
 
         public void OnDispose()
