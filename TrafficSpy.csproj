@@ -3,10 +3,11 @@
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
 		<Title>Traffic Spy</Title>
+		<Version>1.0</Version>
+		<Copyright>Copyright © 2025</Copyright>
 	
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
-		<PDXAccountDataPath>C:\Users\Jeremy\source\repos\pdx_account.txt</PDXAccountDataPath>
 		<DefaultItemExcludes>UI\node_modules\**;$(DefaultItemExcludes)</DefaultItemExcludes>
 		<AssemblyTitle>Traffic Spy</AssemblyTitle>
 		<Description>Provides detailed traffic analysis for selected road segments. Displays a breakdown of all agents passing through, categorized by their travel purpose, and also highlights the destination buildings.</Description>
