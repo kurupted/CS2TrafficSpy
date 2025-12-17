@@ -12,6 +12,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Colossal.Collections;
 using TrafficSpy.Systems;
+using Unity.Mathematics;
 
 namespace TrafficSpy.Jobs
 {
@@ -19,6 +20,7 @@ namespace TrafficSpy.Jobs
     public struct SegmentActivityJob : IJob
     {
         [ReadOnly] public Entity selectedSegment;
+        [ReadOnly] public int directionFilter; // 0 = Both, 1 = Forward (Delta 0), 2 = Backward (Delta 1)
 
         [ReadOnly] public BufferLookup<Game.Net.SubLane> subLaneLookup;
         [ReadOnly] public BufferLookup<Game.Net.LaneObject> laneObjectLookup;
@@ -37,6 +39,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<PropertyRenter> propertyRenterLookup;
         [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
+        [ReadOnly] public ComponentLookup<EdgeLane> edgeLaneLookup;
 
         // Vehicle Lookups
         [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
@@ -75,6 +78,22 @@ namespace TrafficSpy.Jobs
             for (int i = 0; i < lanes.Length; i++)
             {
                 Entity laneEntity = lanes[i].m_SubLane;
+                
+                // filter by direction
+                if (directionFilter != 0 && edgeLaneLookup.HasComponent(laneEntity))
+                {
+                    float2 delta = edgeLaneLookup[laneEntity].m_EdgeDelta;
+                    // delta.x is start, delta.y is end.
+                    // Forward typically goes 0 -> 1 (y > 0.5)
+                    // Backward typically goes 1 -> 0 (y < 0.5)
+
+                    // If Filter is 1 (Forward), skip if y < 0.5
+                    if (directionFilter == 1 && delta.y < 0.5f) continue;
+                    
+                    // If Filter is 2 (Backward), skip if y > 0.5
+                    if (directionFilter == 2 && delta.y > 0.5f) continue;
+                }
+                
                 if (laneObjectLookup.HasBuffer(laneEntity))
                 {
                     DynamicBuffer<Game.Net.LaneObject> laneObjects = laneObjectLookup[laneEntity];

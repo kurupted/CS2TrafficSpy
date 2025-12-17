@@ -18,9 +18,9 @@ using TrafficSpy.Jobs;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine.Diagnostics;
 using Entity = Unity.Entities.Entity;
-
 
 namespace TrafficSpy.Systems
 {
@@ -56,10 +56,12 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> highlightAgentsBinding;
         private ValueBinding<bool> showPedestriansBinding;
         private ValueBinding<bool> showVehiclesBinding;
+        private ValueBinding<int> directionModeBinding;
 
         private bool highlightAgents = false;
         private bool showPedestrians = false;
         private bool showVehicles = true;
+        private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
 
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
@@ -103,12 +105,14 @@ namespace TrafficSpy.Systems
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
             this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false);
             this.showVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showVehicles", true);
+            this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
             AddBinding(this.highlightAgentsBinding);
             AddBinding(this.showPedestriansBinding);
             AddBinding(this.showVehiclesBinding);
+            AddBinding(this.directionModeBinding);
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
                 this.highlightAgents = active;
@@ -128,6 +132,16 @@ namespace TrafficSpy.Systems
                 this.showVehiclesBinding.Update(active);
                 CalculateStats();
                 ApplyFilter();
+            }));
+
+            // Handler for setting direction mode
+            AddBinding(new TriggerBinding<int>("TrafficSpy", "setDirectionMode", (int mode) => {
+                this.directionMode = mode;
+                this.directionModeBinding.Update(mode);
+                if (lastSelectedEntity != Entity.Null)
+                {
+                    RunAnalysis(lastSelectedEntity);
+                }
             }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
@@ -207,6 +221,11 @@ namespace TrafficSpy.Systems
             {
                 lastSelectedEntity = selected;
                 currentFilter = "";
+
+                // Reset direction to All Sides (0)
+                this.directionMode = 0;
+                this.directionModeBinding.Update(0);
+
                 Mod.log.Info($"TrafficSpy: Selection changed to {selected.Index}. Running analysis...");
                 RunAnalysis(selected);
             }
@@ -335,15 +354,37 @@ namespace TrafficSpy.Systems
                 default: return false;
             }
         }
-
-        private NativeHashSet<Entity> GetTargetEntities(Entity segment, Allocator allocator)
+        
+        private NativeHashSet<Entity> GetTargetEntities(Entity segment, Allocator allocator, int directionMode)
         {
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
             targets.Add(segment);
+
             if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<SubLane> lanes))
             {
                 for (int i = 0; i < lanes.Length; i++)
-                    targets.Add(lanes[i].m_SubLane);
+                {
+                    Entity subLaneEntity = lanes[i].m_SubLane;
+                    
+                    // DIRECTION FILTER LOGIC
+                    if (directionMode != 0)
+                    {
+                        // Check if the lane has EdgeLane component
+                        if (EntityManager.HasComponent<EdgeLane>(subLaneEntity))
+                        {
+                            var edgeLane = EntityManager.GetComponentData<EdgeLane>(subLaneEntity);
+                            float2 delta = edgeLane.m_EdgeDelta;
+
+                            // directionMode 1 (Side A / Forward): Typically delta 0.0 -> we want to skip if delta > 0.5
+                            if (directionMode == 1 && delta.y > 0.5f) continue;
+
+                            // directionMode 2 (Side B / Backward): Typically delta 1.0 -> we want to skip if delta < 0.5
+                            if (directionMode == 2 && delta.y < 0.5f) continue;
+                        }
+                    }
+
+                    targets.Add(subLaneEntity);
+                }
             }
             return targets;
         }
@@ -453,7 +494,9 @@ namespace TrafficSpy.Systems
             {
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
                 NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
-                NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob);
+                
+                // Pass directionMode to GetTargetEntities
+                NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob, this.directionMode);
 
                 PathActivityJob pathJob = new PathActivityJob
                 {
@@ -502,6 +545,18 @@ namespace TrafficSpy.Systems
                 targets.Dispose();
                 resultsQueue.Dispose();
             }
+            /*else
+            {
+                // Fallback for SegmentActivityJob
+                SegmentActivityJob segmentJob = new SegmentActivityJob
+                {
+                    selectedSegment = selectedSegment,
+                    directionFilter = this.directionMode,
+                    edgeLaneLookup = SystemAPI.GetComponentLookup<EdgeLane>(true),
+                    // ... (rest of your lookups) ...
+                };
+                // segmentJob.Run();
+            }*/
 
             CalculateStats();
             ApplyFilter();
