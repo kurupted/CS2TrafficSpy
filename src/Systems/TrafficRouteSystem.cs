@@ -1,4 +1,6 @@
-﻿using Game.Creatures;
+﻿using Game;
+using Game.Common;
+using Game.Creatures;
 using Game.Net;
 using Game.Pathfind;
 using Game.Objects;
@@ -9,6 +11,8 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using UnityEngine;
+using Transform = Game.Objects.Transform;
 
 namespace TrafficSpy.Systems
 {
@@ -17,8 +21,6 @@ namespace TrafficSpy.Systems
     {
         private SimpleOverlayRendererSystem overlayRenderSystem;
         private TrafficUISystem trafficUISystem;
-
-        // CHANGED: List now holds struct with Type info
         private NativeList<EntityRouteInput> entityInputList;
 
         protected override void OnCreate()
@@ -42,51 +44,21 @@ namespace TrafficSpy.Systems
             var renderList = TrafficUISystem.CurrentRenderList;
             if (renderList == null || renderList.Count == 0) return;
 
-            // 1. Prepare Data
             entityInputList.Clear();
             if (entityInputList.Capacity < renderList.Count) entityInputList.Capacity = renderList.Count;
 
-            // Get distance filtering params from UI System
-            float3 centerPos = TrafficUISystem.FilterPosition;
-            float maxDistSq = TrafficUISystem.FilterDistance * TrafficUISystem.FilterDistance;
-            bool checkDistance = TrafficUISystem.FilterDistance < 1000000f; // If not "Unlimited"
-            
-            ComponentLookup<Transform> transformLookup = GetComponentLookup<Transform>(true);
+            // Range filtering is now handled by TrafficUISystem.CurrentRenderList
 
             foreach (var item in renderList)
             {
                 if (EntityManager.Exists(item.entity))
                 {
-                    // Distance Check
-                    if (checkDistance)
-                    {
-                        if (transformLookup.TryGetComponent(item.entity, out Transform trans))
-                        {
-                            if (math.distancesq(trans.m_Position, centerPos) > maxDistSq)
-                            {
-                                continue; // Skip if too far
-                            }
-                        }
-                    }
-
-                    // PASS THE TYPE HERE
-                    // 2 = Pedestrian, 4 = Vehicle
                     byte type = 4; // Default Vehicle
                     
-                    if (item.isPedestrian) 
-                    {
-                        type = 2;
-                    }
-                    else if (item.isVehicle)
-                    {
-                        type = 4;
-                    }
-                    else if (item.type == TrafficType.Citizen) 
-                    {
-                        // Fallback: If it's a citizen but 'isPedestrian' wasn't set (e.g. waiting), treat as ped
-                        type = 2;
-                    }
-                    
+                    if (item.isPedestrian) type = 2;
+                    else if (item.isVehicle) type = 4;
+                    else if (item.type == TrafficType.Citizen) type = 2;
+
                     entityInputList.Add(new EntityRouteInput 
                     { 
                         entity = item.entity, 
@@ -97,7 +69,21 @@ namespace TrafficSpy.Systems
 
             if (entityInputList.Length == 0) return;
 
-            // 2. Set up the Calculation Job
+            // 1. Pre-Pass: Count agents per Lane (for Heatmaps)
+            NativeHashMap<Entity, int> laneCounts = new NativeHashMap<Entity, int>(1000, Allocator.TempJob);
+            
+            CountLanesJob countJob = new CountLanesJob
+            {
+                input = entityInputList,
+                laneCounts = laneCounts,
+                carLaneLookup = GetComponentLookup<CarCurrentLane>(true),
+                humanLaneLookup = GetComponentLookup<HumanCurrentLane>(true)
+            };
+            
+            // Single threaded is fast enough and avoids concurrent write issues easily
+            JobHandle countHandle = countJob.Schedule(Dependency);
+
+            // 2. Calculate Geometry
             int batchSize = 32;
             int batchCount = (entityInputList.Length + batchSize - 1) / batchSize;
             
@@ -112,6 +98,7 @@ namespace TrafficSpy.Systems
             CalculateEntityPathsJob calcJob = new CalculateEntityPathsJob
             {
                 input = entityInputList,
+                laneCounts = laneCounts, // Pass the counts
                 batchSize = batchSize,
                 results = jobResults,
                 pathOwnerLookup = GetComponentLookup<PathOwner>(true),
@@ -119,10 +106,11 @@ namespace TrafficSpy.Systems
                 pathElementLookup = GetBufferLookup<PathElement>(true),
                 carNavigationLaneSegmentLookup = GetBufferLookup<CarNavigationLane>(true),
                 carLaneLookup = GetComponentLookup<CarCurrentLane>(true),
-                humanLaneLookup = GetComponentLookup<HumanCurrentLane>(true)
+                humanLaneLookup = GetComponentLookup<HumanCurrentLane>(true),
+                transformLookup = GetComponentLookup<Transform>(true)
             };
 
-            JobHandle calcHandle = calcJob.ScheduleBatch(entityInputList.Length, batchSize, Dependency);
+            JobHandle calcHandle = calcJob.ScheduleBatch(entityInputList.Length, batchSize, countHandle);
 
             RenderRouteOverlayJob renderJob = new RenderRouteOverlayJob
             {
@@ -139,6 +127,7 @@ namespace TrafficSpy.Systems
                 jobResults[i].Dispose(finalHandle);
             }
             jobResults.Dispose(finalHandle);
+            laneCounts.Dispose(finalHandle);
 
             overlayRenderSystem.AddBufferWriter(finalHandle);
             Dependency = finalHandle;

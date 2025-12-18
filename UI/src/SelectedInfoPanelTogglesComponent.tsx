@@ -40,7 +40,6 @@ const InfoRow: any = getModule(
 
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
 
-    // Helper to render a row of small buttons
     const renderButtonRow = (label: string, buttons: { label: string, active: boolean, onClick: () => void }[]) => {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '5px', width: '100%' }}>
@@ -94,10 +93,9 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
         const jsonString = useValue(activityData);
         const showHighlights = useValue(highlightAgents);
-        const currentDisplayMode = useValue(displayMode) || 0; // 0=Vehicles, 1=Peds
+        const currentDisplayMode = useValue(displayMode) || 0;
         const showPathLines = useValue(showRoutes);
         const currentDirMode = useValue(directionMode) || 0;
-        // Fix for "Bug with range toggle": check if undefined/null, otherwise respect 0
         const currentRangeMode = useValue(rangeMode) ?? 1;
         const [activeFilter, setActiveFilter] = useState<string>("");
 
@@ -147,7 +145,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     />
                 </div>
 
-                {/* 2. MODE TOGGLE (Vehicles / Pedestrians) */}
+                {/* 2. MODE TOGGLE */}
                 {renderButtonRow("Traffic Type", [
                     { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
                     { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
@@ -168,24 +166,21 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
                 ])}
 
-                {/* 5. VISUAL TOGGLES */}
-                <div onClick={() => sethighlightAgents(!showHighlights)} style={{ cursor: "pointer" }}>
-                    <InfoRow
-                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Highlight Destinations</span>}
-                        right={ <div style={{ width: "12px", height: "12px", borderRadius: "50%", border: "1px solid white", backgroundColor: showHighlights ? "rgb(100, 255, 100)" : "transparent" }}></div> }
-                        uppercase={false} subRow={true} className={InfoRowTheme?.infoRow}
-                    />
+                {/* 5 & 6. HIGHLIGHT & ROUTE TOGGLE ON SAME ROW */}
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%' }}>
+                    <div style={{ flex: 1 }}>
+                        {renderButtonRow("Highlights", [
+                            { label: showHighlights ? "ON" : "OFF", active: showHighlights, onClick: () => sethighlightAgents(!showHighlights) }
+                        ])}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        {renderButtonRow("Route Lines", [
+                            { label: showPathLines ? "ON" : "OFF", active: showPathLines, onClick: () => setShowRoutes(!showPathLines) }
+                        ])}
+                    </div>
                 </div>
 
-                <div onClick={() => setShowRoutes(!showPathLines)} style={{ cursor: "pointer", marginBottom: "10px" }}>
-                    <InfoRow
-                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Show Route Lines</span>}
-                        right={ <div style={{ width: "12px", height: "12px", borderRadius: "50%", border: "1px solid white", backgroundColor: showPathLines ? "rgb(100, 255, 100)" : "transparent" }}></div> }
-                        uppercase={false} subRow={true} className={InfoRowTheme?.infoRow}
-                    />
-                </div>
-
-                {/* 6. DATA ROWS */}
+                {/* 7. DATA ROWS */}
                 {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
                 {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
 

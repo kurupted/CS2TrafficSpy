@@ -7,6 +7,7 @@ using Game.Common;
 using Game.Creatures;
 using Game.Input;
 using Game.Net;
+using Game.Objects; // Added for Transform
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -35,6 +36,7 @@ namespace TrafficSpy.Systems
     public struct TrafficRenderData
     {
         public Entity entity;
+        public Entity sourceAgent; // The agent responsible for this entry (for distance checks)
         public Game.Citizens.Purpose purpose;
         public TrafficType type;
         public bool isOrigin;
@@ -54,6 +56,7 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> highlightAgentsBinding;
+        // Replaced individual bool bindings with mode
         private ValueBinding<int> displayModeBinding; // 0 = Vehicles, 1 = Pedestrians
         private ValueBinding<bool> showRoutesBinding;
         private ValueBinding<int> directionModeBinding;
@@ -62,10 +65,13 @@ namespace TrafficSpy.Systems
         private bool highlightAgents = false;
         private int displayMode = 0; // Default to Vehicles
         
+        // Removed separate bools in favor of displayMode
+        // private bool showPedestrians = false; 
+        // private bool showVehicles = true;
+        
         public static List<Entity> AnalyzedLanes = new List<Entity>();
         public bool HighlightAgents => highlightAgents;
         public bool ShowRoutes { get; private set; } = true; // Default to True
-        
         private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
         private int rangeMode = 1; // Default to Medium
 
@@ -114,9 +120,8 @@ namespace TrafficSpy.Systems
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
             
-            // Replaced individual bools with one mode
             this.displayModeBinding = new ValueBinding<int>("TrafficSpy", "displayMode", 0);
-
+            
             this.showRoutesBinding = new ValueBinding<bool>("TrafficSpy", "showRoutes", true);
             this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
             this.rangeModeBinding = new ValueBinding<int>("TrafficSpy", "rangeMode", 1);
@@ -135,7 +140,6 @@ namespace TrafficSpy.Systems
                 ApplyFilter();
             }));
 
-            // New Trigger for Display Mode
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setDisplayMode", (int mode) => {
                 this.displayMode = mode;
                 this.displayModeBinding.Update(mode);
@@ -161,11 +165,12 @@ namespace TrafficSpy.Systems
                 }
             }));
 
+            // Handler for setting range mode
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setRangeMode", (int mode) => {
                 this.rangeMode = mode;
                 this.rangeModeBinding.Update(mode);
                 UpdateRangeDistance();
-                IsDirty = true; // Trigger route redraw
+                ApplyFilter();
             }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
@@ -311,11 +316,30 @@ namespace TrafficSpy.Systems
 
             if (allAnalysisResults == null) return;
 
+            // Prepare Range Filtering
+            float maxDistSq = FilterDistance * FilterDistance;
+            bool checkDistance = FilterDistance < 1000000f; 
+            ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
+
             foreach (var item in allAnalysisResults)
             {
-                // New Mutual Exclusivity Check
-                if (this.displayMode == 0 && !item.isVehicle) continue; // Mode 0 = Only Vehicles
-                if (this.displayMode == 1 && !item.isPedestrian) continue; // Mode 1 = Only Peds
+                // 1. Range Check (using sourceAgent to keep destinations visible if agent is close)
+                if (checkDistance)
+                {
+                    // Check distance of the AGENT (sourceAgent), not the entity being rendered (which might be a building)
+                    // If sourceAgent is null/empty for some reason, we fallback to entity, but logic ensures it's populated.
+                    Entity entityToCheck = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
+
+                    if (transformLookup.TryGetComponent(entityToCheck, out Transform trans))
+                    {
+                        if (math.distancesq(trans.m_Position, FilterPosition) > maxDistSq)
+                            continue;
+                    }
+                }
+
+                // 2. Display Mode Check
+                if (this.displayMode == 0 && !item.isVehicle) continue;
+                if (this.displayMode == 1 && !item.isPedestrian) continue;
 
                 bool matchesFilter = false;
                 if (string.IsNullOrEmpty(currentFilter))
@@ -470,7 +494,8 @@ namespace TrafficSpy.Systems
             foreach (var item in allAnalysisResults)
             {
                 if (item.isDestination) continue;
-                // Updated check for DisplayMode
+                
+                // Use displayMode
                 if (this.displayMode == 0 && !item.isVehicle) continue;
                 if (this.displayMode == 1 && !item.isPedestrian) continue;
 
@@ -555,6 +580,7 @@ namespace TrafficSpy.Systems
         {
             if (usePathBasedAnalysis)
             {
+                // Calculate Center Position for Range Filtering
                 if (EntityManager.HasComponent<Curve>(selectedSegment))
                 {
                     Curve curve = EntityManager.GetComponentData<Curve>(selectedSegment);

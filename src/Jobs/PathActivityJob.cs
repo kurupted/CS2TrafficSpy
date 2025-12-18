@@ -223,6 +223,7 @@ namespace TrafficSpy.Jobs
             results.Enqueue(new TrafficRenderData
             {
                 entity = vehicleEntity,
+                sourceAgent = vehicleEntity, // Self
                 purpose = purpose,
                 type = type,
                 isOrigin = false,
@@ -238,14 +239,14 @@ namespace TrafficSpy.Jobs
                 Entity physicalDest = ResolvePhysicalEntity(dest.m_Target);
                 if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
                 {
-                    // isVehicle = false, isDestination = true
                     results.Enqueue(new TrafficRenderData
                     {
                         entity = physicalDest,
+                        sourceAgent = vehicleEntity, // Linked to vehicle
                         purpose = purpose,
                         type = type,
                         isOrigin = false,
-                        isVehicle = false,
+                        isVehicle = true, // Set isVehicle = true so Destination is visible in Vehicle Mode
                         isPedestrian = false,
                         isDestination = true,
                         isMovingIn = isMovingIn
@@ -269,6 +270,7 @@ namespace TrafficSpy.Jobs
             results.Enqueue(new TrafficRenderData
             {
                 entity = renderEntity,
+                sourceAgent = renderEntity, // Self
                 purpose = purpose,
                 type = type,
                 isOrigin = false,
@@ -295,6 +297,7 @@ namespace TrafficSpy.Jobs
                     results.Enqueue(new TrafficRenderData
                     {
                         entity = physicalDest,
+                        sourceAgent = renderEntity, // Linked to Pedestrian
                         purpose = purpose,
                         type = type,
                         isOrigin = false,
