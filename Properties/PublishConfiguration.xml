@@ -51,7 +51,7 @@ This mod is safe to remove and doesn't add data to your save files.
     <ModVersion Value="2.0" />
 
     <!-- Recommended version of the base game to use the mod. -->
-    <GameVersion Value="1.*" />
+    <GameVersion Value="1.5.*" />
 
     <!-- Dependency for the mod.  Can be set multiple times. -->
     <Dependency Id="74417" />
