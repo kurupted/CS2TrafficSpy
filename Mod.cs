@@ -5,6 +5,7 @@ using Game.Input;
 using Game.Modding;
 using Game.SceneFlow;
 using TrafficSpy.ModSettings;
+using TrafficSpy.Systems;
 
 namespace TrafficSpy
 {
@@ -37,6 +38,9 @@ namespace TrafficSpy
 
             updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.ToolUpdate);
+            
+            updateSystem.UpdateAt<SimpleOverlayRendererSystem>(SystemUpdatePhase.Rendering);
+            updateSystem.UpdateAt<TrafficRouteSystem>(SystemUpdatePhase.Rendering);
         }
 
         public void OnDispose()

@@ -5,6 +5,7 @@ export const activityData = bindValue<string>("TrafficSpy", "activityData", "{}"
 export const highlightAgents = bindValue<boolean>("TrafficSpy", "highlightAgents", false);
 export const showPedestrians = bindValue<boolean>("TrafficSpy", "showPedestrians", false);
 export const showVehicles = bindValue<boolean>("TrafficSpy", "showVehicles", true);
+export const showRoutes = bindValue<boolean>("TrafficSpy", "showRoutes", false);
 
 export const directionMode = bindValue<number>("TrafficSpy", "directionMode", 0);
 
@@ -12,5 +13,6 @@ export const setTrafficFilter = (filter: string) => trigger("TrafficSpy", "setTr
 export const sethighlightAgents = (active: boolean) => trigger("TrafficSpy", "sethighlightAgents", active);
 export const setShowPedestrians = (active: boolean) => trigger("TrafficSpy", "setShowPedestrians", active);
 export const setShowVehicles = (active: boolean) => trigger("TrafficSpy", "setShowVehicles", active);
+export const setShowRoutes = (active: boolean) => trigger("TrafficSpy", "setShowRoutes", active);
 
 export const setDirectionMode = (mode: number) => trigger("TrafficSpy", "setDirectionMode", mode);

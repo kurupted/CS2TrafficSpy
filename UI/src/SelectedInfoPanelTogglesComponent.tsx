@@ -5,7 +5,8 @@ import {
     highlightAgents, sethighlightAgents,
     showPedestrians, setShowPedestrians,
     showVehicles, setShowVehicles,
-    directionMode, setDirectionMode
+    directionMode, setDirectionMode,
+    showRoutes, setShowRoutes
 } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
@@ -77,6 +78,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         const showHighlights = useValue(highlightAgents);
         const showPeds = useValue(showPedestrians);
         const showCars = useValue(showVehicles);
+        const showPathLines = useValue(showRoutes);
         const currentDirMode = useValue(directionMode); // Get current mode
         const [activeFilter, setActiveFilter] = useState<string>("");
 
@@ -94,7 +96,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             (data.tourism || 0) + (data.other || 0) + (data.services || 0);
 
         const totalStyle: React.CSSProperties = {
-            color: activeFilter === "" ? 'rgba(255, 235, 100, 1)' : 'white',
+            color: activeFilter === "" ? 'rgba(255, 235, 100, 1)' : 'rgba(120, 200, 255, 1)',
             fontWeight: activeFilter === "" ? '800' : 'normal',
         };
 
@@ -164,11 +166,11 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     style={{ cursor: "pointer", marginBottom: "0px" }}
                 >
                     <InfoRow
-                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Road Side:</span>}
+                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Road Side:</span>}
                         right={
                             <span style={{
                                 color: currentDirMode === 0 ? "white" : "rgb(100, 255, 100)",
-                                fontSize: "0.9em",
+                                fontSize: "1em",
                                 fontWeight: currentDirMode === 0 ? "normal" : "bold"
                             }}>
                                 {getDirectionLabel()}
@@ -186,7 +188,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     style={{ cursor: "pointer", marginBottom: "0px" }}
                 >
                     <InfoRow
-                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Include Vehicles</span>}
+                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Include Vehicles</span>}
                         right={
                             <div style={{
                                 width: "12px", height: "12px",
@@ -207,7 +209,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     style={{ cursor: "pointer", marginBottom: "5px" }}
                 >
                     <InfoRow
-                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Include Pedestrians</span>}
+                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Include Pedestrians</span>}
                         right={
                             <div style={{
                                 width: "12px", height: "12px",
@@ -223,29 +225,48 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 </div>
 
                 {/* 5. HIGHLIGHT TOGGLE (Visible only when no specific filter active) */}
-                {activeFilter === "" && (
-                    <div
-                        onClick={() => sethighlightAgents(!showHighlights)}
-                        style={{ cursor: "pointer", marginBottom: "10px" }}
-                    >
-                        <InfoRow
-                            left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Highlight Vehicles/Peds</span>}
-                            right={
-                                <div style={{
-                                    width: "12px", height: "12px",
-                                    borderRadius: "50%",
-                                    border: "1px solid white",
-                                    backgroundColor: showHighlights ? "rgb(100, 255, 100)" : "transparent"
-                                }}></div>
-                            }
-                            uppercase={false}
-                            subRow={true}
-                            className={InfoRowTheme?.infoRow}
-                        />
-                    </div>
-                )}
+                <div
+                    onClick={() => sethighlightAgents(!showHighlights)}
+                    style={{ cursor: "pointer", marginBottom: "10px" }}
+                >
+                    <InfoRow
+                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Highlight Destinations & Agents</span>}
+                        right={
+                            <div style={{
+                                width: "12px", height: "12px",
+                                borderRadius: "50%",
+                                border: "1px solid white",
+                                backgroundColor: showHighlights ? "rgb(100, 255, 100)" : "transparent"
+                            }}></div>
+                        }
+                        uppercase={false}
+                        subRow={true}
+                        className={InfoRowTheme?.infoRow}
+                    />
+                </div>
 
-                {/* 6. DATA ROWS */}
+                {/* 6. SHOW ROUTES TOGGLE */}
+                <div
+                    onClick={() => setShowRoutes(!showPathLines)}
+                    style={{ cursor: "pointer", marginBottom: "10px" }}
+                >
+                    <InfoRow
+                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Show Route Lines</span>}
+                        right={
+                            <div style={{
+                                width: "12px", height: "12px",
+                                borderRadius: "50%",
+                                border: "1px solid white",
+                                backgroundColor: showPathLines ? "rgb(100, 255, 100)" : "transparent"
+                            }}></div>
+                        }
+                        uppercase={false}
+                        subRow={true}
+                        className={InfoRowTheme?.infoRow}
+                    />
+                </div>
+
+                {/* 7. DATA ROWS */}
                 {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
                 {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
 

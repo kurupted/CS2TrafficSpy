@@ -37,6 +37,10 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<DeliveryTruck> deliveryTruckLookup;
         [ReadOnly] public ComponentLookup<CargoTransport> cargoTransportLookup;
         [ReadOnly] public ComponentLookup<PublicTransport> publicTransportLookup;
+        
+        // Taxi Lookups
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Taxi> taxiLookup;
+        [ReadOnly] public BufferLookup<Passenger> passengerLookup;
 
         // Service Vehicle Lookups
         [ReadOnly] public ComponentLookup<Game.Vehicles.Hearse> hearseLookup;
@@ -80,6 +84,42 @@ namespace TrafficSpy.Jobs
                 maintenanceVehicleLookup.HasComponent(entity))
             {
                 EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service);
+                return true;
+            }
+
+            // Taxis (Check before PublicTransport to be specific)
+            if (taxiLookup.HasComponent(entity))
+            {
+                Purpose passengerPurpose = Purpose.None;
+                TrafficType type = TrafficType.Service; // Default to Service (Yellow/Other)
+                bool isMovingIn = false;
+
+                // Try to find a passenger to get the real purpose
+                if (passengerLookup.TryGetBuffer(entity, out DynamicBuffer<Passenger> passengers) && passengers.Length > 0)
+                {
+                    for (int i = 0; i < passengers.Length; i++)
+                    {
+                        Entity passenger = passengers[i].m_Passenger;
+                        if (travelPurposeLookup.TryGetComponent(passenger, out TravelPurpose purpose))
+                        {
+                            passengerPurpose = purpose.m_Purpose;
+                            type = TrafficType.Citizen; // Upgrade to Citizen so it counts towards Shopping/Home/etc stats
+                            
+                            if (passengerPurpose == Purpose.GoingHome)
+                            {
+                                if (householdMemberLookup.TryGetComponent(passenger, out HouseholdMember householdMember) &&
+                                    householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
+                                    (household.m_Flags & HouseholdFlags.MovedIn) == 0)
+                                {
+                                    isMovingIn = true;
+                                }
+                            }
+                            break; // Use the first valid passenger's purpose
+                        }
+                    }
+                }
+
+                EnqueueVehicleDestination(entity, passengerPurpose, type, isMovingIn);
                 return true;
             }
 

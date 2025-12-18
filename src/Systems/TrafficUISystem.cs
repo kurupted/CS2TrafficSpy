@@ -56,11 +56,15 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> highlightAgentsBinding;
         private ValueBinding<bool> showPedestriansBinding;
         private ValueBinding<bool> showVehiclesBinding;
+        private ValueBinding<bool> showRoutesBinding;
         private ValueBinding<int> directionModeBinding;
 
         private bool highlightAgents = false;
         private bool showPedestrians = false;
         private bool showVehicles = true;
+        public static List<Entity> AnalyzedLanes = new List<Entity>();
+        public bool HighlightAgents => highlightAgents;
+        public bool ShowRoutes { get; private set; } = false;
         private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
 
         private bool isToolActive = false;
@@ -105,6 +109,7 @@ namespace TrafficSpy.Systems
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
             this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false);
             this.showVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showVehicles", true);
+            this.showRoutesBinding = new ValueBinding<bool>("TrafficSpy", "showRoutes", false);
             this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
 
             AddBinding(this.activityDataBinding);
@@ -112,6 +117,7 @@ namespace TrafficSpy.Systems
             AddBinding(this.highlightAgentsBinding);
             AddBinding(this.showPedestriansBinding);
             AddBinding(this.showVehiclesBinding);
+            AddBinding(this.showRoutesBinding);
             AddBinding(this.directionModeBinding);
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
@@ -131,6 +137,14 @@ namespace TrafficSpy.Systems
                 this.showVehicles = active;
                 this.showVehiclesBinding.Update(active);
                 CalculateStats();
+                ApplyFilter();
+            }));
+            
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowRoutes", (bool active) => {
+                this.ShowRoutes = active;
+                this.showRoutesBinding.Update(active);
+                // We set IsDirty to true so the RouteSystem knows to check immediately
+                IsDirty = true; 
                 ApplyFilter();
             }));
 
@@ -263,6 +277,7 @@ namespace TrafficSpy.Systems
                 this.activityDataBinding.Update("{}");
                 allAnalysisResults.Clear();
                 CurrentRenderList.Clear();
+                AnalyzedLanes.Clear(); // Clear lanes
                 IsDirty = true;
             }
         }
@@ -296,7 +311,7 @@ namespace TrafficSpy.Systems
                 }
                 else
                 {
-                    if (!string.IsNullOrEmpty(currentFilter) || this.highlightAgents)
+                    if (!string.IsNullOrEmpty(currentFilter) || this.highlightAgents || this.ShowRoutes)
                     {
                         CurrentRenderList.Add(item);
                     }
@@ -305,6 +320,8 @@ namespace TrafficSpy.Systems
 
             IsDirty = true;
         }
+        
+        
 
         private bool MatchesFilter(TrafficRenderData item, string filter)
         {
@@ -360,26 +377,47 @@ namespace TrafficSpy.Systems
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
             targets.Add(segment);
 
-            if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<SubLane> lanes))
+            // 1. Get the main road segment's geometry
+            if (EntityManager.HasComponent<Curve>(segment) && 
+                EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<SubLane> lanes))
             {
+                Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
+                
+                // Calculate the "Center" and "Right Vector" of the road at the midpoint (t=0.5)
+                // Position(0.5)
+                float3 segmentPos = Colossal.Mathematics.MathUtils.Position(segmentCurve.m_Bezier, 0.5f);
+                // Tangent(0.5) gives the forward direction
+                float3 segmentTan = Colossal.Mathematics.MathUtils.Tangent(segmentCurve.m_Bezier, 0.5f);
+                // Cross product with Up (0,1,0) gives the Right Vector
+                float3 segmentRight = math.cross(segmentTan, new float3(0, 1, 0));
+
                 for (int i = 0; i < lanes.Length; i++)
                 {
                     Entity subLaneEntity = lanes[i].m_SubLane;
                     
-                    // DIRECTION FILTER LOGIC
                     if (directionMode != 0)
                     {
-                        // Check if the lane has EdgeLane component
-                        if (EntityManager.HasComponent<EdgeLane>(subLaneEntity))
+                        // We check the geometry of the sub-lane
+                        if (EntityManager.HasComponent<Curve>(subLaneEntity))
                         {
-                            var edgeLane = EntityManager.GetComponentData<EdgeLane>(subLaneEntity);
-                            float2 delta = edgeLane.m_EdgeDelta;
+                            Curve laneCurve = EntityManager.GetComponentData<Curve>(subLaneEntity);
+                            float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
 
-                            // directionMode 1 (Side A / Forward): Typically delta 0.0 -> we want to skip if delta > 0.5
-                            if (directionMode == 1 && delta.y > 0.5f) continue;
+                            // Calculate vector from Road Center -> Lane Center
+                            float3 diff = lanePos - segmentPos;
+                            
+                            // Dot product determines side:
+                            // > 0 means the lane is on the Right side of the road center
+                            // < 0 means the lane is on the Left side of the road center
+                            float dot = math.dot(diff, segmentRight);
 
-                            // directionMode 2 (Side B / Backward): Typically delta 1.0 -> we want to skip if delta < 0.5
-                            if (directionMode == 2 && delta.y < 0.5f) continue;
+                            // Threshold 0.1f ignores tiny floating point errors for exact center lanes
+                            
+                            // Mode 1 (Side A): We want ONE side (e.g. Left). So skip if dot is Positive (Right).
+                            if (directionMode == 1 && dot > 0.1f) continue;
+
+                            // Mode 2 (Side B): We want OTHER side (e.g. Right). So skip if dot is Negative (Left).
+                            if (directionMode == 2 && dot < -0.1f) continue;
                         }
                     }
 
@@ -498,6 +536,24 @@ namespace TrafficSpy.Systems
                 // Pass directionMode to GetTargetEntities
                 NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob, this.directionMode);
 
+                AnalyzedLanes.Clear();
+
+                // highlight the road segment or its specific lanes
+                if (this.directionMode != 0)
+                {
+                    NativeArray<Entity> targetArray = targets.ToNativeArray(Allocator.Temp);
+                    foreach (var entity in targetArray)
+                    {
+                        if (entity != selectedSegment) AnalyzedLanes.Add(entity);
+                    }
+                    targetArray.Dispose();
+                }
+                else
+                {
+                    AnalyzedLanes.Add(selectedSegment);
+                }
+
+
                 PathActivityJob pathJob = new PathActivityJob
                 {
                     targets = targets,
@@ -513,6 +569,8 @@ namespace TrafficSpy.Systems
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),
                     currentVehicleLookup = SystemAPI.GetComponentLookup<CurrentVehicle>(true),
                     currentTransportLookup = SystemAPI.GetComponentLookup<CurrentTransport>(true),
+                    taxiLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Taxi>(true),
+                    passengerLookup = SystemAPI.GetBufferLookup<Passenger>(true),
 
                     deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
                     cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
