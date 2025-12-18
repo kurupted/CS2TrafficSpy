@@ -12,6 +12,6 @@ namespace TrafficSpy
         public const string Name        = "TrafficSpy";
         public const string Version     = "2.0";
         public const string Title       = "Traffic Spy";
-        public const string Description = "Provides detailed traffic analysis for selected road segments. Displays a breakdown of all agents passing through, categorized by their travel purpose, and also highlights the destination buildings.";
+        public const string Description = "Provides detailed traffic analysis for selected road segments. Displays route lines color-coded by volume, a breakdown of travel purposes, and also highlights destinations.";
     }
 }

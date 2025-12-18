@@ -4,57 +4,41 @@
 
 <Publish>
     <!-- Mod ID must be 0 for publishing a mod for the first time.  Mod ID must be set in order to update an existing mod. -->
-    <ModId Value="0" />
+    <ModId Value="128566" />
 
     <!-- Name of the mod to display to players.  Copied from assembly Title. -->
     <DisplayName Value="Traffic Spy" />
 
     <!-- Short description of the mod.  Copied from assembly Description. -->
-    <ShortDescription Value="Provides detailed traffic analysis for selected road segments. Displays a breakdown of all agents passing through, categorized by their travel purpose, and also highlights the destination buildings." />
+    <ShortDescription Value="Provides detailed traffic analysis for selected road segments. Displays route lines color-coded by volume, a breakdown of travel purposes, and also highlights destinations." />
 
     <!-- Long description of the mod.  Copied from ReadMe.md file.  Supports minimal markdown subset. -->
     <LongDescription>
 # Traffic Spy
-
-
-Provides detailed traffic analysis for selected road segments. Displays a breakdown of all agents passing through, categorized by their travel purpose, and also highlights the destination buildings.
-
-
-Features:
-
-    - Destination Visualization: Highlights destination buildings.
-
-    - Travel Purpose Summary: View vehicle/pedestrian counts, grouped by their travel purpose (e.g., commuting, cargo delivery, etc).
-
-    - Filtering: Isolate specific travel purposes and view only their destinations. Optionally highlight the vehicles/peds themselves.
-
-
-Known Issues:
-
-    - Vehicles already on the selected segment are not included in the counts. Will add this later.
-
-    - Pedestrian counts seem high -- need to investigate further.
-
-
-Future Plans:
-
-    - Would like to add the ability so select one side of a two-way road.
+Provides detailed traffic analysis for selected road segments. Displays route lines color-coded by volume, a breakdown of travel purposes, and also highlights destinations.
+## Features:
+- Route Lines: Draws lines indicating the routes that each agent will take, similar to the vanilla system but with color-coding to indicate volume, and it works in combination with the various filters.
+- Filtering Options: Isolate one side of a two-way road, filter to specific travel purposes, or limit analysis based on agents' distance from the selected path.
+- Destination Visualization: Highlights destination buildings.
+- Travel Purpose Summary: View agent counts, grouped by their travel purpose (e.g., commuting, cargo delivery, etc).
+- Works with either vehicles or pedestrians.
+## How to Use:
+Click the Traffic Spy icon, and then click a road/path segment.
+## Removal:
+This mod is safe to remove and doesn't add data to your save files.
 </LongDescription>
 
     <!-- Thumbnail. -->
     <Thumbnail Value="Properties/Thumbnail.png" />
 
     <!-- Screenshot.  Copied from Screenshots folder.  Include no spaces in file names.  Max file size is 2.1MB.  Can be set multiple times. -->
-    <Screenshot Value="Properties\Screenshots\10Thumbnail.png" />
-    <Screenshot Value="Properties\Screenshots\10_routes.png" />
-    <Screenshot Value="Properties\Screenshots\20Highlights.png" />
-    <Screenshot Value="Properties\Screenshots\30WithRoutes.png" />
-    <Screenshot Value="Properties\Screenshots\30_peds.png" />
-    <Screenshot Value="Properties\Screenshots\31InfoPanel.png" />
-    <Screenshot Value="Properties\Screenshots\40Vehicles.png" />
-    <Screenshot Value="Properties\Screenshots\40_rangelong.png" />
-    <Screenshot Value="Properties\Screenshots\40_rangemed.png" />
-    <Screenshot Value="Properties\Screenshots\50_filterpurpose.png" />
+    <Screenshot Value="Properties\Screenshots\10_thumbnail.png" />
+    <Screenshot Value="Properties\Screenshots\20_routes.png" />
+    <Screenshot Value="Properties\Screenshots\30_filterpurpose.png" />
+    <Screenshot Value="Properties\Screenshots\40_infopanel.png" />
+    <Screenshot Value="Properties\Screenshots\50_rangemed.png" />
+    <Screenshot Value="Properties\Screenshots\51_rangelong.png" />
+    <Screenshot Value="Properties\Screenshots\60_peds.png" />
 
 
     <!-- Tag.  Can be set multiple times. -->
@@ -78,7 +62,11 @@ Future Plans:
 
     <!-- Change log.  Copied from ChangeLog.md file.  Supports minimal markdown subset. -->
     <ChangeLog>
-- Initial Release
+- New option to draw route lines, which are color-coded based on traffic volume
+- New option to set a distance range
+- New ability to select which side of the road to analyze
+- Now includes vehicles already on the selected segment
+- New UI
 </ChangeLog>
 
     <!-- External links.  Can be set multiple times. -->

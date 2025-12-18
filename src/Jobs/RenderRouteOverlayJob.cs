@@ -56,7 +56,7 @@ namespace TrafficSpy.Jobs
         private void DrawWeightedCurve(CurveDef curveDef, int weight)
         {
             float baseWidth = 1.0f; 
-            float maxAdditionalWidth = 2.2f; 
+            float maxAdditionalWidth = 2.2f;
             float widthMultiplier = 0.15f;
 
             float width = baseWidth + math.min(weight * widthMultiplier, maxAdditionalWidth);
@@ -65,7 +65,7 @@ namespace TrafficSpy.Jobs
             if (curveDef.type == 2) // Pedestrian
             {
                  t = math.clamp(weight / maxPedestrianTraffic, 0f, 1f);
-                 width *= 0.75f; 
+                 width *= 0.75f;
             }
             else // Vehicle
             {

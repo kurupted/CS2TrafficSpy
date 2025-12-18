@@ -10,7 +10,7 @@
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
 		<DefaultItemExcludes>UI\node_modules\**;$(DefaultItemExcludes)</DefaultItemExcludes>
 		<AssemblyTitle>Traffic Spy</AssemblyTitle>
-		<Description>Provides detailed traffic analysis for selected road segments. Displays a breakdown of all agents passing through, categorized by their travel purpose, and also highlights the destination buildings.</Description>
+		<Description>Provides detailed traffic analysis for selected road segments. Displays route lines color-coded by volume, a breakdown of travel purposes, and also highlights destinations.</Description>
 	</PropertyGroup>
 	
 	<!--Imports must be after PropertyGroup block-->
