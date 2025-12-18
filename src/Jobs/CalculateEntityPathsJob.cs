@@ -14,7 +14,6 @@ using MathUtils = TrafficSpy.Utils.MathUtils;
 
 namespace TrafficSpy.Jobs
 {
-    // Simple struct to pass the Entity + its determined Type into the job
     public struct EntityRouteInput
     {
         public Entity entity;
@@ -24,7 +23,6 @@ namespace TrafficSpy.Jobs
     [BurstCompile]
     public struct CalculateEntityPathsJob : IJobParallelForBatch
     {
-        // CHANGED: Takes our custom struct instead of just Entity
         [ReadOnly] public NativeList<EntityRouteInput> input;
         
         [ReadOnly] public ComponentLookup<PathOwner> pathOwnerLookup;
@@ -55,7 +53,7 @@ namespace TrafficSpy.Jobs
         private void WriteEntityRoute(EntityRouteInput item, int batchIndex)
         {
             Entity entity = item.entity;
-            byte agentType = item.type; // Use the type passed from TrafficRouteSystem
+            byte agentType = item.type;
 
             if (!pathOwnerLookup.TryGetComponent(entity, out PathOwner pathOwner)) return;
             if (!pathElementLookup.TryGetBuffer(entity, out DynamicBuffer<PathElement> pathElements)) return;
@@ -83,8 +81,8 @@ namespace TrafficSpy.Jobs
                 {
                     if (curveLookup.TryGetComponent(navLanes[i].m_Lane, out Curve curve))
                     {
-                        Bezier4x3 cutCurve = MathUtils.Cut(curve.m_Bezier, navLanes[i].m_CurvePosition);
-                        Write(new CurveDef(cutCurve, agentType), batchIndex);
+                        // Use FULL curve for aggregation
+                        Write(new CurveDef(curve.m_Bezier, agentType), batchIndex);
                     }
                 }
             }
@@ -93,16 +91,16 @@ namespace TrafficSpy.Jobs
             if (carLaneLookup.TryGetComponent(entity, out CarCurrentLane carLane) 
                 && curveLookup.TryGetComponent(carLane.m_Lane, out Curve carCurve))
             {
-                Bezier4x3 cutCurve = MathUtils.Cut(carCurve.m_Bezier, carLane.m_CurvePosition.xy);
-                Write(new CurveDef(cutCurve, agentType), batchIndex);
+                // Use FULL curve for aggregation (fixes MaxTraffic setting)
+                Write(new CurveDef(carCurve.m_Bezier, agentType), batchIndex);
             }
 
             // Handle Current Pedestrian Lane
             if (humanLaneLookup.TryGetComponent(entity, out HumanCurrentLane humanLane) 
                 && curveLookup.TryGetComponent(humanLane.m_Lane, out Curve humanCurve))
             {
-                Bezier4x3 cutCurve = MathUtils.Cut(humanCurve.m_Bezier, humanLane.m_CurvePosition);
-                Write(new CurveDef(cutCurve, agentType), batchIndex);
+                // Use FULL curve for aggregation
+                Write(new CurveDef(humanCurve.m_Bezier, agentType), batchIndex);
             }
         }
 

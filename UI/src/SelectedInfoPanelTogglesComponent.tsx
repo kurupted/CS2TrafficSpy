@@ -3,10 +3,10 @@ import { VanillaComponentResolver } from "./VanillaComponentResolver";
 import {
     activityData, setTrafficFilter,
     highlightAgents, sethighlightAgents,
-    showPedestrians, setShowPedestrians,
-    showVehicles, setShowVehicles,
+    displayMode, setDisplayMode,
     directionMode, setDirectionMode,
-    showRoutes, setShowRoutes
+    showRoutes, setShowRoutes,
+    rangeMode, setRangeMode
 } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
@@ -40,34 +40,52 @@ const InfoRow: any = getModule(
 
 export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
 
+    // Helper to render a row of small buttons
+    const renderButtonRow = (label: string, buttons: { label: string, active: boolean, onClick: () => void }[]) => {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '5px', width: '100%' }}>
+                <div style={{ color: "rgba(255,255,255,0.8)", fontSize: "0.9em", marginBottom: '2px', marginLeft: '4px' }}>{label}</div>
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%' }}>
+                    {buttons.map((btn, idx) => (
+                        <div
+                            key={idx}
+                            onClick={btn.onClick}
+                            style={{
+                                flex: 1,
+                                backgroundColor: btn.active ? "rgba(100, 255, 100, 0.8)" : "rgba(0, 0, 0, 0.4)",
+                                color: btn.active ? "black" : "white",
+                                border: "1px solid rgba(255,255,255,0.3)",
+                                borderRadius: "3px",
+                                textAlign: "center",
+                                padding: "2px 0",
+                                fontSize: "0.85em",
+                                cursor: "pointer",
+                                userSelect: "none"
+                            }}
+                        >
+                            {btn.label}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     const renderRow = (label: string, count: number, filterKey: string, activeFilter: string, setActive: any) => {
         if (!count || count <= 0) return null;
-
         const isSelected = activeFilter === filterKey;
         const displayLabel = isSelected ? `> ${label}` : label;
-
         const textStyle: React.CSSProperties = {
             color: isSelected ? 'rgba(255, 235, 100, 1)' : 'rgba(120, 200, 255, 1)',
             fontWeight: isSelected ? '800' : 'normal',
         };
 
         return (
-            <div
-                key={label}
-                onClick={() => {
-                    const newValue = isSelected ? "" : filterKey;
-                    setActive(newValue);
-                    setTrafficFilter(filterKey);
-                }}
-                style={{ cursor: "pointer" }}
-            >
+            <div key={label} onClick={() => { const newValue = isSelected ? "" : filterKey; setActive(newValue); setTrafficFilter(filterKey); }} style={{ cursor: "pointer" }}>
                 <InfoRow
                     left={<span style={textStyle}>{displayLabel}</span>}
                     right={<span style={textStyle}>{count.toString()}</span>}
-                    uppercase={false}
-                    disableFocus={true}
-                    subRow={false}
-                    className={InfoRowTheme?.infoRow}
+                    uppercase={false} disableFocus={true} subRow={false} className={InfoRowTheme?.infoRow}
                 />
             </div>
         );
@@ -76,18 +94,17 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
     componentList["TrafficSpy.Systems.TrafficUISystem"] = (e: InfoSectionComponent) => {
         const jsonString = useValue(activityData);
         const showHighlights = useValue(highlightAgents);
-        const showPeds = useValue(showPedestrians);
-        const showCars = useValue(showVehicles);
+        const currentDisplayMode = useValue(displayMode) || 0; // 0=Vehicles, 1=Peds
         const showPathLines = useValue(showRoutes);
-        const currentDirMode = useValue(directionMode); // Get current mode
+        const currentDirMode = useValue(directionMode) || 0;
+        // Fix for "Bug with range toggle": check if undefined/null, otherwise respect 0
+        const currentRangeMode = useValue(rangeMode) ?? 1;
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const data: SegmentActivity = useMemo(() => {
             try { return JSON.parse(jsonString || "{}"); } catch(e) { return {}; }
         }, [jsonString]);
-        
-        // If data is empty (no road selected), hide the component entirely.
-        // TrafficUISystem sends "{}" when selection is not a road.
+
         if (!data || Object.keys(data).length === 0) return null;
 
         const total = (data.none || 0) + (data.shopping || 0) + (data.leisure || 0) +
@@ -115,30 +132,6 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             { label: "Other", count: data.other || 0, key: "other" },
         ].sort((a, b) => b.count - a.count);
 
-        // Mutual Exclusivity (prevent both being off)
-        const toggleVehicles = () => {
-            if (showCars && !showPeds) setShowPedestrians(true);
-            setShowVehicles(!showCars);
-        }
-        const togglePedestrians = () => {
-            if (showPeds && !showCars) setShowVehicles(true);
-            setShowPedestrians(!showPeds);
-        }
-
-        // Cycles through: 0 (Both) -> 1 (Forward) -> 2 (Backward) -> 0
-        const toggleDirection = () => {
-            const nextMode = (currentDirMode + 1) % 3;
-            setDirectionMode(nextMode);
-        }
-
-        const getDirectionLabel = () => {
-            switch(currentDirMode) {
-                case 1: return "Side A";
-                case 2: return "Side B";
-                default: return "Both Sides";
-            }
-        }
-
         return (
             <InfoSection
                 focusKey={VanillaComponentResolver.instance.FOCUS_DISABLED}
@@ -146,133 +139,58 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 className={InfoSectionTheme?.infoSection}
             >
                 {/* 1. RESET / TOTAL ROW */}
-                <div
-                    onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }}
-                    style={{ cursor: "pointer", marginBottom: "5px" }}
-                >
+                <div onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }} style={{ cursor: "pointer", marginBottom: "5px" }}>
                     <InfoRow
                         left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}
                         right={<span style={totalStyle}>{total.toString()}</span>}
-                        uppercase={true}
-                        disableFocus={true}
-                        subRow={false}
-                        className={InfoRowTheme?.infoRow}
+                        uppercase={true} disableFocus={true} subRow={false} className={InfoRowTheme?.infoRow}
                     />
                 </div>
 
-                {/* 2. DIRECTION TOGGLE */}
-                <div
-                    onClick={toggleDirection}
-                    style={{ cursor: "pointer", marginBottom: "0px" }}
-                >
+                {/* 2. MODE TOGGLE (Vehicles / Pedestrians) */}
+                {renderButtonRow("Traffic Type", [
+                    { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
+                    { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
+                ])}
+
+                {/* 3. DIRECTION BUTTONS */}
+                {renderButtonRow("Road Side / Direction", [
+                    { label: "Both", active: currentDirMode === 0, onClick: () => setDirectionMode(0) },
+                    { label: "Side A", active: currentDirMode === 1, onClick: () => setDirectionMode(1) },
+                    { label: "Side B", active: currentDirMode === 2, onClick: () => setDirectionMode(2) }
+                ])}
+
+                {/* 4. RANGE BUTTONS */}
+                {renderButtonRow("Max Range", [
+                    { label: "S", active: currentRangeMode === 0, onClick: () => setRangeMode(0) },
+                    { label: "M", active: currentRangeMode === 1, onClick: () => setRangeMode(1) },
+                    { label: "L", active: currentRangeMode === 2, onClick: () => setRangeMode(2) },
+                    { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
+                ])}
+
+                {/* 5. VISUAL TOGGLES */}
+                <div onClick={() => sethighlightAgents(!showHighlights)} style={{ cursor: "pointer" }}>
                     <InfoRow
-                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Road Side:</span>}
-                        right={
-                            <span style={{
-                                color: currentDirMode === 0 ? "white" : "rgb(100, 255, 100)",
-                                fontSize: "1em",
-                                fontWeight: currentDirMode === 0 ? "normal" : "bold"
-                            }}>
-                                {getDirectionLabel()}
-                            </span>
-                        }
-                        uppercase={false}
-                        subRow={true}
-                        className={InfoRowTheme?.infoRow}
+                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Highlight Destinations</span>}
+                        right={ <div style={{ width: "12px", height: "12px", borderRadius: "50%", border: "1px solid white", backgroundColor: showHighlights ? "rgb(100, 255, 100)" : "transparent" }}></div> }
+                        uppercase={false} subRow={true} className={InfoRowTheme?.infoRow}
                     />
                 </div>
 
-                {/* 3. INCLUDE VEHICLES TOGGLE */}
-                <div
-                    onClick={toggleVehicles}
-                    style={{ cursor: "pointer", marginBottom: "0px" }}
-                >
+                <div onClick={() => setShowRoutes(!showPathLines)} style={{ cursor: "pointer", marginBottom: "10px" }}>
                     <InfoRow
-                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Include Vehicles</span>}
-                        right={
-                            <div style={{
-                                width: "12px", height: "12px",
-                                borderRadius: "50%",
-                                border: "1px solid white",
-                                backgroundColor: showCars ? "rgb(100, 255, 100)" : "transparent"
-                            }}></div>
-                        }
-                        uppercase={false}
-                        subRow={true}
-                        className={InfoRowTheme?.infoRow}
+                        left={<span style={{ color: "white", fontSize: "0.9em", opacity: 0.8 }}>Show Route Lines</span>}
+                        right={ <div style={{ width: "12px", height: "12px", borderRadius: "50%", border: "1px solid white", backgroundColor: showPathLines ? "rgb(100, 255, 100)" : "transparent" }}></div> }
+                        uppercase={false} subRow={true} className={InfoRowTheme?.infoRow}
                     />
                 </div>
 
-                {/* 4. INCLUDE PEDESTRIANS TOGGLE */}
-                <div
-                    onClick={togglePedestrians}
-                    style={{ cursor: "pointer", marginBottom: "5px" }}
-                >
-                    <InfoRow
-                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Include Pedestrians</span>}
-                        right={
-                            <div style={{
-                                width: "12px", height: "12px",
-                                borderRadius: "50%",
-                                border: "1px solid white",
-                                backgroundColor: showPeds ? "rgb(100, 255, 100)" : "transparent"
-                            }}></div>
-                        }
-                        uppercase={false}
-                        subRow={true}
-                        className={InfoRowTheme?.infoRow}
-                    />
-                </div>
-
-                {/* 5. HIGHLIGHT TOGGLE (Visible only when no specific filter active) */}
-                <div
-                    onClick={() => sethighlightAgents(!showHighlights)}
-                    style={{ cursor: "pointer", marginBottom: "10px" }}
-                >
-                    <InfoRow
-                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Highlight Destinations & Agents</span>}
-                        right={
-                            <div style={{
-                                width: "12px", height: "12px",
-                                borderRadius: "50%",
-                                border: "1px solid white",
-                                backgroundColor: showHighlights ? "rgb(100, 255, 100)" : "transparent"
-                            }}></div>
-                        }
-                        uppercase={false}
-                        subRow={true}
-                        className={InfoRowTheme?.infoRow}
-                    />
-                </div>
-
-                {/* 6. SHOW ROUTES TOGGLE */}
-                <div
-                    onClick={() => setShowRoutes(!showPathLines)}
-                    style={{ cursor: "pointer", marginBottom: "10px" }}
-                >
-                    <InfoRow
-                        left={<span style={{ color: "white", fontSize: "1em", opacity: 0.8 }}>Show Route Lines</span>}
-                        right={
-                            <div style={{
-                                width: "12px", height: "12px",
-                                borderRadius: "50%",
-                                border: "1px solid white",
-                                backgroundColor: showPathLines ? "rgb(100, 255, 100)" : "transparent"
-                            }}></div>
-                        }
-                        uppercase={false}
-                        subRow={true}
-                        className={InfoRowTheme?.infoRow}
-                    />
-                </div>
-
-                {/* 7. DATA ROWS */}
+                {/* 6. DATA ROWS */}
                 {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
                 {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
 
             </InfoSection>
         );
     };
-
     return componentList;
 }

@@ -1,12 +1,13 @@
 ﻿DONE:
 - ability to select which side of the road to analyze
 - heat map
+- range
 
 TODO
 - not including all vehicles
 - sometimes in a non-working state?
 - configurable upper limit for heatmap
-- separate upper limit for peds
+x separate upper limit for peds
 x exclude taxis from peds
 
 - "peds" num seems high. and routes are on roads. (taxis are def included. buses are under Vehicles correctly.) if needed, see code below

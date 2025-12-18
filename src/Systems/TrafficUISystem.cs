@@ -54,18 +54,24 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> highlightAgentsBinding;
-        private ValueBinding<bool> showPedestriansBinding;
-        private ValueBinding<bool> showVehiclesBinding;
+        private ValueBinding<int> displayModeBinding; // 0 = Vehicles, 1 = Pedestrians
         private ValueBinding<bool> showRoutesBinding;
         private ValueBinding<int> directionModeBinding;
+        private ValueBinding<int> rangeModeBinding; // 0=Short, 1=Med, 2=Long, 3=Unlimited
 
         private bool highlightAgents = false;
-        private bool showPedestrians = false;
-        private bool showVehicles = true;
+        private int displayMode = 0; // Default to Vehicles
+        
         public static List<Entity> AnalyzedLanes = new List<Entity>();
         public bool HighlightAgents => highlightAgents;
-        public bool ShowRoutes { get; private set; } = false;
+        public bool ShowRoutes { get; private set; } = true; // Default to True
+        
         private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
+        private int rangeMode = 1; // Default to Medium
+
+        // Statics for the Route System to read
+        public static float3 FilterPosition = float3.zero;
+        public static float FilterDistance = 3000f; // Default Medium
 
         private bool isToolActive = false;
         private bool defaultDebugSelectState = false;
@@ -107,18 +113,21 @@ namespace TrafficSpy.Systems
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
-            this.showPedestriansBinding = new ValueBinding<bool>("TrafficSpy", "showPedestrians", false);
-            this.showVehiclesBinding = new ValueBinding<bool>("TrafficSpy", "showVehicles", true);
-            this.showRoutesBinding = new ValueBinding<bool>("TrafficSpy", "showRoutes", false);
+            
+            // Replaced individual bools with one mode
+            this.displayModeBinding = new ValueBinding<int>("TrafficSpy", "displayMode", 0);
+
+            this.showRoutesBinding = new ValueBinding<bool>("TrafficSpy", "showRoutes", true);
             this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
+            this.rangeModeBinding = new ValueBinding<int>("TrafficSpy", "rangeMode", 1);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
             AddBinding(this.highlightAgentsBinding);
-            AddBinding(this.showPedestriansBinding);
-            AddBinding(this.showVehiclesBinding);
+            AddBinding(this.displayModeBinding);
             AddBinding(this.showRoutesBinding);
             AddBinding(this.directionModeBinding);
+            AddBinding(this.rangeModeBinding);
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
                 this.highlightAgents = active;
@@ -126,16 +135,10 @@ namespace TrafficSpy.Systems
                 ApplyFilter();
             }));
 
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowPedestrians", (bool active) => {
-                this.showPedestrians = active;
-                this.showPedestriansBinding.Update(active);
-                CalculateStats();
-                ApplyFilter();
-            }));
-
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowVehicles", (bool active) => {
-                this.showVehicles = active;
-                this.showVehiclesBinding.Update(active);
+            // New Trigger for Display Mode
+            AddBinding(new TriggerBinding<int>("TrafficSpy", "setDisplayMode", (int mode) => {
+                this.displayMode = mode;
+                this.displayModeBinding.Update(mode);
                 CalculateStats();
                 ApplyFilter();
             }));
@@ -156,6 +159,13 @@ namespace TrafficSpy.Systems
                 {
                     RunAnalysis(lastSelectedEntity);
                 }
+            }));
+
+            AddBinding(new TriggerBinding<int>("TrafficSpy", "setRangeMode", (int mode) => {
+                this.rangeMode = mode;
+                this.rangeModeBinding.Update(mode);
+                UpdateRangeDistance();
+                IsDirty = true; // Trigger route redraw
             }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
@@ -272,6 +282,7 @@ namespace TrafficSpy.Systems
         {
             lastSelectedEntity = Entity.Null;
             currentFilter = "";
+            FilterPosition = float3.zero;
             if (this.activityDataBinding.value != "{}")
             {
                 this.activityDataBinding.Update("{}");
@@ -279,6 +290,18 @@ namespace TrafficSpy.Systems
                 CurrentRenderList.Clear();
                 AnalyzedLanes.Clear(); // Clear lanes
                 IsDirty = true;
+            }
+        }
+
+        private void UpdateRangeDistance()
+        {
+            switch (rangeMode)
+            {
+                case 0: FilterDistance = 1000f; break; // Short (1km)
+                case 1: FilterDistance = 3000f; break; // Medium (3km)
+                case 2: FilterDistance = 10000f; break; // Long (10km)
+                case 3: FilterDistance = float.MaxValue; break; // Unlimited
+                default: FilterDistance = 3000f; break;
             }
         }
 
@@ -290,8 +313,9 @@ namespace TrafficSpy.Systems
 
             foreach (var item in allAnalysisResults)
             {
-                if (item.isPedestrian && !this.showPedestrians) continue;
-                if (item.isVehicle && !this.showVehicles) continue;
+                // New Mutual Exclusivity Check
+                if (this.displayMode == 0 && !item.isVehicle) continue; // Mode 0 = Only Vehicles
+                if (this.displayMode == 1 && !item.isPedestrian) continue; // Mode 1 = Only Peds
 
                 bool matchesFilter = false;
                 if (string.IsNullOrEmpty(currentFilter))
@@ -446,8 +470,9 @@ namespace TrafficSpy.Systems
             foreach (var item in allAnalysisResults)
             {
                 if (item.isDestination) continue;
-                if (item.isPedestrian && !this.showPedestrians) continue;
-                if (item.isVehicle && !this.showVehicles) continue;
+                // Updated check for DisplayMode
+                if (this.displayMode == 0 && !item.isVehicle) continue;
+                if (this.displayMode == 1 && !item.isPedestrian) continue;
 
                 if (item.type == TrafficType.Service)
                 {
@@ -530,6 +555,18 @@ namespace TrafficSpy.Systems
         {
             if (usePathBasedAnalysis)
             {
+                if (EntityManager.HasComponent<Curve>(selectedSegment))
+                {
+                    Curve curve = EntityManager.GetComponentData<Curve>(selectedSegment);
+                    FilterPosition = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
+                }
+                else
+                {
+                    FilterPosition = float3.zero;
+                }
+                
+                UpdateRangeDistance();
+
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
                 NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
                 

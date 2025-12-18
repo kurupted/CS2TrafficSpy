@@ -14,6 +14,9 @@ namespace TrafficSpy.Jobs
     public struct RenderRouteOverlayJob : IJob
     {
         public SimpleOverlayRendererSystem.Buffer overlayBuffer;
+        
+        public float maxVehicleTraffic;
+        public float maxPedestrianTraffic;
 
         [ReadOnly]
         public NativeArray<NativeHashMap<CurveDef, int>> curveData;
@@ -54,35 +57,32 @@ namespace TrafficSpy.Jobs
 
             float width = baseWidth + math.min(weight * widthMultiplier, maxAdditionalWidth);
 
-            Color color;
-
+            float t = 0f;
+            
+            // Normalize weight based on type
             if (curveDef.type == 2) // Pedestrian
             {
-                // Changed to Purple/White so it doesn't look like "Green Traffic"
-                color = new Color(0.8f, 0.5f, 1.0f, 0.6f); 
-                width *= 0.75f;  // Ped paths slightly thinner
+                 t = math.clamp(weight / maxPedestrianTraffic, 0f, 1f);
+                 width *= 0.75f; // Peds slightly thinner
             }
             else // Vehicle
             {
-                // Heatmap Logic. We normalize the weight against a "Max Capacity" constant.
-                float maxTraffic = 50.0f; 
-                float t = math.clamp(weight / maxTraffic, 0f, 1f);
+                 t = math.clamp(weight / maxVehicleTraffic, 0f, 1f);
+            }
 
-                // Standard Traffic Colors: Green -> Yellow -> Red
-                Color low = new Color(0f, 1f, 0f, 0.5f);     // Green (Minimal traffic)
-                Color mid = new Color(1f, 0.9f, 0f, 0.7f);   // Yellow
-                Color high = new Color(1f, 0.2f, 0f, 0.9f);  // Red (Heavy traffic)
+            // Shared Heatmap Colors
+            Color low = new Color(0f, 1f, 0f, 0.6f);     // Green
+            Color mid = new Color(1f, 0.9f, 0f, 0.8f);   // Yellow
+            Color high = new Color(1f, 0.2f, 0f, 0.95f);  // Red
 
-                if (t < 0.5f)
-                {
-                    // Interpolate Green -> Yellow
-                    color = Color.Lerp(low, mid, t * 2.0f);
-                }
-                else
-                {
-                    // Interpolate Yellow -> Red
-                    color = Color.Lerp(mid, high, (t - 0.5f) * 2.0f);
-                }
+            Color color;
+            if (t < 0.5f)
+            {
+                color = Color.Lerp(low, mid, t * 2.0f);
+            }
+            else
+            {
+                color = Color.Lerp(mid, high, (t - 0.5f) * 2.0f);
             }
 
             overlayBuffer.DrawCurve(color, curveDef.curve, width, new float2(1, 1));
