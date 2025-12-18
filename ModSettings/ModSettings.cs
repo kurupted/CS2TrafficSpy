@@ -16,13 +16,17 @@ namespace TrafficSpy.ModSettings
         public const string kKeybindingGroup = "KeyBinding";
         public const string kVisualsGroup = "Visuals";
 
-        public static ModSettings Instance { get; private set; }
+        public static ModSettings Instance { get; set; }
 
         public ModSettings(IMod mod) : base(mod)
         {
-            Instance = this;
+            //Instance = this;
         }
 
+        [SettingsUISlider(min = 10, max = 100, step = 5, unit = Unit.kPercentage)]
+        [SettingsUISection(kSection, kVisualsGroup)]
+        public int RouteOpacity { get; set; } = 80;
+        
         [SettingsUISlider(min = 10, max = 200, step = 5, unit = Unit.kInteger)]
         [SettingsUISection(kSection, kVisualsGroup)]
         public int MaxVehicleTraffic { get; set; } = 50;

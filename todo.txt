@@ -1,25 +1,19 @@
 ﻿DONE:
-- ability to select which side of the road to analyze
-- heat map of agent volume
-- distance range
-- exclude taxis from peds
+
 
 
 TODO
+- new thumbnail ; retake SS ; add text to other SSs
+- gray world
+?? lines on the wrong side of the street -- maybe from agents that are crossing?
 - not including all vehicles
-- configurable upper limit for heatmap not working
 
-- also include vehicles ON the current segment (option for exclusively?)
 
 
 
 
 
 ==========
-
-
-handle waiting for public transit
-
 
 
 

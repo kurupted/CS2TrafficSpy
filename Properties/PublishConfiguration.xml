@@ -46,10 +46,15 @@ Future Plans:
 
     <!-- Screenshot.  Copied from Screenshots folder.  Include no spaces in file names.  Max file size is 2.1MB.  Can be set multiple times. -->
     <Screenshot Value="Properties\Screenshots\10Thumbnail.png" />
+    <Screenshot Value="Properties\Screenshots\10_routes.png" />
     <Screenshot Value="Properties\Screenshots\20Highlights.png" />
     <Screenshot Value="Properties\Screenshots\30WithRoutes.png" />
+    <Screenshot Value="Properties\Screenshots\30_peds.png" />
     <Screenshot Value="Properties\Screenshots\31InfoPanel.png" />
     <Screenshot Value="Properties\Screenshots\40Vehicles.png" />
+    <Screenshot Value="Properties\Screenshots\40_rangelong.png" />
+    <Screenshot Value="Properties\Screenshots\40_rangemed.png" />
+    <Screenshot Value="Properties\Screenshots\50_filterpurpose.png" />
 
 
     <!-- Tag.  Can be set multiple times. -->
@@ -59,7 +64,7 @@ Future Plans:
     <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/traffic-spy.1884568/" />
 
     <!-- Version of the mod.  Copied from assembly Version. -->
-    <ModVersion Value="1.1" />
+    <ModVersion Value="2.0" />
 
     <!-- Recommended version of the base game to use the mod. -->
     <GameVersion Value="1.*" />

@@ -25,6 +25,7 @@ namespace TrafficSpy
                 log.Info($"Current mod asset at {asset.path}");
 
             m_Setting = new ModSettings.ModSettings(this);
+            ModSettings.ModSettings.Instance = m_Setting;
             m_Setting.RegisterInOptionsUI();
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEN(m_Setting));
 

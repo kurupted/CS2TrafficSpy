@@ -7,7 +7,7 @@ import {
     directionMode, setDirectionMode,
     showRoutes, setShowRoutes,
     rangeMode, setRangeMode
-} from "./bindings";
+} from "./bindings";            // add: grayWorld, setGrayWorld
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
 import { SegmentActivity } from "./types";
@@ -97,6 +97,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         const showPathLines = useValue(showRoutes);
         const currentDirMode = useValue(directionMode) || 0;
         const currentRangeMode = useValue(rangeMode) ?? 1;
+        //const isGrayWorld = useValue(grayWorld);
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const data: SegmentActivity = useMemo(() => {
@@ -178,6 +179,12 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                             { label: showPathLines ? "ON" : "OFF", active: showPathLines, onClick: () => setShowRoutes(!showPathLines) }
                         ])}
                     </div>
+                    {/* Gray World Toggle
+                    <div style={{ flex: 1 }}>
+                        {renderButtonRow("Gray World", [
+                            { label: isGrayWorld ? "ON" : "OFF", active: isGrayWorld, onClick: () => setGrayWorld(!isGrayWorld) }
+                        ])}
+                    </div> */}
                 </div>
 
                 {/* 7. DATA ROWS */}

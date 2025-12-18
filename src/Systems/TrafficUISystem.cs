@@ -7,7 +7,9 @@ using Game.Common;
 using Game.Creatures;
 using Game.Input;
 using Game.Net;
-using Game.Objects; // Added for Transform
+using Game.Objects;
+//using Game.Prefabs; // for GrayWorld
+//using System.Reflection; // for GrayWorld
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -65,10 +67,6 @@ namespace TrafficSpy.Systems
         private bool highlightAgents = false;
         private int displayMode = 0; // Default to Vehicles
         
-        // Removed separate bools in favor of displayMode
-        // private bool showPedestrians = false; 
-        // private bool showVehicles = true;
-        
         public static List<Entity> AnalyzedLanes = new List<Entity>();
         public bool HighlightAgents => highlightAgents;
         public bool ShowRoutes { get; private set; } = true; // Default to True
@@ -93,6 +91,13 @@ namespace TrafficSpy.Systems
 
         private Entity lastSelectedEntity = Entity.Null;
         private EntityQuery pathOwnerQuery;
+        
+        // for 'gray world'
+        /*private EntityQuery infoviewQuery;
+        private Entity fakeInfoviewEntity = Entity.Null;
+        private ValueBinding<bool> grayWorldBinding;
+        private bool grayWorldEnabled = false;*/
+        
 
         protected override void OnCreate()
         {
@@ -101,7 +106,7 @@ namespace TrafficSpy.Systems
 
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
-
+            
             this.pathOwnerQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
@@ -198,6 +203,17 @@ namespace TrafficSpy.Systems
                     Mod.log.Error($"TrafficSpy: Error setting filter: {ex.Message}");
                 }
             }));
+            
+            /*this.grayWorldBinding = new ValueBinding<bool>("TrafficSpy", "grayWorld", false);
+            AddBinding(this.grayWorldBinding);
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setGrayWorld", (bool active) => {
+                this.grayWorldEnabled = active;
+                this.grayWorldBinding.Update(active);
+                if (this.isToolActive)
+                {
+                    ToggleGrayWorld(active);
+                }
+            }));*/
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", SetToolActive));
         }
@@ -210,7 +226,7 @@ namespace TrafficSpy.Systems
         protected bool ShouldBeVisible(Entity entity)
         {
             return EntityManager.Exists(entity)
-                && EntityManager.HasBuffer<SubLane>(entity)
+                && EntityManager.HasBuffer<Game.Net.SubLane>(entity)
                 && !EntityManager.HasComponent<Building>(entity)
                 // Allow either Road Segments (Edges) OR Intersections (Nodes)
                 && (EntityManager.HasComponent<Game.Net.Edge>(entity) || EntityManager.HasComponent<Game.Net.Node>(entity));
@@ -266,6 +282,15 @@ namespace TrafficSpy.Systems
             this.isToolActive = active;
             this.toolActiveBinding.Update(active);
 
+            /*if (active && grayWorldEnabled)
+            {
+                ToggleGrayWorld(true);
+            }
+            else
+            {
+                ToggleGrayWorld(false);
+            }*/
+            
             if (active)
             {
                 if (defaultToolSystem != null)
@@ -426,7 +451,7 @@ namespace TrafficSpy.Systems
 
             // 1. Get the main road segment's geometry
             if (EntityManager.HasComponent<Curve>(segment) && 
-                EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<SubLane> lanes))
+                EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
             {
                 Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
                 
@@ -625,10 +650,10 @@ namespace TrafficSpy.Systems
                     taxiLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Taxi>(true),
                     passengerLookup = SystemAPI.GetBufferLookup<Passenger>(true),
 
-                    deliveryTruckLookup = SystemAPI.GetComponentLookup<DeliveryTruck>(true),
-                    cargoTransportLookup = SystemAPI.GetComponentLookup<CargoTransport>(true),
-                    publicTransportLookup = SystemAPI.GetComponentLookup<PublicTransport>(true),
-                    personalCarLookup = SystemAPI.GetComponentLookup<PersonalCar>(true),
+                    deliveryTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.DeliveryTruck>(true),
+                    cargoTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.CargoTransport>(true),
+                    publicTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PublicTransport>(true),
+                    personalCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PersonalCar>(true),
 
                     hearseLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Hearse>(true),
                     garbageTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.GarbageTruck>(true),
@@ -637,6 +662,10 @@ namespace TrafficSpy.Systems
                     ambulanceLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Ambulance>(true),
                     postVanLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PostVan>(true),
                     maintenanceVehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.MaintenanceVehicle>(true),
+                    
+                    // for those on the selected segment
+                    carLaneLookup = SystemAPI.GetComponentLookup<CarCurrentLane>(true),
+                    humanLaneLookup = SystemAPI.GetComponentLookup<HumanCurrentLane>(true),
 
                     results = resultsQueue.AsParallelWriter()
                 };
@@ -644,33 +673,99 @@ namespace TrafficSpy.Systems
                 pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
 
                 allAnalysisResults.Clear();
-                int queueCount = 0;
                 while (resultsQueue.TryDequeue(out TrafficRenderData item))
                 {
                     allAnalysisResults.Add(item);
-                    queueCount++;
                 }
-
-                Mod.log.Info($"TrafficSpy: Queue had {queueCount} items");
 
                 targets.Dispose();
                 resultsQueue.Dispose();
             }
-            /*else
-            {
-                // Fallback for SegmentActivityJob
-                SegmentActivityJob segmentJob = new SegmentActivityJob
-                {
-                    selectedSegment = selectedSegment,
-                    directionFilter = this.directionMode,
-                    edgeLaneLookup = SystemAPI.GetComponentLookup<EdgeLane>(true),
-                    // ... (rest of your lookups) ...
-                };
-                // segmentJob.Run();
-            }*/
-
+            
             CalculateStats();
             ApplyFilter();
         }
+        
+        
+        /*private void ToggleGrayWorld(bool active)
+        {
+            if (active)
+            {
+                // Create the Fake Infoview if it doesn't exist
+                if (fakeInfoviewEntity == Entity.Null)
+                {
+                    var entities = infoviewQuery.ToEntityArray(Allocator.Temp);
+                    var prefabs = SystemAPI.GetComponentLookup<PrefabData>(true);
+                    var infos = SystemAPI.GetComponentLookup<InfoviewData>(true);
+                    
+                    Entity sourceTrafficView = Entity.Null;
+                    foreach (var e in entities)
+                    {
+                        if (prefabs.TryGetComponent(e, out PrefabData pData))
+                        {
+                            // Use the inherited m_PrefabSystem
+                            var prefabBase = m_PrefabSystem.GetPrefab<PrefabBase>(pData);
+                            if (prefabBase != null && prefabBase.name == "Traffic")
+                            {
+                                sourceTrafficView = e;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (sourceTrafficView != Entity.Null)
+                    {
+                        fakeInfoviewEntity = EntityManager.CreateEntity();
+                        
+                        // 1. Add Visual Settings (Gray World)
+                        EntityManager.AddComponentData(fakeInfoviewEntity, infos[sourceTrafficView]);
+                        
+                        // 2. [FIX] Add Prefab Data (Enables Selection/Raycasting)
+                        // This tells the ToolSystem "We are the Traffic View" so it allows selecting roads,
+                        // but since we exclude InfoviewNetStatusData, it won't draw the green/red overlay.
+                        EntityManager.AddComponentData(fakeInfoviewEntity, prefabs[sourceTrafficView]);
+                    }
+                    entities.Dispose();
+                }
+
+                // Activate it
+                if (fakeInfoviewEntity != Entity.Null)
+                {
+                    ForceSetActiveInfoview(fakeInfoviewEntity);
+                }
+            }
+            else
+            {
+                // Deactivate
+                ForceSetActiveInfoview(Entity.Null);
+                
+                if (fakeInfoviewEntity != Entity.Null)
+                {
+                    EntityManager.DestroyEntity(fakeInfoviewEntity);
+                    fakeInfoviewEntity = Entity.Null;
+                }
+            }
+        }
+
+        // HELPER METHOD (Reflects into ToolSystem to set the read-only property)
+        private void ForceSetActiveInfoview(Entity entity)
+        {
+            // Try setting via Property (if private setter exists)
+            var prop = typeof(ToolSystem).GetProperty("activeInfoview");
+            var setter = prop?.GetSetMethod(true);
+            if (setter != null)
+            {
+                setter.Invoke(toolSystem, new object[] { entity });
+            }
+            else
+            {
+                // Fallback: Set the backing field directly (usually 'm_ActiveInfoview')
+                var field = typeof(ToolSystem).GetField("m_ActiveInfoview", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    field.SetValue(toolSystem, entity);
+                }
+            }
+        }*/
     }
 }

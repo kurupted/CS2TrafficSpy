@@ -61,8 +61,9 @@ namespace TrafficSpy.Jobs
             if (!pathOwnerLookup.TryGetComponent(entity, out PathOwner pathOwner)) return;
             if (!pathElementLookup.TryGetBuffer(entity, out DynamicBuffer<PathElement> pathElements)) return;
 
-            // 1. Add Future Path Elements (These use weight 1 and aggregate naturally)
-            for (int i = pathOwner.m_ElementIndex; i < pathElements.Length; ++i)
+            // 1. Add Future Path Elements
+            // Start loop at 'm_ElementIndex + 1' to exclude the current lane
+            for (int i = pathOwner.m_ElementIndex + 1; i < pathElements.Length; ++i)
             {
                 PathElement element = pathElements[i];
                 if (curveLookup.TryGetComponent(element.m_Target, out Curve curve))
@@ -72,7 +73,7 @@ namespace TrafficSpy.Jobs
                 }
             }
 
-            // 2. Add Current Navigation/Lane Elements
+            // 2. Add Current Navigation/Lane Elements (This handles the current lane with cutting)
             AddRouteNavigationCurves(entity, batchIndex, agentType);
         }
 

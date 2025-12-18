@@ -17,6 +17,8 @@ namespace TrafficSpy.Jobs
         
         public float maxVehicleTraffic;
         public float maxPedestrianTraffic;
+        
+        public float alphaMultiplier;
 
         [ReadOnly]
         public NativeArray<NativeHashMap<CurveDef, int>> curveData;
@@ -55,7 +57,7 @@ namespace TrafficSpy.Jobs
         {
             float baseWidth = 1.0f; 
             float maxAdditionalWidth = 2.2f; 
-            float widthMultiplier = 0.2f;
+            float widthMultiplier = 0.15f;
 
             float width = baseWidth + math.min(weight * widthMultiplier, maxAdditionalWidth);
             float t = 0f;
@@ -70,9 +72,18 @@ namespace TrafficSpy.Jobs
                  t = math.clamp(weight / maxVehicleTraffic, 0f, 1f);
             }
 
-            Color cCyan = new Color(0f, 1f, 1f, 0.5f);
-            Color cYellow = new Color(1f, 0.9f, 0f, 0.8f);
-            Color cRed = new Color(1f, 0.2f, 0f, 0.95f);
+            float baseAlpha = alphaMultiplier; // e.g. 0.8
+
+            // Cyan (Low Traffic): Fades out faster (0.7 * 0.8 = 0.56)
+            Color cCyan = new Color(0f, 1f, 1f, 0.7f * baseAlpha);
+        
+            // Yellow (Med Traffic): Normal fade (0.8 * 0.8 = 0.64)
+            Color cYellow = new Color(1f, 0.9f, 0f, 0.8f * baseAlpha);
+        
+            // Red (High Traffic): Stays strong! 
+            // We clamp it so it never drops below 0.6 unless the slider is very low.
+            float redAlpha = math.max(0.6f * baseAlpha, 0.95f * baseAlpha); 
+            Color cRed = new Color(1f, 0.2f, 0f, redAlpha);
 
             Color color;
             

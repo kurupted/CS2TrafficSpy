@@ -50,18 +50,38 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Game.Vehicles.Ambulance> ambulanceLookup;
         [ReadOnly] public ComponentLookup<Game.Vehicles.PostVan> postVanLookup;
         [ReadOnly] public ComponentLookup<Game.Vehicles.MaintenanceVehicle> maintenanceVehicleLookup;
+        
+        // For on selected segment
+        [ReadOnly] public ComponentLookup<CarCurrentLane> carLaneLookup;
+        [ReadOnly] public ComponentLookup<HumanCurrentLane> humanLaneLookup;
 
         public NativeQueue<TrafficRenderData>.ParallelWriter results;
 
         public void Execute(Entity entity, DynamicBuffer<PathElement> path)
         {
             bool passesThrough = false;
+            
+            // 1. Check Path Buffer (Future path)
             for (int i = 0; i < path.Length; i++)
             {
                 if (targets.Contains(path[i].m_Target))
                 {
                     passesThrough = true;
                     break;
+                }
+            }
+
+            // 2. Check Current Physical Position
+            // If the path check failed, check if they are physically on one of the target lanes right now.
+            if (!passesThrough)
+            {
+                if (carLaneLookup.TryGetComponent(entity, out CarCurrentLane carLane))
+                {
+                    if (targets.Contains(carLane.m_Lane)) passesThrough = true;
+                }
+                else if (humanLaneLookup.TryGetComponent(entity, out HumanCurrentLane humanLane))
+                {
+                    if (targets.Contains(humanLane.m_Lane)) passesThrough = true;
                 }
             }
 

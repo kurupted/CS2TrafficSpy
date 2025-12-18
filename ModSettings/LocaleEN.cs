@@ -21,12 +21,16 @@ namespace TrafficSpy.ModSettings
 
                 { m_Setting.GetOptionGroupLocaleID(ModSettings.kKeybindingGroup), "Controls" },
                 { m_Setting.GetOptionGroupLocaleID(ModSettings.kVisualsGroup), "Visuals" },
+                
+                { m_Setting.GetOptionLabelLocaleID(nameof(ModSettings.RouteOpacity)), "Route Line Opaqueness" },
+                { m_Setting.GetOptionDescLocaleID(nameof(ModSettings.RouteOpacity)), "How opaque or transparent the route lines should be, when enabled.  Default is 80%." },
+
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(ModSettings.MaxVehicleTraffic)), "Vehicle Traffic Threshold" },
-                { m_Setting.GetOptionDescLocaleID(nameof(ModSettings.MaxVehicleTraffic)), "The number of vehicles passing through a segment required to reach maximum 'Red' heat intensity." },
+                { m_Setting.GetOptionDescLocaleID(nameof(ModSettings.MaxVehicleTraffic)), "The number of vehicles passing through a segment required to reach Red when drawing the route lines. Default is 50." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(ModSettings.MaxPedestrianTraffic)), "Pedestrian Traffic Threshold" },
-                { m_Setting.GetOptionDescLocaleID(nameof(ModSettings.MaxPedestrianTraffic)), "The number of pedestrians required to reach maximum intensity." },
+                { m_Setting.GetOptionDescLocaleID(nameof(ModSettings.MaxPedestrianTraffic)), "The number of pedestrians passing through a segment required to reach Red when drawing the route lines. Default is 100." },
 
                 // Matches the property name "ToggleToolBinding" in ModSettings.cs
                 { m_Setting.GetOptionLabelLocaleID(nameof(ModSettings.ToggleToolBinding)), "Activate Traffic Spy" },
