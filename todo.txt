@@ -1,19 +1,15 @@
 ﻿DONE:
 - ability to select which side of the road to analyze
-- heat map
-- range
+- heat map of agent volume
+- distance range
+- exclude taxis from peds
+
 
 TODO
 - not including all vehicles
-- sometimes in a non-working state?
-- configurable upper limit for heatmap
-x separate upper limit for peds
-x exclude taxis from peds
-
-- "peds" num seems high. and routes are on roads. (taxis are def included. buses are under Vehicles correctly.) if needed, see code below
+- configurable upper limit for heatmap not working
 
 - also include vehicles ON the current segment (option for exclusively?)
-- icons for checkboxes?
 
 
 

@@ -86,9 +86,18 @@ namespace TrafficSpy.Jobs
                 {
                     if (curveLookup.TryGetComponent(navLanes[i].m_Lane, out Curve curve))
                     {
-                        // Use MathUtils.Cut with the range (x to y)
-                        // If ranges are reversed (y < x), Cut handles it or we should ensure standard usage.
-                        // Standard driving is usually x->y.
+                        // Check if the curve is a "crossing" (very short distance)
+                        // Simple check: Distance squared between start and end control points
+                        float distSq = math.distancesq(curve.m_Bezier.a, curve.m_Bezier.d);
+                        
+                        // 16.0f = 4 meters squared. 
+                        // Lane connections/merges across a road are usually short.
+                        // Standard lanes are usually much longer.
+                        if (distSq < 16.0f) 
+                        {
+                            continue; // Skip crossing/merge lines
+                        }
+
                         Bezier4x3 cutNav = MathUtils.Cut(curve.m_Bezier, navLanes[i].m_CurvePosition);
                         Write(new CurveDef(cutNav, agentType), batchIndex, 1);
                     }

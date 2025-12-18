@@ -54,7 +54,7 @@ namespace TrafficSpy.Jobs
         private void DrawWeightedCurve(CurveDef curveDef, int weight)
         {
             float baseWidth = 1.0f; 
-            float maxAdditionalWidth = 2.3f; 
+            float maxAdditionalWidth = 2.2f; 
             float widthMultiplier = 0.2f;
 
             float width = baseWidth + math.min(weight * widthMultiplier, maxAdditionalWidth);
@@ -70,19 +70,23 @@ namespace TrafficSpy.Jobs
                  t = math.clamp(weight / maxVehicleTraffic, 0f, 1f);
             }
 
-            // Cyan -> Yellow -> Red
-            Color low = new Color(0f, 1f, 1f, 0.7f);     // Cyan
-            Color mid = new Color(1f, 0.9f, 0f, 0.75f);   // Yellow
-            Color high = new Color(1f, 0.2f, 0f, 0.80f);  // Red
+            Color cCyan = new Color(0f, 1f, 1f, 0.5f);
+            Color cYellow = new Color(1f, 0.9f, 0f, 0.8f);
+            Color cRed = new Color(1f, 0.2f, 0f, 0.95f);
 
             Color color;
+            
             if (t < 0.5f)
             {
-                color = Color.Lerp(low, mid, t * 2.0f);
+                // Lerp Cyan -> Yellow
+                float localT = t * 2.0f;
+                color = Color.Lerp(cCyan, cYellow, localT);
             }
             else
             {
-                color = Color.Lerp(mid, high, (t - 0.5f) * 2.0f);
+                // Lerp Yellow -> Red
+                float localT = (t - 0.5f) * 2.0f;
+                color = Color.Lerp(cYellow, cRed, localT);
             }
 
             overlayBuffer.DrawCurve(color, curveDef.curve, width, new float2(1, 1));

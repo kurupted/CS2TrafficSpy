@@ -170,6 +170,7 @@ namespace TrafficSpy.Systems
                 this.rangeMode = mode;
                 this.rangeModeBinding.Update(mode);
                 UpdateRangeDistance();
+                CalculateStats();
                 ApplyFilter();
             }));
 
@@ -309,6 +310,25 @@ namespace TrafficSpy.Systems
                 default: FilterDistance = 3000f; break;
             }
         }
+        
+        private bool IsItemVisible(TrafficRenderData item, ComponentLookup<Transform> transformLookup)
+        {
+            // 1. Display Mode Check
+            if (this.displayMode == 0 && !item.isVehicle) return false;
+            if (this.displayMode == 1 && !item.isPedestrian) return false;
+
+            // 2. Range Check
+            if (FilterDistance < 1000000f)
+            {
+                Entity entityToCheck = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
+                if (transformLookup.TryGetComponent(entityToCheck, out Transform trans))
+                {
+                    if (math.distancesq(trans.m_Position, FilterPosition) > (FilterDistance * FilterDistance))
+                        return false;
+                }
+            }
+            return true;
+        }
 
         private void ApplyFilter()
         {
@@ -316,40 +336,18 @@ namespace TrafficSpy.Systems
 
             if (allAnalysisResults == null) return;
 
-            // Prepare Range Filtering
-            float maxDistSq = FilterDistance * FilterDistance;
-            bool checkDistance = FilterDistance < 1000000f; 
             ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
 
             foreach (var item in allAnalysisResults)
             {
-                // 1. Range Check (using sourceAgent to keep destinations visible if agent is close)
-                if (checkDistance)
-                {
-                    // Check distance of the AGENT (sourceAgent), not the entity being rendered (which might be a building)
-                    // If sourceAgent is null/empty for some reason, we fallback to entity, but logic ensures it's populated.
-                    Entity entityToCheck = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
-
-                    if (transformLookup.TryGetComponent(entityToCheck, out Transform trans))
-                    {
-                        if (math.distancesq(trans.m_Position, FilterPosition) > maxDistSq)
-                            continue;
-                    }
-                }
-
-                // 2. Display Mode Check
-                if (this.displayMode == 0 && !item.isVehicle) continue;
-                if (this.displayMode == 1 && !item.isPedestrian) continue;
+                // Use centralized visibility check
+                if (!IsItemVisible(item, transformLookup)) continue;
 
                 bool matchesFilter = false;
                 if (string.IsNullOrEmpty(currentFilter))
-                {
                     matchesFilter = true;
-                }
                 else
-                {
                     matchesFilter = MatchesFilter(item, currentFilter);
-                }
 
                 if (!matchesFilter) continue;
 
@@ -368,6 +366,7 @@ namespace TrafficSpy.Systems
 
             IsDirty = true;
         }
+
         
         
 
@@ -491,26 +490,17 @@ namespace TrafficSpy.Systems
             int cntOther = 0;
             int cntServices = 0;
 
+            ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
+
             foreach (var item in allAnalysisResults)
             {
                 if (item.isDestination) continue;
                 
-                // Use displayMode
-                if (this.displayMode == 0 && !item.isVehicle) continue;
-                if (this.displayMode == 1 && !item.isPedestrian) continue;
+                // Use centralized visibility check (respects Range and DisplayMode)
+                if (!IsItemVisible(item, transformLookup)) continue;
 
-                if (item.type == TrafficType.Service)
-                {
-                    cntServices++;
-                    continue;
-                }
-
-                if (item.type == TrafficType.PublicTransport)
-                {
-                    cntOther++;
-                    continue;
-                }
-
+                if (item.type == TrafficType.Service) { cntServices++; continue; }
+                if (item.type == TrafficType.PublicTransport) { cntOther++; continue; }
                 if (item.type == TrafficType.Cargo)
                 {
                     if (item.purpose == Purpose.Delivery) cntTransporting++;
