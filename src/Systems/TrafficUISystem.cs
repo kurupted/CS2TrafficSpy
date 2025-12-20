@@ -54,6 +54,8 @@ namespace TrafficSpy.Systems
     {
         private ToolSystem toolSystem;
         private DefaultToolSystem defaultToolSystem;
+        private TrafficSpyToolSystem trafficSpyToolSystem;
+        private bool _isSpyModeActive = false;
 
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
@@ -78,7 +80,6 @@ namespace TrafficSpy.Systems
         public static float FilterDistance = 3000f; // Default Medium
 
         private bool isToolActive = false;
-        private bool defaultDebugSelectState = false;
         private bool usePathBasedAnalysis = true;
 
         private bool wasToggleKeyDown = false;
@@ -106,6 +107,10 @@ namespace TrafficSpy.Systems
 
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
+            this.trafficSpyToolSystem = World.GetOrCreateSystemManaged<TrafficSpyToolSystem>();
+            
+            // Listen for tool changes
+            this.toolSystem.EventToolChanged += OnToolChanged;
             
             this.pathOwnerQuery = GetEntityQuery(new EntityQueryDesc
             {
@@ -231,6 +236,15 @@ namespace TrafficSpy.Systems
                 // Allow either Road Segments (Edges) OR Intersections (Nodes)
                 && (EntityManager.HasComponent<Game.Net.Edge>(entity) || EntityManager.HasComponent<Game.Net.Node>(entity));
         }
+        
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (this.toolSystem != null)
+            {
+                this.toolSystem.EventToolChanged -= OnToolChanged;
+            }
+        }
 
         protected override void OnUpdate()
         {
@@ -247,8 +261,23 @@ namespace TrafficSpy.Systems
                 }
                 wasToggleKeyDown = isPressed;
             }
-
+            
             base.OnUpdate();
+            
+            // Auto-Reactivate Tool
+            if (_isSpyModeActive)
+            {
+                // If we are currently in Default Tool (viewing info or idle)
+                if (toolSystem.activeTool == defaultToolSystem)
+                {
+                    // And nothing is selected (User just pressed Esc to close Info Panel)
+                    if (toolSystem.selected == Entity.Null)
+                    {
+                        // Reactivate the Spy Tool immediately
+                        trafficSpyToolSystem.Enable();
+                    }
+                }
+            }
 
             Entity selected = this.toolSystem.selected;
 
@@ -276,39 +305,48 @@ namespace TrafficSpy.Systems
                 RunAnalysis(selected);
             }
         }
-
-        private void SetToolActive(bool active)
+        
+        private void OnToolChanged(ToolBaseSystem newTool)
         {
-            this.isToolActive = active;
-            this.toolActiveBinding.Update(active);
-
-            /*if (active && grayWorldEnabled)
+            // If we are in Spy Mode...
+            if (_isSpyModeActive)
             {
-                ToggleGrayWorld(true);
-            }
-            else
-            {
-                ToggleGrayWorld(false);
-            }*/
-            
-            if (active)
-            {
-                if (defaultToolSystem != null)
+                // ...and the user switches to a tool that is NEITHER TrafficSpy NOR Default...
+                if (newTool != trafficSpyToolSystem && newTool != defaultToolSystem)
                 {
-                    this.defaultDebugSelectState = this.defaultToolSystem.debugSelect;
-                    this.defaultToolSystem.debugSelect = true;
+                    // ...then they probably clicked the Bulldozer or Road tool. Turn off Spy Mode.
+                    SetSpyMode(false);
                 }
-            }
-            else
-            {
-                if (defaultToolSystem != null)
-                {
-                    this.defaultToolSystem.debugSelect = this.defaultDebugSelectState;
-                }
-                ClearData();
             }
         }
 
+        public void SetSpyMode(bool active)
+        {
+            if (_isSpyModeActive != active)
+            {
+                _isSpyModeActive = active;
+                this.isToolActive = active;
+                this.toolActiveBinding.Update(active);
+
+                if (active)
+                {
+                    trafficSpyToolSystem.Enable();
+                }
+                else
+                {
+                    // If disabling, ensure we switch back to default tool if we were spying
+                    if (toolSystem.activeTool == trafficSpyToolSystem)
+                    {
+                        trafficSpyToolSystem.Disable();
+                    }
+                    ClearData();
+                }
+            }
+        }
+        
+        private void SetToolActive(bool active) => SetSpyMode(active);
+        public void SyncToolState(bool active) => SetSpyMode(active);
+        
         private void ClearData()
         {
             lastSelectedEntity = Entity.Null;

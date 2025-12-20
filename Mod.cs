@@ -37,6 +37,8 @@ namespace TrafficSpy
 
             AssetDatabase.global.LoadSettings(nameof(TrafficSpy), m_Setting, new ModSettings.ModSettings(this));
 
+            updateSystem.UpdateAt<TrafficSpyToolSystem>(SystemUpdatePhase.ToolUpdate);
+            
             updateSystem.UpdateAt<TrafficSpy.Systems.TrafficUISystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<TrafficSpy.Systems.TrafficHighlightSystem>(SystemUpdatePhase.ToolUpdate);
             

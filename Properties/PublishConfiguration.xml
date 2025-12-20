@@ -48,7 +48,7 @@ This mod is safe to remove and doesn't add data to your save files.
     <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/traffic-spy.1884568/" />
 
     <!-- Version of the mod.  Copied from assembly Version. -->
-    <ModVersion Value="2.0" />
+    <ModVersion Value="2.1" />
 
     <!-- Recommended version of the base game to use the mod. -->
     <GameVersion Value="1.5.*" />
@@ -62,11 +62,9 @@ This mod is safe to remove and doesn't add data to your save files.
 
     <!-- Change log.  Copied from ChangeLog.md file.  Supports minimal markdown subset. -->
     <ChangeLog>
-- New option to draw route lines, which are color-coded based on traffic volume
-- New option to set a distance range
-- New ability to select which side of the road to analyze
-- Now includes vehicles already on the selected segment
-- New UI
+- Now limits selection to roads and paths
+- Added instruction text after button click
+- Deactivate picker if another tool is chosen~~~~
 </ChangeLog>
 
     <!-- External links.  Can be set multiple times. -->

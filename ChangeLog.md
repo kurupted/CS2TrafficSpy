@@ -1,5 +1,3 @@
-- New option to draw route lines, which are color-coded based on traffic volume
-- New option to set a distance range
-- New ability to select which side of the road to analyze
-- Now includes vehicles already on the selected segment
-- New UI
+- Now limits selection to roads and paths
+- Added instruction text after button click
+- Deactivate picker if another tool is chosen
