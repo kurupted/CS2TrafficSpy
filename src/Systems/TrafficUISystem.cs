@@ -47,6 +47,7 @@ namespace TrafficSpy.Systems
         public bool isPedestrian;
         public bool isDestination;
         public bool isMovingIn;
+        public bool isTourist;
     }
 
     [UpdateAfter(typeof(ToolSystem))]
@@ -60,7 +61,6 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> highlightAgentsBinding;
-        // Replaced individual bool bindings with mode
         private ValueBinding<int> displayModeBinding; // 0 = Vehicles, 1 = Pedestrians
         private ValueBinding<bool> showRoutesBinding;
         private ValueBinding<int> directionModeBinding;
@@ -440,10 +440,10 @@ namespace TrafficSpy.Systems
                 case "none": return item.purpose == Purpose.None && item.type != TrafficType.Service && item.type != TrafficType.Cargo && item.type != TrafficType.PublicTransport;
                 case "shopping": return item.purpose == Purpose.Shopping;
                 case "leisure": return item.purpose == Purpose.Leisure || item.purpose == Purpose.Relaxing || item.purpose == Purpose.Sleeping || item.purpose == Purpose.WaitingHome;
-                case "goingHome": return item.purpose == Purpose.GoingHome;
+                case "goingHome": return item.purpose == Purpose.GoingHome && !item.isTourist;
                 case "goingToWork": return item.purpose == Purpose.GoingToWork || item.purpose == Purpose.Working;
                 case "movingIn": return item.isMovingIn;
-                case "movingAway": return item.purpose == Purpose.MovingAway;
+                case "movingAway": return item.purpose == Purpose.MovingAway && !item.isTourist;
                 case "school": return item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying;
 
                 case "transporting":
@@ -453,7 +453,9 @@ namespace TrafficSpy.Systems
                 case "returning":
                     return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
 
-                case "tourism": return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions;
+                case "tourism": 
+                    // Includes standard tourism purposes OR Tourists going home (leaving city)
+                    return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions || ((item.purpose == Purpose.GoingHome || item.purpose == Purpose.MovingAway) && item.isTourist);  
 
                 case "services":
                     return item.type == TrafficType.Service ||
@@ -581,11 +583,15 @@ namespace TrafficSpy.Systems
                     case Purpose.Relaxing: cntLeisure++; break;
                     case Purpose.GoingHome:
                         if (item.isMovingIn) cntMovingIn++;
+                        else if (item.isTourist) cntTourism++; // Tourists leaving counted as Tourism
                         else cntGoingHome++;
                         break;
                     case Purpose.GoingToWork:
                     case Purpose.Working: cntGoingToWork++; break;
-                    case Purpose.MovingAway: cntMovingAway++; break;
+                    case Purpose.MovingAway:
+                        if (item.isTourist) cntTourism++; 
+                        else cntMovingAway++; 
+                        break;
                     case Purpose.GoingToSchool:
                     case Purpose.Studying: cntSchool++; break;
                     case Purpose.Sightseeing:
@@ -680,6 +686,7 @@ namespace TrafficSpy.Systems
                     workerLookup = SystemAPI.GetComponentLookup<Worker>(true),
                     studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
                     creatureResidentLookup = SystemAPI.GetComponentLookup<Game.Creatures.Resident>(true),
+                    touristHouseholdLookup = SystemAPI.GetComponentLookup<TouristHousehold>(true), 
                     propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
                     ownerLookup = SystemAPI.GetComponentLookup<Owner>(true),
                     buildingLookup = SystemAPI.GetComponentLookup<Building>(true),

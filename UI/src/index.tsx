@@ -12,7 +12,6 @@ const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
     moduleRegistry.append("GameTopLeft", TrafficButton);
 
     // 3. Extend Info Panel
-    // This path is standard for recent CS2 versions
     const infoPanelPath = "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx";
     const infoPanelExport = "selectedInfoSectionComponents";
     

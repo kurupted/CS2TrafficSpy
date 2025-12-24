@@ -26,6 +26,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Worker> workerLookup;
         [ReadOnly] public ComponentLookup<Game.Citizens.Student> studentLookup;
         [ReadOnly] public ComponentLookup<Game.Creatures.Resident> creatureResidentLookup;
+        [ReadOnly] public ComponentLookup<TouristHousehold> touristHouseholdLookup; 
         [ReadOnly] public ComponentLookup<PropertyRenter> propertyRenterLookup;
         [ReadOnly] public ComponentLookup<Owner> ownerLookup;
         [ReadOnly] public ComponentLookup<Building> buildingLookup;
@@ -103,7 +104,7 @@ namespace TrafficSpy.Jobs
                 postVanLookup.HasComponent(entity) ||
                 maintenanceVehicleLookup.HasComponent(entity))
             {
-                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service);
+                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service, false, false);
                 return true;
             }
 
@@ -113,6 +114,7 @@ namespace TrafficSpy.Jobs
                 Purpose passengerPurpose = Purpose.None;
                 TrafficType type = TrafficType.Service; // Default to Service (Yellow/Other)
                 bool isMovingIn = false;
+                bool isTourist = false;
 
                 // Try to find a passenger to get the real purpose
                 if (passengerLookup.TryGetBuffer(entity, out DynamicBuffer<Passenger> passengers) && passengers.Length > 0)
@@ -134,19 +136,22 @@ namespace TrafficSpy.Jobs
                                     isMovingIn = true;
                                 }
                             }
+                            
+                            if (IsTourist(passenger)) isTourist = true;
+                            
                             break; // Use the first valid passenger's purpose
                         }
                     }
                 }
 
-                EnqueueVehicleDestination(entity, passengerPurpose, type, isMovingIn);
+                EnqueueVehicleDestination(entity, passengerPurpose, type, isMovingIn, isTourist);
                 return true;
             }
 
             // 2. Public Transport
             if (publicTransportLookup.HasComponent(entity))
             {
-                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.PublicTransport);
+                EnqueueVehicleDestination(entity, Purpose.None, TrafficType.PublicTransport, false, false);
                 return true;
             }
 
@@ -155,11 +160,11 @@ namespace TrafficSpy.Jobs
             {
                 if ((truck.m_State & DeliveryTruckFlags.Returning) != 0)
                 {
-                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
+                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo, false, false);
                 }
                 else
                 {
-                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo);
+                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo, false, false);
                 }
                 return true;
             }
@@ -169,11 +174,11 @@ namespace TrafficSpy.Jobs
             {
                 if ((cargo.m_State & CargoTransportFlags.Returning) != 0)
                 {
-                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo);
+                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo, false, false);
                 }
                 else
                 {
-                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo);
+                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo, false, false);
                 }
                 return true;
             }
@@ -183,21 +188,28 @@ namespace TrafficSpy.Jobs
             {
                 Purpose driverPurpose = Purpose.None;
                 bool isMovingIn = false;
+                bool isTourist = false;
 
-                if (car.m_Keeper != Entity.Null && travelPurposeLookup.TryGetComponent(car.m_Keeper, out TravelPurpose purpose))
+                if (car.m_Keeper != Entity.Null)
                 {
-                    driverPurpose = purpose.m_Purpose;
-                    if (driverPurpose == Purpose.GoingHome)
+                    if (travelPurposeLookup.TryGetComponent(car.m_Keeper, out TravelPurpose purpose))
                     {
-                        if (householdMemberLookup.TryGetComponent(car.m_Keeper, out HouseholdMember householdMember) &&
-                            householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
-                            (household.m_Flags & HouseholdFlags.MovedIn) == 0)
+                        driverPurpose = purpose.m_Purpose;
+                        if (driverPurpose == Purpose.GoingHome)
                         {
-                            isMovingIn = true;
+                            if (householdMemberLookup.TryGetComponent(car.m_Keeper, out HouseholdMember householdMember) &&
+                                householdLookup.TryGetComponent(householdMember.m_Household, out Game.Citizens.Household household) &&
+                                (household.m_Flags & HouseholdFlags.MovedIn) == 0)
+                            {
+                                isMovingIn = true;
+                            }
                         }
                     }
+                    
+                    // Check if driver is tourist
+                    if (IsTourist(car.m_Keeper)) isTourist = true;
                 }
-                EnqueueVehicleDestination(entity, driverPurpose, TrafficType.Citizen, isMovingIn);
+                EnqueueVehicleDestination(entity, driverPurpose, TrafficType.Citizen, isMovingIn, isTourist);
                 return true;
             }
 
@@ -218,6 +230,7 @@ namespace TrafficSpy.Jobs
 
             Purpose currentPurpose = Purpose.None;
             bool isMovingIn = false;
+            bool isTourist = IsTourist(citizenEntity); // Check citizen entity
 
             if (travelPurposeLookup.TryGetComponent(citizenEntity, out TravelPurpose purpose))
             {
@@ -233,10 +246,10 @@ namespace TrafficSpy.Jobs
                 }
             }
 
-            EnqueueDestination(entity, currentPurpose, isMovingIn);
+            EnqueueDestination(entity, currentPurpose, isMovingIn, isTourist);
         }
 
-        private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type, bool isMovingIn = false)
+        private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type, bool isMovingIn, bool isTourist)
         {
             // Vehicle Agent
             // isVehicle = true, isDestination = false
@@ -250,7 +263,8 @@ namespace TrafficSpy.Jobs
                 isVehicle = true,
                 isPedestrian = false,
                 isDestination = false,
-                isMovingIn = isMovingIn
+                isMovingIn = isMovingIn,
+                isTourist = isTourist
             });
 
             // Vehicle Destination (Building)
@@ -269,13 +283,14 @@ namespace TrafficSpy.Jobs
                         isVehicle = true, // Set isVehicle = true so Destination is visible in Vehicle Mode
                         isPedestrian = false,
                         isDestination = true,
-                        isMovingIn = isMovingIn
+                        isMovingIn = isMovingIn,
+                        isTourist = isTourist
                     });
                 }
             }
         }
 
-        private void EnqueueDestination(Entity entity, Purpose purpose, bool isMovingIn = false)
+        private void EnqueueDestination(Entity entity, Purpose purpose, bool isMovingIn, bool isTourist)
         {
             Entity renderEntity = entity;
             TrafficType type = TrafficType.Citizen;
@@ -297,7 +312,8 @@ namespace TrafficSpy.Jobs
                 isVehicle = isVehicle,
                 isPedestrian = isPedestrian,
                 isDestination = false,
-                isMovingIn = isMovingIn
+                isMovingIn = isMovingIn,
+                isTourist = isTourist
             });
 
             Entity rawDest = Entity.Null;
@@ -324,7 +340,8 @@ namespace TrafficSpy.Jobs
                         isVehicle = false,
                         isPedestrian = isPedestrian,
                         isDestination = true,
-                        isMovingIn = isMovingIn
+                        isMovingIn = isMovingIn,
+                        isTourist = isTourist
                     });
                 }
             }
@@ -340,6 +357,15 @@ namespace TrafficSpy.Jobs
                 if (buildingLookup.HasComponent(owner.m_Owner))
                     current = owner.m_Owner;
             return current;
+        }
+        
+        private bool IsTourist(Entity citizen)
+        {
+            if (householdMemberLookup.TryGetComponent(citizen, out HouseholdMember member))
+            {
+                return touristHouseholdLookup.HasComponent(member.m_Household);
+            }
+            return false;
         }
     }
 }

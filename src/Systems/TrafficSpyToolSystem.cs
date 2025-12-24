@@ -6,6 +6,8 @@ using Game.Tools;
 using Unity.Entities;
 using Unity.Jobs;
 using UnityEngine;
+using PedestrianLane = Game.Net.PedestrianLane;
+using TrackLane = Game.Net.TrackLane;
 
 namespace TrafficSpy.Systems
 {
@@ -44,7 +46,23 @@ namespace TrafficSpy.Systems
             {
                 if (GetRaycastResult(out Entity entity, out _))
                 {
-                    hitEntity = entity;
+                    // Filter out Entities that are specifically Electricity or Water connections
+                    // BUT allow them if they are also Roads (Roads often have embedded connections)
+                    /*bool isRoadOrPath = EntityManager.HasComponent<Road>(entity) || 
+                                        EntityManager.HasComponent<PedestrianLane>(entity) ||
+                                        EntityManager.HasComponent<TrainTrack>(entity) ||
+                                        EntityManager.HasComponent<TramTrack>(entity) ||
+                                        EntityManager.HasComponent<SubwayTrack>(entity) ||
+                                        EntityManager.HasComponent<TrackLane>(entity);
+
+                    if (!isRoadOrPath && (EntityManager.HasComponent<Game.Net.ElectricityConnection>(entity) || EntityManager.HasComponent<Game.Net.WaterPipeConnection>(entity)))
+                    {
+                        hitEntity = Entity.Null;
+                    }
+                    else
+                    {*/
+                        hitEntity = entity;
+                    //}
                 }
             }
 
@@ -116,8 +134,6 @@ namespace TrafficSpy.Systems
                  EntityManager.AddComponent<BatchesUpdated>(_hoveredEntity);
                  _hoveredEntity = Entity.Null;
             }
-            // CRITICAL CHANGE: Do NOT call SyncToolState(false) here. 
-            // We let the UI System manage the "Mode".
         }
 
         public override PrefabBase GetPrefab() => null;

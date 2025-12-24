@@ -1,3 +1,2 @@
-- Now limits selection to roads and paths
-- Added instruction text after button click
-- Deactivate picker if another tool is chosen
+- Fixed: Tourists going back home were being categorized as Moving Away
+- Changed default hotkey to /

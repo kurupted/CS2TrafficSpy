@@ -35,8 +35,8 @@ namespace TrafficSpy.ModSettings
         [SettingsUISection(kSection, kVisualsGroup)]
         public int MaxPedestrianTraffic { get; set; } = 100;
 
-        // Define the default binding (Ctrl + I)
-        [SettingsUIKeyboardBinding(BindingKeyboard.I, Mod.kToggleActionName, ctrl: true)]
+        // Define the default binding (/ key)
+        [SettingsUIKeyboardBinding(BindingKeyboard.Slash, Mod.kToggleActionName, ctrl: false)]
         [SettingsUISection(kSection, kKeybindingGroup)]
         public ProxyBinding ToggleToolBinding { get; set; }
 

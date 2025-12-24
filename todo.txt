@@ -7,5 +7,6 @@ TO DO
 
 - gray world
 - lines on the wrong side of the street -- maybe from agents that are crossing?
-- not including all vehicles
+- not including all vehicles?
+- don't show for powerlines
 

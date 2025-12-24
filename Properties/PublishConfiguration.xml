@@ -48,7 +48,7 @@ This mod is safe to remove and doesn't add data to your save files.
     <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/traffic-spy.1884568/" />
 
     <!-- Version of the mod.  Copied from assembly Version. -->
-    <ModVersion Value="2.1" />
+    <ModVersion Value="2.1.1" />
 
     <!-- Recommended version of the base game to use the mod. -->
     <GameVersion Value="1.5.*" />
@@ -64,7 +64,7 @@ This mod is safe to remove and doesn't add data to your save files.
     <ChangeLog>
 - Now limits selection to roads and paths
 - Added instruction text after button click
-- Deactivate picker if another tool is chosen~~~~
+- Deactivate picker if another tool is chosen
 </ChangeLog>
 
     <!-- External links.  Can be set multiple times. -->
