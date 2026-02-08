@@ -62,9 +62,8 @@ This mod is safe to remove and doesn't add data to your save files.
 
     <!-- Change log.  Copied from ChangeLog.md file.  Supports minimal markdown subset. -->
     <ChangeLog>
-- Now limits selection to roads and paths
-- Added instruction text after button click
-- Deactivate picker if another tool is chosen
+- Fixed: Tourists going back home were being categorized as Moving Away
+- Changed default hotkey to /
 </ChangeLog>
 
     <!-- External links.  Can be set multiple times. -->
