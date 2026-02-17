@@ -10,6 +10,7 @@ using Game.Net;
 using Game.Objects;
 //using Game.Prefabs; // for GrayWorld
 //using System.Reflection; // for GrayWorld
+using Game.Routes;
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -93,6 +94,15 @@ namespace TrafficSpy.Systems
         private Entity lastSelectedEntity = Entity.Null;
         private EntityQuery pathOwnerQuery;
         
+        // Structures for Stop Selection
+        private struct StopOption
+        {
+            public Entity Entity;
+            public string Name;
+        }
+        private List<StopOption> m_AssociatedStops = new List<StopOption>();
+        private EntityQuery m_AllStopsQuery;
+        
         // for 'gray world'
         /*private EntityQuery infoviewQuery;
         private Entity fakeInfoviewEntity = Entity.Null;
@@ -135,6 +145,31 @@ namespace TrafficSpy.Systems
             this.showRoutesBinding = new ValueBinding<bool>("TrafficSpy", "showRoutes", true);
             this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
             this.rangeModeBinding = new ValueBinding<int>("TrafficSpy", "rangeMode", 1);
+            
+            // NEW: Query to find all stops
+            m_AllStopsQuery = GetEntityQuery(
+                ComponentType.ReadOnly<Game.Routes.TransportStop>(),
+                ComponentType.ReadOnly<Game.Routes.Connected>()
+            );
+
+            // NEW: Binding to send stops to UI
+            AddBinding(new GetterValueBinding<string>("trafficSpy", "associatedStops", () => 
+            {
+                var sb = new System.Text.StringBuilder("[");
+                foreach(var stop in m_AssociatedStops)
+                {
+                    // We use Index/Version which is safer for UI
+                    sb.Append($"{{\"index\":{stop.Entity.Index}, \"version\":{stop.Entity.Version}, \"name\":\"{stop.Name}\"}},");
+                }
+                if (m_AssociatedStops.Count > 0) sb.Length--; 
+                sb.Append("]");
+                return sb.ToString();
+            }));
+
+            // NEW: Binding to let UI select a stop
+            AddBinding(new TriggerBinding<Entity>("trafficSpy", "selectStop", (entity) => {
+                toolSystem.selected = entity;
+            }));
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
@@ -300,6 +335,9 @@ namespace TrafficSpy.Systems
                 // Reset direction to All Sides (0)
                 this.directionMode = 0;
                 this.directionModeBinding.Update(0);
+                
+                // NEW: Find stops attached to this road/station
+                FindAssociatedStops(selected);
 
                 Mod.log.Info($"TrafficSpy: Selection changed to {selected.Index}. Running analysis...");
                 RunAnalysis(selected);
@@ -488,6 +526,38 @@ namespace TrafficSpy.Systems
         {
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
             targets.Add(segment);
+            
+            // 1. HANDLE TRANSPORT STOPS (Runs when you click the "Bus Stop" button in UI)
+            if (EntityManager.HasComponent<Game.Routes.TransportStop>(segment))
+            {
+                // Use HasComponent + GetComponentData (TryGetComponent doesn't work for data components)
+                if (EntityManager.HasComponent<Game.Routes.Connected>(segment))
+                {
+                    Game.Routes.Connected connected = EntityManager.GetComponentData<Game.Routes.Connected>(segment);
+                    Entity mainLane = connected.m_Connected;
+                    targets.Add(mainLane);
+
+                    // Find Sibling Lanes (Platforms/Sidewalks)
+                    if (EntityManager.HasComponent<Owner>(mainLane))
+                    {
+                        Owner laneOwner = EntityManager.GetComponentData<Owner>(mainLane);
+                        Entity edgeEntity = laneOwner.m_Owner;
+            
+                        // Add the Edge
+                        targets.Add(edgeEntity);
+
+                        // Add all SubLanes (Platform/Sidewalk)
+                        if (EntityManager.TryGetBuffer(edgeEntity, true, out DynamicBuffer<Game.Net.SubLane> subLanes))
+                        {
+                            foreach (var subLane in subLanes)
+                            {
+                                targets.Add(subLane.m_SubLane);
+                            }
+                        }
+                    }
+                }
+                return targets;
+            }
 
             // 1. Get the main road segment's geometry
             if (EntityManager.HasComponent<Curve>(segment) && 
@@ -538,6 +608,53 @@ namespace TrafficSpy.Systems
             }
             return targets;
         }
+        
+        
+        private void FindAssociatedStops(Entity selected)
+        {
+            m_AssociatedStops.Clear();
+            if (selected == Entity.Null) return;
+
+            // Efficiently grab all stops in the city
+            var stopEntities = m_AllStopsQuery.ToEntityArray(Allocator.Temp);
+            var connectedComps = m_AllStopsQuery.ToComponentDataArray<Game.Routes.Connected>(Allocator.Temp);
+
+            for (int i = 0; i < stopEntities.Length; i++)
+            {
+                Entity stopEntity = stopEntities[i];
+                Entity laneEntity = connectedComps[i].m_Connected;
+                bool isMatch = false;
+
+                // CHECK 1: Is the Stop connected to a Lane owned by the Selection? (Roads/Tracks)
+                if (EntityManager.HasComponent<Owner>(laneEntity))
+                {
+                    if (EntityManager.GetComponentData<Owner>(laneEntity).m_Owner == selected)
+                        isMatch = true;
+                }
+
+                // CHECK 2: Is the Stop directly owned by the Selection? (Stations/Buildings)
+                if (!isMatch && EntityManager.HasComponent<Owner>(stopEntity))
+                {
+                    if (EntityManager.GetComponentData<Owner>(stopEntity).m_Owner == selected)
+                        isMatch = true;
+                }
+
+                if (isMatch)
+                {
+                    // Give it a nice name
+                    string typeName = "Stop";
+                    if (EntityManager.HasComponent<Game.Net.TrainTrack>(laneEntity)) typeName = "Platform";
+                    else if (EntityManager.HasComponent<Game.Net.SubwayTrack>(laneEntity)) typeName = "Subway";
+                    else if (EntityManager.HasComponent<Game.Net.PedestrianLane>(laneEntity)) typeName = "Bus/Tram";
+
+                    m_AssociatedStops.Add(new StopOption { 
+                        Entity = stopEntity, 
+                        Name = $"{typeName} {m_AssociatedStops.Count + 1}" 
+                    });
+                }
+            }
+        }
+        
 
         private void CalculateStats()
         {

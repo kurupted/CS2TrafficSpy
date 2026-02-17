@@ -6,8 +6,9 @@ import {
     displayMode, setDisplayMode,
     directionMode, setDirectionMode,
     showRoutes, setShowRoutes,
-    rangeMode, setRangeMode
-} from "./bindings";            // add: grayWorld, setGrayWorld
+    rangeMode, setRangeMode,
+    associatedStops, selectStop
+} from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
 import { SegmentActivity } from "./types";
@@ -16,6 +17,13 @@ interface InfoSectionComponent {
     group: string;
     tooltipKeys: Array<string>;
     tooltipTags: Array<string>;
+}
+
+// NEW: Structure for the stop data
+interface StopOption {
+    index: number;
+    version: number;
+    name: string;
 }
 
 const InfoSectionTheme: any = getModule(
@@ -44,22 +52,24 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '5px', width: '100%' }}>
                 <div style={{ color: "rgba(255,255,255,0.8)", fontSize: "0.9em", marginBottom: '2px', marginLeft: '4px' }}>{label}</div>
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%' }}>
+                {/* Added flexWrap so buttons don't squash */}
+                <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '4px', width: '100%' }}>
                     {buttons.map((btn, idx) => (
                         <div
                             key={idx}
                             onClick={btn.onClick}
                             style={{
-                                flex: 1,
+                                flex: "1 0 auto",
                                 backgroundColor: btn.active ? "rgba(100, 255, 100, 0.8)" : "rgba(0, 0, 0, 0.4)",
                                 color: btn.active ? "black" : "white",
                                 border: "1px solid rgba(255,255,255,0.3)",
                                 borderRadius: "3px",
                                 textAlign: "center",
-                                padding: "2px 0",
+                                padding: "2px 6px",
                                 fontSize: "0.85em",
                                 cursor: "pointer",
-                                userSelect: "none"
+                                userSelect: "none",
+                                minWidth: "40px"
                             }}
                         >
                             {btn.label}
@@ -99,6 +109,12 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         const currentRangeMode = useValue(rangeMode) ?? 1;
         //const isGrayWorld = useValue(grayWorld);
         const [activeFilter, setActiveFilter] = useState<string>("");
+
+        // NEW: Get the list of associated stops using the correct binding
+        const associatedStopsJson = useValue(associatedStops);
+        const stops: StopOption[] = useMemo(() => {
+            try { return JSON.parse(associatedStopsJson || "[]"); } catch(e) { return []; }
+        }, [associatedStopsJson]);
 
         const data: SegmentActivity = useMemo(() => {
             try { return JSON.parse(jsonString || "{}"); } catch(e) { return {}; }
@@ -146,6 +162,13 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     />
                 </div>
 
+                {/* NEW: AVAILABLE STOPS (Rendered dynamically if stops exist) */}
+                {stops.length > 0 && renderButtonRow("Select Stop / Platform", stops.map(stop => ({
+                    label: stop.name,
+                    active: false, // Buttons are triggers, not toggles
+                    onClick: () => selectStop({ index: stop.index, version: stop.version })
+                })))}
+
                 {/* 2. MODE TOGGLE */}
                 {renderButtonRow("Traffic Type", [
                     { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
@@ -167,7 +190,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
                 ])}
 
-                {/* 5 & 6. HIGHLIGHT & ROUTE TOGGLE ON SAME ROW */}
+                {/* 5 & 6. HIGHLIGHT & ROUTE TOGGLE */}
                 <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%' }}>
                     <div style={{ flex: 1 }}>
                         {renderButtonRow("Highlights", [

@@ -4,6 +4,8 @@
 
 TO DO
 
+- still says to click and select while need to press Esc first
+
 
 - gray world
 - lines on the wrong side of the street -- maybe from agents that are crossing?

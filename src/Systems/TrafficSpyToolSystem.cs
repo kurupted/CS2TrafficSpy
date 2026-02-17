@@ -5,6 +5,7 @@ using Game.Prefabs;
 using Game.Tools;
 using Unity.Entities;
 using Unity.Jobs;
+using Game.Routes;
 using UnityEngine;
 using PedestrianLane = Game.Net.PedestrianLane;
 using TrackLane = Game.Net.TrackLane;
@@ -29,8 +30,12 @@ namespace TrafficSpy.Systems
         public override void InitializeRaycast()
         {
             base.InitializeRaycast();
-            m_ToolRaycastSystem.typeMask = TypeMask.Net;
-            m_ToolRaycastSystem.netLayerMask = Layer.Road | Layer.PublicTransportRoad | Layer.Pathway;
+            
+            m_ToolRaycastSystem.typeMask = TypeMask.Net | TypeMask.StaticObjects;
+            
+            m_ToolRaycastSystem.netLayerMask = Layer.Road | Layer.PublicTransportRoad | Layer.Pathway | 
+                                               Layer.TrainTrack | Layer.TramTrack | Layer.SubwayTrack;
+                                               
             m_ToolRaycastSystem.collisionMask = CollisionMask.OnGround | CollisionMask.Overground;
         }
 
@@ -46,47 +51,69 @@ namespace TrafficSpy.Systems
             {
                 if (GetRaycastResult(out Entity entity, out _))
                 {
-                    // Filter out Entities that are specifically Electricity or Water connections
-                    // BUT allow them if they are also Roads (Roads often have embedded connections)
-                    /*bool isRoadOrPath = EntityManager.HasComponent<Road>(entity) || 
-                                        EntityManager.HasComponent<PedestrianLane>(entity) ||
-                                        EntityManager.HasComponent<TrainTrack>(entity) ||
-                                        EntityManager.HasComponent<TramTrack>(entity) ||
-                                        EntityManager.HasComponent<SubwayTrack>(entity) ||
-                                        EntityManager.HasComponent<TrackLane>(entity);
+                    Entity potentialTarget = entity;
 
-                    if (!isRoadOrPath && (EntityManager.HasComponent<Game.Net.ElectricityConnection>(entity) || EntityManager.HasComponent<Game.Net.WaterPipeConnection>(entity)))
+                    // 1. OWNER CHECK (Handle clicking props/sub-objects)
+                    // If we click a bench or a tree attached to a road/station, 
+                    // check its owner to see if the OWNER is a valid target.
+                    if (!IsValidSpyTarget(potentialTarget) && EntityManager.HasComponent<Owner>(potentialTarget))
                     {
-                        hitEntity = Entity.Null;
+                        potentialTarget = EntityManager.GetComponentData<Owner>(potentialTarget).m_Owner;
                     }
-                    else
-                    {*/
-                        hitEntity = entity;
-                    //}
+
+                    // 2. FINAL VALIDATION
+                    if (IsValidSpyTarget(potentialTarget))
+                    {
+                        hitEntity = potentialTarget;
+                    }
                 }
             }
 
             UpdateHoverHighlight(hitEntity);
 
-            // 1. SELECT (Left Click)
             if (hitEntity != Entity.Null && applyAction.WasReleasedThisFrame())
             {
                 _toolSystem.selected = hitEntity;
-                
-                // Switch to Default Tool to show Info Panel.
-                // We do NOT turn off Spy Mode here. The UI System keeps it alive.
                 Disable(); 
             }
 
-            // 2. CANCEL (Right Click / Esc)
             if (cancelAction.WasPressedThisFrame())
             {
-                // User explicitly wants to quit the tool completely.
                 _uiSystem.SetSpyMode(false);
                 Disable();
             }
 
             return inputDeps;
+        }
+
+        // Helper to filter for only Roads, Tracks, and Transit Stations
+        private bool IsValidSpyTarget(Entity entity)
+        {
+            if (entity == Entity.Null) return false;
+
+            // A. Networks (Roads & Rails)
+            if (EntityManager.HasComponent<Road>(entity) || 
+                EntityManager.HasComponent<TrainTrack>(entity) ||
+                EntityManager.HasComponent<TramTrack>(entity) ||
+                EntityManager.HasComponent<SubwayTrack>(entity))
+            {
+                return true;
+            }
+
+            // B. Transit Stations (Plopped Buildings Only)
+            // This filters out Zoned Buildings (Res/Com/Ind) because they lack this component.
+            if (EntityManager.HasComponent<Game.Buildings.TransportStation>(entity))
+            {
+                return true;
+            }
+            
+            // C. Direct Stops (If a stop icon is directly clickable)
+            if (EntityManager.HasComponent<Game.Routes.TransportStop>(entity))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private void UpdateHoverHighlight(Entity newHover)
