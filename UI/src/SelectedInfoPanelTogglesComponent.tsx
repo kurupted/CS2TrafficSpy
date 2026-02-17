@@ -153,36 +153,27 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true}
                 className={InfoSectionTheme?.infoSection}
             >
-                {/* 1. RESET / TOTAL ROW */}
-                <div onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }} style={{ cursor: "pointer", marginBottom: "5px" }}>
-                    <InfoRow
-                        left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}
-                        right={<span style={totalStyle}>{total.toString()}</span>}
-                        uppercase={true} disableFocus={true} subRow={false} className={InfoRowTheme?.infoRow}
-                    />
-                </div>
-
-                {/* NEW: AVAILABLE STOPS (Rendered dynamically if stops exist) */}
+                {/* 1. STOPS & PLATFORMS (Top Priority) */}
                 {stops.length > 0 && renderButtonRow("Select Stop / Platform", stops.map(stop => ({
                     label: stop.name,
-                    active: false, // Buttons are triggers, not toggles
+                    active: false,
                     onClick: () => selectStop({ index: stop.index, version: stop.version })
                 })))}
 
-                {/* 2. MODE TOGGLE */}
+                {/* 2. MODE TOGGLES (Vehicles vs Peds) */}
                 {renderButtonRow("Traffic Type", [
                     { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
                     { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
                 ])}
 
-                {/* 3. DIRECTION BUTTONS */}
+                {/* 3. DIRECTION TOGGLES */}
                 {renderButtonRow("Road Side / Direction", [
                     { label: "Both", active: currentDirMode === 0, onClick: () => setDirectionMode(0) },
                     { label: "Side A", active: currentDirMode === 1, onClick: () => setDirectionMode(1) },
                     { label: "Side B", active: currentDirMode === 2, onClick: () => setDirectionMode(2) }
                 ])}
 
-                {/* 4. RANGE BUTTONS */}
+                {/* 4. RANGE TOGGLES */}
                 {renderButtonRow("Max Range", [
                     { label: "S", active: currentRangeMode === 0, onClick: () => setRangeMode(0) },
                     { label: "M", active: currentRangeMode === 1, onClick: () => setRangeMode(1) },
@@ -190,8 +181,8 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
                 ])}
 
-                {/* 5 & 6. HIGHLIGHT & ROUTE TOGGLE */}
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%' }}>
+                {/* 5. HIGHLIGHTS & ROUTE TOGGLES */}
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%', marginBottom: '10px' }}>
                     <div style={{ flex: 1 }}>
                         {renderButtonRow("Highlights", [
                             { label: showHighlights ? "ON" : "OFF", active: showHighlights, onClick: () => sethighlightAgents(!showHighlights) }
@@ -202,12 +193,15 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                             { label: showPathLines ? "ON" : "OFF", active: showPathLines, onClick: () => setShowRoutes(!showPathLines) }
                         ])}
                     </div>
-                    {/* Gray World Toggle
-                    <div style={{ flex: 1 }}>
-                        {renderButtonRow("Gray World", [
-                            { label: isGrayWorld ? "ON" : "OFF", active: isGrayWorld, onClick: () => setGrayWorld(!isGrayWorld) }
-                        ])}
-                    </div> */}
+                </div>
+
+                {/* 6. RESET FILTER / TOTAL ROW (Moved Here) */}
+                <div onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }} style={{ cursor: "pointer", marginBottom: "5px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "5px" }}>
+                    <InfoRow
+                        left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}
+                        right={<span style={totalStyle}>{total.toString()}</span>}
+                        uppercase={true} disableFocus={true} subRow={false} className={InfoRowTheme?.infoRow}
+                    />
                 </div>
 
                 {/* 7. DATA ROWS */}
