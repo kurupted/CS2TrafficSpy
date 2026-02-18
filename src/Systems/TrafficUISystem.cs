@@ -8,8 +8,6 @@ using Game.Creatures;
 using Game.Input;
 using Game.Net;
 using Game.Objects;
-//using Game.Prefabs; // for GrayWorld
-//using System.Reflection; // for GrayWorld
 using Game.Routes;
 using Game.Pathfind;
 using Game.Tools;
@@ -39,12 +37,12 @@ namespace TrafficSpy.Systems
     public struct TrafficRenderData
     {
         public Entity entity;
-        public Entity sourceAgent; // The agent responsible for this entry (for distance checks)
+        public Entity sourceAgent; 
+        public Entity destinationEntity; 
+        public Entity waitingAtStop;
         public Game.Citizens.Purpose purpose;
         public TrafficType type;
         public bool isOrigin;
-        public Entity destinationEntity; // used with people waiting for transit
-
         public bool isVehicle;
         public bool isPedestrian;
         public bool isDestination;
@@ -63,24 +61,23 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> highlightAgentsBinding;
-        private ValueBinding<int> displayModeBinding; // 0 = Vehicles, 1 = Pedestrians
+        private ValueBinding<int> displayModeBinding; 
         private ValueBinding<bool> showRoutesBinding;
         private ValueBinding<int> directionModeBinding;
-        private ValueBinding<int> rangeModeBinding; // 0=Short, 1=Med, 2=Long, 3=Unlimited
+        private ValueBinding<int> rangeModeBinding; 
         private ValueBinding<string> associatedStopsBinding;
 
         private bool highlightAgents = false;
-        private int displayMode = 0; // Default to Vehicles
+        private int displayMode = 0; 
         
         public static List<Entity> AnalyzedLanes = new List<Entity>();
         public bool HighlightAgents => highlightAgents;
-        public bool ShowRoutes { get; private set; } = true; // Default to True
-        private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
-        private int rangeMode = 1; // Default to Medium
+        public bool ShowRoutes { get; private set; } = true; 
+        private int directionMode = 0; 
+        private int rangeMode = 1; 
 
-        // Statics for the Route System to read
         public static float3 FilterPosition = float3.zero;
-        public static float FilterDistance = 3000f; // Default Medium
+        public static float FilterDistance = 3000f; 
 
         private bool isToolActive = false;
         private bool usePathBasedAnalysis = true;
@@ -92,10 +89,9 @@ namespace TrafficSpy.Systems
         public static bool IsDirty = false;
 
         private string currentFilter = "";
-
         private Entity lastSelectedEntity = Entity.Null;
         private EntityQuery pathOwnerQuery;
-        private EntityQuery waitingPassengersQuery; // NEW: For counting waiting people
+        private EntityQuery waitingPassengersQuery;
         
         private struct StopOption
         {
@@ -105,13 +101,6 @@ namespace TrafficSpy.Systems
         private List<StopOption> m_AssociatedStops = new List<StopOption>();
         private EntityQuery m_AllStopsQuery;
         
-        // for 'gray world'
-        /*private EntityQuery infoviewQuery;
-        private Entity fakeInfoviewEntity = Entity.Null;
-        private ValueBinding<bool> grayWorldBinding;
-        private bool grayWorldEnabled = false;*/
-        
-
         protected override void OnCreate()
         {
             base.OnCreate();
@@ -121,10 +110,8 @@ namespace TrafficSpy.Systems
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
             this.trafficSpyToolSystem = World.GetOrCreateSystemManaged<TrafficSpyToolSystem>();
             
-            // Listen for tool changes
             this.toolSystem.EventToolChanged += OnToolChanged;
             
-// Query for standard Path Analysis
             this.pathOwnerQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
@@ -139,14 +126,12 @@ namespace TrafficSpy.Systems
                 }
             });
 
-            // NEW: Query for Waiting Passengers (Target + Resident)
             this.waitingPassengersQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[] 
                 {
-                    ComponentType.ReadOnly<Target>(),
                     ComponentType.ReadOnly<Resident>(),
-                    ComponentType.ReadOnly<PathElement>() // <--- Added this
+                    ComponentType.ReadOnly<Game.Creatures.Queue>(), 
                 },
                 None = new ComponentType[]
                 {
@@ -155,18 +140,23 @@ namespace TrafficSpy.Systems
                 }
             });
 
-            // Query for scanning all stops (for Roads)
-            m_AllStopsQuery = GetEntityQuery(
-                ComponentType.ReadOnly<Game.Routes.TransportStop>(),
-                ComponentType.ReadOnly<Game.Routes.Connected>()
-            );
+            this.m_AllStopsQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Game.Routes.TransportStop>()
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
+            });
 
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
-            
             this.displayModeBinding = new ValueBinding<int>("TrafficSpy", "displayMode", 0);
-            
             this.showRoutesBinding = new ValueBinding<bool>("TrafficSpy", "showRoutes", true);
             this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
             this.rangeModeBinding = new ValueBinding<int>("TrafficSpy", "rangeMode", 1);
@@ -185,7 +175,6 @@ namespace TrafficSpy.Systems
                 this.toolSystem.selected = entity; 
             }));
 
-
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
                 this.highlightAgents = active;
                 this.highlightAgentsBinding.Update(active);
@@ -202,12 +191,10 @@ namespace TrafficSpy.Systems
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowRoutes", (bool active) => {
                 this.ShowRoutes = active;
                 this.showRoutesBinding.Update(active);
-                // We set IsDirty to true so the RouteSystem knows to check immediately
                 IsDirty = true; 
                 ApplyFilter();
             }));
 
-            // Handler for setting direction mode
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setDirectionMode", (int mode) => {
                 this.directionMode = mode;
                 this.directionModeBinding.Update(mode);
@@ -217,7 +204,6 @@ namespace TrafficSpy.Systems
                 }
             }));
 
-            // Handler for setting range mode
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setRangeMode", (int mode) => {
                 this.rangeMode = mode;
                 this.rangeModeBinding.Update(mode);
@@ -227,41 +213,12 @@ namespace TrafficSpy.Systems
             }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
-                try
-                {
-                    if (filter == "RESET" || string.IsNullOrEmpty(filter))
-                    {
-                        this.currentFilter = "";
-                    }
-                    else if (this.currentFilter == filter)
-                    {
-                        this.currentFilter = "";
-                    }
-                    else
-                    {
-                        this.currentFilter = filter;
-                    }
-
-                    Mod.log.Info($"TrafficSpy: Filter set to '{(string.IsNullOrEmpty(currentFilter) ? "ALL" : currentFilter)}'");
-                    ApplyFilter();
-                }
-                catch (Exception ex)
-                {
-                    Mod.log.Error($"TrafficSpy: Error setting filter: {ex.Message}");
-                }
+                if (filter == "RESET" || string.IsNullOrEmpty(filter)) this.currentFilter = "";
+                else if (this.currentFilter == filter) this.currentFilter = "";
+                else this.currentFilter = filter;
+                ApplyFilter();
             }));
             
-            /*this.grayWorldBinding = new ValueBinding<bool>("TrafficSpy", "grayWorld", false);
-            AddBinding(this.grayWorldBinding);
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setGrayWorld", (bool active) => {
-                this.grayWorldEnabled = active;
-                this.grayWorldBinding.Update(active);
-                if (this.isToolActive)
-                {
-                    ToggleGrayWorld(active);
-                }
-            }));*/
-
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", SetToolActive));
         }
 
@@ -272,16 +229,13 @@ namespace TrafficSpy.Systems
 
         protected bool ShouldBeVisible(Entity entity)
         {
-            // Allow Stops
             if (EntityManager.HasComponent<Game.Routes.TransportStop>(entity)) return true;
-            // Allow Station Buildings
             if (EntityManager.HasComponent<Game.Buildings.TransportStation>(entity)) return true;
 
             return EntityManager.Exists(entity)
-                && EntityManager.HasBuffer<Game.Net.SubLane>(entity)
-                && !EntityManager.HasComponent<Building>(entity)
-                // Allow either Road Segments (Edges) OR Intersections (Nodes)
-                && (EntityManager.HasComponent<Game.Net.Edge>(entity) || EntityManager.HasComponent<Game.Net.Node>(entity));
+                   && EntityManager.HasBuffer<Game.Net.SubLane>(entity)
+                   && !EntityManager.HasComponent<Building>(entity) 
+                   && (EntityManager.HasComponent<Game.Net.Edge>(entity) || EntityManager.HasComponent<Game.Net.Node>(entity));
         }
         
         protected override void OnDestroy()
@@ -297,32 +251,20 @@ namespace TrafficSpy.Systems
         {
             if (!Enabled) Enabled = true;
 
-            // 1. CHECK KEYBOARD INPUT
             if (Mod.m_ToggleAction != null)
             {
                 bool isPressed = Mod.m_ToggleAction.IsPressed();
-                // Only trigger if pressed NOW but wasn't pressed LAST frame
-                if (isPressed && !wasToggleKeyDown)
-                {
-                    SetToolActive(!isToolActive);
-                }
+                if (isPressed && !wasToggleKeyDown) SetToolActive(!isToolActive);
                 wasToggleKeyDown = isPressed;
             }
             
             base.OnUpdate();
             
-            // Auto-Reactivate Tool
             if (_isSpyModeActive)
             {
-                // If we are currently in Default Tool (viewing info or idle)
-                if (toolSystem.activeTool == defaultToolSystem)
+                if (toolSystem.activeTool == defaultToolSystem && toolSystem.selected == Entity.Null)
                 {
-                    // And nothing is selected (User just pressed Esc to close Info Panel)
-                    if (toolSystem.selected == Entity.Null)
-                    {
-                        // Reactivate the Spy Tool immediately
-                        trafficSpyToolSystem.Enable();
-                    }
+                    trafficSpyToolSystem.Enable();
                 }
             }
 
@@ -343,28 +285,20 @@ namespace TrafficSpy.Systems
             {
                 lastSelectedEntity = selected;
                 currentFilter = "";
-
-                // Reset direction to All Sides (0)
                 this.directionMode = 0;
                 this.directionModeBinding.Update(0);
                 
-                // NEW: Find stops attached to this road/station
                 FindAssociatedStops(selected);
-
-                Mod.log.Info($"TrafficSpy: Selection changed to {selected.Index}. Running analysis...");
                 RunAnalysis(selected);
             }
         }
         
         private void OnToolChanged(ToolBaseSystem newTool)
         {
-            // If we are in Spy Mode...
             if (_isSpyModeActive)
             {
-                // ...and the user switches to a tool that is NEITHER TrafficSpy NOR Default...
                 if (newTool != trafficSpyToolSystem && newTool != defaultToolSystem)
                 {
-                    // ...then they probably clicked the Bulldozer or Road tool. Turn off Spy Mode.
                     SetSpyMode(false);
                 }
             }
@@ -378,17 +312,10 @@ namespace TrafficSpy.Systems
                 this.isToolActive = active;
                 this.toolActiveBinding.Update(active);
 
-                if (active)
-                {
-                    trafficSpyToolSystem.Enable();
-                }
+                if (active) trafficSpyToolSystem.Enable();
                 else
                 {
-                    // If disabling, ensure we switch back to default tool if we were spying
-                    if (toolSystem.activeTool == trafficSpyToolSystem)
-                    {
-                        trafficSpyToolSystem.Disable();
-                    }
+                    if (toolSystem.activeTool == trafficSpyToolSystem) trafficSpyToolSystem.Disable();
                     ClearData();
                 }
             }
@@ -407,9 +334,9 @@ namespace TrafficSpy.Systems
                 this.activityDataBinding.Update("{}");
                 allAnalysisResults.Clear();
                 CurrentRenderList.Clear();
-                AnalyzedLanes.Clear(); // Clear lanes
+                AnalyzedLanes.Clear();
                 IsDirty = true;
-                this.associatedStopsBinding.Update("[]");
+                this.associatedStopsBinding.Update("[]"); 
             }
         }
 
@@ -417,21 +344,22 @@ namespace TrafficSpy.Systems
         {
             switch (rangeMode)
             {
-                case 0: FilterDistance = 1000f; break; // Short (1km)
-                case 1: FilterDistance = 3000f; break; // Medium (3km)
-                case 2: FilterDistance = 10000f; break; // Long (10km)
-                case 3: FilterDistance = float.MaxValue; break; // Unlimited
+                case 0: FilterDistance = 1000f; break; 
+                case 1: FilterDistance = 3000f; break; 
+                case 2: FilterDistance = 10000f; break; 
+                case 3: FilterDistance = float.MaxValue; break; 
                 default: FilterDistance = 3000f; break;
             }
         }
         
         private bool IsItemVisible(TrafficRenderData item, ComponentLookup<Transform> transformLookup)
         {
-            // 1. Display Mode Check
-            if (this.displayMode == 0 && !item.isVehicle) return false;
-            if (this.displayMode == 1 && !item.isPedestrian) return false;
+            bool isPed = item.isPedestrian;
+            if (this.displayMode == 0 && !item.isVehicle) return false; 
+            if (this.displayMode == 1 && !isPed) return false; 
 
-            // 2. Range Check
+            if (item.sourceAgent == Entity.Null) return true;
+
             if (FilterDistance < 1000000f)
             {
                 Entity entityToCheck = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
@@ -447,42 +375,24 @@ namespace TrafficSpy.Systems
         private void ApplyFilter()
         {
             CurrentRenderList.Clear();
-
             if (allAnalysisResults == null) return;
-
             ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
 
             foreach (var item in allAnalysisResults)
             {
-                // Use centralized visibility check
                 if (!IsItemVisible(item, transformLookup)) continue;
 
                 bool matchesFilter = false;
-                if (string.IsNullOrEmpty(currentFilter))
-                    matchesFilter = true;
-                else
-                    matchesFilter = MatchesFilter(item, currentFilter);
+                if (string.IsNullOrEmpty(currentFilter)) matchesFilter = true;
+                else matchesFilter = MatchesFilter(item, currentFilter);
 
                 if (!matchesFilter) continue;
 
-                if (item.isDestination)
-                {
-                    CurrentRenderList.Add(item);
-                }
-                else
-                {
-                    if (!string.IsNullOrEmpty(currentFilter) || this.highlightAgents || this.ShowRoutes)
-                    {
-                        CurrentRenderList.Add(item);
-                    }
-                }
+                if (item.isDestination) CurrentRenderList.Add(item);
+                else if (!string.IsNullOrEmpty(currentFilter) || this.highlightAgents || this.ShowRoutes) CurrentRenderList.Add(item);
             }
-
             IsDirty = true;
         }
-
-        
-        
 
         private bool MatchesFilter(TrafficRenderData item, string filter)
         {
@@ -496,41 +406,14 @@ namespace TrafficSpy.Systems
                 case "movingIn": return item.isMovingIn;
                 case "movingAway": return item.purpose == Purpose.MovingAway && !item.isTourist;
                 case "school": return item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying;
-
-                case "transporting":
-                    return (item.type == TrafficType.Cargo && item.purpose == Purpose.Delivery) ||
-                           (item.type == TrafficType.Citizen && (item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping));
-
-                case "returning":
-                    return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
-
-                case "tourism": 
-                    // Includes standard tourism purposes OR Tourists going home (leaving city)
-                    return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions || ((item.purpose == Purpose.GoingHome || item.purpose == Purpose.MovingAway) && item.isTourist);  
-
-                case "services":
-                    return item.type == TrafficType.Service ||
-                           item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital ||
-                           item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage ||
-                           item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail ||
-                           item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail;
-
+                case "transporting": return (item.type == TrafficType.Cargo && item.purpose == Purpose.Delivery) || (item.type == TrafficType.Citizen && (item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping));
+                case "returning": return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
+                case "tourism": return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions || ((item.purpose == Purpose.GoingHome || item.purpose == Purpose.MovingAway) && item.isTourist);  
+                case "services": return item.type == TrafficType.Service || item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital || item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage || item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail || item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail;
                 case "other":
                     if (item.type == TrafficType.Cargo || item.type == TrafficType.Service) return false;
                     if (item.type == TrafficType.PublicTransport) return true;
-
-                    return item.type == TrafficType.Citizen &&
-                           item.purpose != Purpose.None &&
-                           item.purpose != Purpose.Shopping &&
-                           !(item.purpose == Purpose.Leisure || item.purpose == Purpose.Relaxing || item.purpose == Purpose.Sleeping || item.purpose == Purpose.WaitingHome) &&
-                           item.purpose != Purpose.GoingHome &&
-                           !(item.purpose == Purpose.GoingToWork || item.purpose == Purpose.Working) &&
-                           item.purpose != Purpose.MovingAway &&
-                           !(item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying) &&
-                           !(item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions) &&
-                           !(item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping) &&
-                           !(item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital || item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage || item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail || item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail);
-
+                    return item.type == TrafficType.Citizen && item.purpose != Purpose.None && item.purpose != Purpose.Shopping && !(item.purpose == Purpose.Leisure || item.purpose == Purpose.Relaxing || item.purpose == Purpose.Sleeping || item.purpose == Purpose.WaitingHome) && item.purpose != Purpose.GoingHome && !(item.purpose == Purpose.GoingToWork || item.purpose == Purpose.Working) && item.purpose != Purpose.MovingAway && !(item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying) && !(item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions) && !(item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping) && !(item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital || item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage || item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail || item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail);
                 default: return false;
             }
         }
@@ -539,118 +422,109 @@ namespace TrafficSpy.Systems
         {
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
             targets.Add(segment);
-
-            // 1. Get the main road segment's geometry
+            
             if (EntityManager.HasComponent<Curve>(segment) && 
                 EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
             {
                 Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
-                
-                // Calculate the "Center" and "Right Vector" of the road at the midpoint (t=0.5)
-                // Position(0.5)
                 float3 segmentPos = Colossal.Mathematics.MathUtils.Position(segmentCurve.m_Bezier, 0.5f);
-                // Tangent(0.5) gives the forward direction
                 float3 segmentTan = Colossal.Mathematics.MathUtils.Tangent(segmentCurve.m_Bezier, 0.5f);
-                // Cross product with Up (0,1,0) gives the Right Vector
                 float3 segmentRight = math.cross(segmentTan, new float3(0, 1, 0));
 
                 for (int i = 0; i < lanes.Length; i++)
                 {
                     Entity subLaneEntity = lanes[i].m_SubLane;
-                    
                     if (directionMode != 0)
                     {
-                        // We check the geometry of the sub-lane
                         if (EntityManager.HasComponent<Curve>(subLaneEntity))
                         {
                             Curve laneCurve = EntityManager.GetComponentData<Curve>(subLaneEntity);
                             float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
-
-                            // Calculate vector from Road Center -> Lane Center
                             float3 diff = lanePos - segmentPos;
-                            
-                            // Dot product determines side:
-                            // > 0 means the lane is on the Right side of the road center
-                            // < 0 means the lane is on the Left side of the road center
                             float dot = math.dot(diff, segmentRight);
-
-                            // Threshold 0.1f ignores tiny floating point errors for exact center lanes
-                            
-                            // Mode 1 (Side A): We want ONE side (e.g. Left). So skip if dot is Positive (Right).
                             if (directionMode == 1 && dot > 0.1f) continue;
-
-                            // Mode 2 (Side B): We want OTHER side (e.g. Right). So skip if dot is Negative (Left).
                             if (directionMode == 2 && dot < -0.1f) continue;
                         }
                     }
-
                     targets.Add(subLaneEntity);
                 }
             }
             return targets;
         }
         
-        
-        
-        // --- NEW: LOGIC FOR FINDING ATTACHED STOPS ---
         private void FindAssociatedStops(Entity selected)
         {
             m_AssociatedStops.Clear();
             if (selected == Entity.Null) return;
 
-            // STRATEGY A: For Buildings (Stations), check ConnectedRoute buffer
-            // This is the "Correct" way for buildings, supports complex stations
-            if (EntityManager.HasComponent<Building>(selected))
+            string selectedType = "Unknown";
+            if (EntityManager.HasComponent<Building>(selected)) selectedType = "Building";
+            else if (EntityManager.HasComponent<Game.Net.Edge>(selected)) selectedType = "Road Edge";
+            else if (EntityManager.HasComponent<Game.Routes.TransportStop>(selected)) selectedType = "Transport Stop";
+            
+            Mod.log.Info($"TrafficSpy: Searching for stops. Selected: {selected.Index} ({selectedType})");
+
+            if (EntityManager.HasComponent<Game.Routes.TransportStop>(selected))
             {
-                NativeHashSet<Entity> stopsFound = new NativeHashSet<Entity>(10, Allocator.Temp);
-                // Recursively find routes in main building and sub-objects
-                FindStopsRecursive(selected, ref stopsFound);
-                
-                // Convert found entities to StopOptions
-                var stopsArray = stopsFound.ToNativeArray(Allocator.Temp);
-                foreach(var stop in stopsArray)
-                {
-                    AddStopToAssociatedList(stop);
-                }
-                stopsArray.Dispose();
-                stopsFound.Dispose();
+                AddStopToAssociatedList(selected);
             }
-            // STRATEGY B: For Roads, we MUST scan all stops because Roads don't list their stops.
-            else if (EntityManager.HasComponent<Game.Net.Edge>(selected) || EntityManager.HasComponent<Game.Net.Node>(selected))
+
+            var stopEntities = m_AllStopsQuery.ToEntityArray(Allocator.Temp);
+            Mod.log.Info($"TrafficSpy: Query returned {stopEntities.Length} TOTAL stops in city to check.");
+
+            NativeList<Entity> targetParts = new NativeList<Entity>(Allocator.Temp);
+            targetParts.Add(selected);
+            
+            if (EntityManager.HasComponent<Game.Net.Edge>(selected))
             {
-                var stopEntities = m_AllStopsQuery.ToEntityArray(Allocator.Temp);
-                var connectedComps = m_AllStopsQuery.ToComponentDataArray<Game.Routes.Connected>(Allocator.Temp);
+                Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(selected);
+                targetParts.Add(edge.m_Start);
+                targetParts.Add(edge.m_End);
+            }
+            if (EntityManager.TryGetBuffer(selected, true, out DynamicBuffer<Game.Objects.SubObject> subObjs))
+            {
+                foreach(var sub in subObjs) targetParts.Add(sub.m_SubObject);
+            }
+
+            for (int i = 0; i < stopEntities.Length; i++)
+            {
+                Entity stopEntity = stopEntities[i];
+                Entity currentChecker = stopEntity;
+                if (EntityManager.HasComponent<Game.Routes.Connected>(stopEntity))
+                    currentChecker = EntityManager.GetComponentData<Game.Routes.Connected>(stopEntity).m_Connected;
+
+                bool matchFound = false;
                 
-                // Get related entities (The Road Edge + Its 2 Nodes)
-                // Stops can be attached to the Edge OR the Node.
-                NativeList<Entity> roadParts = new NativeList<Entity>(Allocator.Temp);
-                roadParts.Add(selected);
-                if (EntityManager.HasComponent<Game.Net.Edge>(selected))
+                for (int depth = 0; depth < 4; depth++)
                 {
-                    Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(selected);
-                    roadParts.Add(edge.m_Start);
-                    roadParts.Add(edge.m_End);
+                    Entity nextChecker = Entity.Null;
+
+                    if (EntityManager.HasComponent<Owner>(currentChecker))
+                        nextChecker = EntityManager.GetComponentData<Owner>(currentChecker).m_Owner;
+                    else if (EntityManager.HasComponent<Attached>(currentChecker))
+                        nextChecker = EntityManager.GetComponentData<Attached>(currentChecker).m_Parent;
+
+                    if (nextChecker != Entity.Null)
+                    {
+                        if (targetParts.Contains(nextChecker))
+                        {
+                            matchFound = true;
+                            break;
+                        }
+                        currentChecker = nextChecker;
+                    }
+                    else break;
                 }
 
-                for (int i = 0; i < stopEntities.Length; i++)
+                if (matchFound)
                 {
-                    Entity stopEntity = stopEntities[i];
-                    Entity laneEntity = connectedComps[i].m_Connected;
-                    
-                    // Check if the Lane (where the stop is) is owned by our Road/Node
-                    if (EntityManager.HasComponent<Owner>(laneEntity))
-                    {
-                        Entity laneOwner = EntityManager.GetComponentData<Owner>(laneEntity).m_Owner;
-                        if (roadParts.Contains(laneOwner))
-                        {
-                            AddStopToAssociatedList(stopEntity);
-                        }
-                    }
+                    bool exists = false;
+                    foreach(var s in m_AssociatedStops) if(s.Entity == stopEntity) exists = true;
+                    if (!exists) AddStopToAssociatedList(stopEntity);
                 }
-                roadParts.Dispose();
             }
+            targetParts.Dispose();
             
-            // PUSH TO UI
             var sb = new System.Text.StringBuilder("[");
             foreach(var stop in m_AssociatedStops)
             {
@@ -658,88 +532,60 @@ namespace TrafficSpy.Systems
             }
             if (m_AssociatedStops.Count > 0) sb.Length--; 
             sb.Append("]");
+            
+            Mod.log.Info($"TrafficSpy: Final Associated Stops Count: {m_AssociatedStops.Count}");
             this.associatedStopsBinding.Update(sb.ToString());
         }
 
         private void FindStopsRecursive(Entity entity, ref NativeHashSet<Entity> results)
         {
-            // 1. Check direct ConnectedRoutes
             if (EntityManager.TryGetBuffer(entity, true, out DynamicBuffer<ConnectedRoute> routes))
             {
-                foreach(var route in routes)
-                {
-                    // m_Waypoint is the Stop Entity
-                    if (EntityManager.HasComponent<Game.Routes.TransportStop>(route.m_Waypoint))
-                    {
-                        results.Add(route.m_Waypoint);
-                    }
-                }
+                foreach(var route in routes) results.Add(route.m_Waypoint);
             }
-            // 2. Check SubObjects (recurse)
             if (EntityManager.TryGetBuffer(entity, true, out DynamicBuffer<Game.Objects.SubObject> subObjects))
             {
-                foreach(var sub in subObjects)
-                {
-                    FindStopsRecursive(sub.m_SubObject, ref results);
-                }
+                foreach(var sub in subObjects) FindStopsRecursive(sub.m_SubObject, ref results);
             }
         }
 
         private void AddStopToAssociatedList(Entity stopEntity)
         {
-            if (!EntityManager.HasComponent<Game.Routes.Connected>(stopEntity)) return;
-            
-            Entity laneEntity = EntityManager.GetComponentData<Game.Routes.Connected>(stopEntity).m_Connected;
             string typeName = "Stop";
-            
-            if (EntityManager.HasComponent<Game.Net.TrainTrack>(laneEntity)) typeName = "Platform";
-            else if (EntityManager.HasComponent<Game.Net.SubwayTrack>(laneEntity)) typeName = "Subway";
-            else if (EntityManager.HasComponent<Game.Net.PedestrianLane>(laneEntity)) typeName = "Bus/Tram";
+            if (EntityManager.HasComponent<Game.Routes.Connected>(stopEntity))
+            {
+                Entity laneEntity = EntityManager.GetComponentData<Game.Routes.Connected>(stopEntity).m_Connected;
+                if (EntityManager.HasComponent<Game.Net.TrainTrack>(laneEntity)) typeName = "Platform";
+                else if (EntityManager.HasComponent<Game.Net.SubwayTrack>(laneEntity)) typeName = "Subway";
+                else if (EntityManager.HasComponent<Game.Net.PedestrianLane>(laneEntity)) typeName = "Bus/Tram";
+            }
 
             m_AssociatedStops.Add(new StopOption { 
                 Entity = stopEntity, 
                 Name = $"{typeName} {m_AssociatedStops.Count + 1}" 
             });
         }
-        
 
         private void CalculateStats()
         {
-            int cntNone = 0;
-            int cntShopping = 0;
-            int cntLeisure = 0;
-            int cntGoingHome = 0;
-            int cntGoingToWork = 0;
-            int cntMovingIn = 0;
-            int cntMovingAway = 0;
-            int cntSchool = 0;
-            int cntTransporting = 0;
-            int cntReturning = 0;
-            int cntTourism = 0;
-            int cntOther = 0;
-            int cntServices = 0;
+            int cntNone = 0, cntShopping = 0, cntLeisure = 0, cntGoingHome = 0, cntGoingToWork = 0, cntMovingIn = 0, cntMovingAway = 0, cntSchool = 0, cntTransporting = 0, cntReturning = 0, cntTourism = 0, cntOther = 0, cntServices = 0;
 
             ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
 
             foreach (var item in allAnalysisResults)
             {
-                // Use centralized visibility check (respects Range and DisplayMode)
-                // We SKIP visibility check for Stop Waiting Passengers (they have no sourceAgent usually)
-                if (item.sourceAgent != Entity.Null && !IsItemVisible(item, transformLookup)) continue;
-
+                if (!IsItemVisible(item, transformLookup)) continue;
                 if (item.isDestination) continue;
 
                 if (item.type == TrafficType.Service) { cntServices++; continue; }
                 if (item.type == TrafficType.PublicTransport) { cntOther++; continue; }
-                if (item.type == TrafficType.Cargo)
-                {
+                if (item.type == TrafficType.Cargo) {
                     if (item.purpose == Purpose.Delivery) cntTransporting++;
                     else cntReturning++;
                     continue;
                 }
 
-                switch (item.purpose)
-                {
+                switch (item.purpose) {
                     case Purpose.None: cntNone++; break;
                     case Purpose.Shopping: cntShopping++; break;
                     case Purpose.Leisure:
@@ -748,7 +594,7 @@ namespace TrafficSpy.Systems
                     case Purpose.Relaxing: cntLeisure++; break;
                     case Purpose.GoingHome:
                         if (item.isMovingIn) cntMovingIn++;
-                        else if (item.isTourist) cntTourism++; // Tourists leaving counted as Tourism
+                        else if (item.isTourist) cntTourism++; 
                         else cntGoingHome++;
                         break;
                     case Purpose.GoingToWork:
@@ -781,63 +627,68 @@ namespace TrafficSpy.Systems
                 }
             }
 
-            string json = $@"{{
-                ""none"": {cntNone},
-                ""shopping"": {cntShopping},
-                ""leisure"": {cntLeisure},
-                ""goingHome"": {cntGoingHome},
-                ""goingToWork"": {cntGoingToWork},
-                ""movingIn"": {cntMovingIn},
-                ""movingAway"": {cntMovingAway},
-                ""school"": {cntSchool},
-                ""transporting"": {cntTransporting},
-                ""returning"": {cntReturning},
-                ""tourism"": {cntTourism},
-                ""other"": {cntOther},
-                ""services"": {cntServices}
-            }}";
-
+            string json = $@"{{""none"": {cntNone}, ""shopping"": {cntShopping}, ""leisure"": {cntLeisure}, ""goingHome"": {cntGoingHome}, ""goingToWork"": {cntGoingToWork}, ""movingIn"": {cntMovingIn}, ""movingAway"": {cntMovingAway}, ""school"": {cntSchool}, ""transporting"": {cntTransporting}, ""returning"": {cntReturning}, ""tourism"": {cntTourism}, ""other"": {cntOther}, ""services"": {cntServices}}}";
             this.activityDataBinding.Update(json);
         }
 
-        
-        
         private void RunAnalysis(Entity selectedSegment)
         {
             allAnalysisResults.Clear();
             NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
 
-            // CASE 1: TRANSPORT STOP SELECTED (Waiting Passengers)
-            // Uses Target-based counting (logic from BuildingUsageTracker)
+            // 1. COLLECT STOPS (Use the actual Stop Entity IDs)
+            NativeList<Entity> stopsToAnalyze = new NativeList<Entity>(Allocator.TempJob);
+            
             if (EntityManager.HasComponent<Game.Routes.TransportStop>(selectedSegment))
             {
-                Mod.log.Info("TrafficSpy: Analyzing Waiting Passengers at Stop " + selectedSegment.Index);
+                stopsToAnalyze.Add(selectedSegment);
+            }
+            
+            foreach(var option in m_AssociatedStops)
+            {
+                bool alreadyAdded = false;
+                for(int k=0; k<stopsToAnalyze.Length; k++) if(stopsToAnalyze[k] == option.Entity) alreadyAdded = true;
+                if(!alreadyAdded) stopsToAnalyze.Add(option.Entity);
+            }
+
+            // 2. SCHEDULE WAITING PASSENGER JOB (QUEUE BASED)
+            JobHandle waitingJobHandle = default;
+            NativeList<int> debugList = new NativeList<int>(Allocator.TempJob);
+
+            if (stopsToAnalyze.Length > 0)
+            {
+                Mod.log.Info($"TrafficSpy: Analyzing Queue for {stopsToAnalyze.Length} stops.");
                 
-                WaitingPassengerJob stopJob = new WaitingPassengerJob
+                WaitingPassengerJob waitJob = new WaitingPassengerJob
                 {
-                    searchTarget = selectedSegment,
-                    targetHandle = SystemAPI.GetComponentTypeHandle<Target>(true),
+                    searchTargets = stopsToAnalyze.AsArray(),
+                    debugList = debugList,
+                    
+                    queueBufferHandle = SystemAPI.GetBufferTypeHandle<Game.Creatures.Queue>(true), 
                     residentHandle = SystemAPI.GetComponentTypeHandle<Resident>(true),
+                    
+                    // NEW: Lookup for reading Connected component from the Line/TargetEntity
+                    connectedLookup = SystemAPI.GetComponentLookup<Game.Routes.Connected>(true),
+                    
                     travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
                     householdMemberLookup = SystemAPI.GetComponentLookup<HouseholdMember>(true),
                     householdLookup = SystemAPI.GetComponentLookup<Household>(true),
                     workerLookup = SystemAPI.GetComponentLookup<Worker>(true), 
                     studentLookup = SystemAPI.GetComponentLookup<Game.Citizens.Student>(true),
-                    
-                    // for people waiting on transit:
                     propertyRenterLookup = SystemAPI.GetComponentLookup<PropertyRenter>(true),
                     pathOwnerHandle = SystemAPI.GetComponentTypeHandle<PathOwner>(true),
                     pathBufferHandle = SystemAPI.GetBufferTypeHandle<PathElement>(true),
-                    
                     results = resultsQueue.AsParallelWriter()
                 };
-                stopJob.ScheduleParallel(waitingPassengersQuery, default).Complete();
+                waitingJobHandle = waitJob.Schedule(waitingPassengersQuery, default); 
             }
+
+            // 3. SCHEDULE PATH ACTIVITY JOB
+            JobHandle pathJobHandle = default;
+            NativeHashSet<Entity> targets = default; 
             
-            // CASE 2: ROAD/LANE SELECTED (Traffic Flow)
-            else if (usePathBasedAnalysis)
+            if (usePathBasedAnalysis && !EntityManager.HasComponent<Game.Routes.TransportStop>(selectedSegment))
             {
-                // Range Filter Setup
                 if (EntityManager.HasComponent<Curve>(selectedSegment)) {
                     Curve curve = EntityManager.GetComponentData<Curve>(selectedSegment);
                     FilterPosition = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
@@ -850,7 +701,7 @@ namespace TrafficSpy.Systems
 
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
                 
-                NativeHashSet<Entity> targets = GetTargetEntities(selectedSegment, Allocator.TempJob, this.directionMode);
+                targets = GetTargetEntities(selectedSegment, Allocator.TempJob, this.directionMode);
                 AnalyzedLanes.Clear();
                 if (this.directionMode != 0) {
                     NativeArray<Entity> targetArray = targets.ToNativeArray(Allocator.Temp);
@@ -880,12 +731,10 @@ namespace TrafficSpy.Systems
                     currentTransportLookup = SystemAPI.GetComponentLookup<CurrentTransport>(true),
                     taxiLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Taxi>(true),
                     passengerLookup = SystemAPI.GetBufferLookup<Passenger>(true),
-
                     deliveryTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.DeliveryTruck>(true),
                     cargoTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.CargoTransport>(true),
                     publicTransportLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PublicTransport>(true),
                     personalCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PersonalCar>(true),
-
                     hearseLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Hearse>(true),
                     garbageTruckLookup = SystemAPI.GetComponentLookup<Game.Vehicles.GarbageTruck>(true),
                     policeCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PoliceCar>(true),
@@ -893,122 +742,61 @@ namespace TrafficSpy.Systems
                     ambulanceLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Ambulance>(true),
                     postVanLookup = SystemAPI.GetComponentLookup<Game.Vehicles.PostVan>(true),
                     maintenanceVehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.MaintenanceVehicle>(true),
-                    
-                    // for those on the selected segment
                     carLaneLookup = SystemAPI.GetComponentLookup<CarCurrentLane>(true),
                     humanLaneLookup = SystemAPI.GetComponentLookup<HumanCurrentLane>(true),
-
                     results = resultsQueue.AsParallelWriter()
                 };
-
-                pathJob.ScheduleParallel(pathOwnerQuery, default).Complete();
-                targets.Dispose();
+                pathJobHandle = pathJob.ScheduleParallel(pathOwnerQuery, default);
             }
 
-            // Dequeue results from whichever job ran
+            if (stopsToAnalyze.Length > 0) 
+            {
+                waitingJobHandle.Complete();
+                int total = debugList.Length > 0 ? debugList[0] : 0;
+                int matches = debugList.Length > 1 ? debugList[1] : 0;
+                Mod.log.Info($"TrafficSpy Job Debug: Checked {total} potential passengers. Found {matches} matches via Queue.");
+                
+                if (debugList.Length > 2)
+                {
+                    var sb = new System.Text.StringBuilder("TrafficSpy SAMPLES: ");
+                    for(int k=2; k<debugList.Length; k++)
+                    {
+                        sb.Append($"[StopID:{debugList[k]}] ");
+                    }
+                    Mod.log.Info(sb.ToString());
+                }
+                
+                debugList.Dispose();
+            }
+            if (targets.IsCreated) pathJobHandle.Complete();
+
             while (resultsQueue.TryDequeue(out TrafficRenderData item)) allAnalysisResults.Add(item);
+            
             resultsQueue.Dispose();
+            stopsToAnalyze.Dispose();
+            if (targets.IsCreated) targets.Dispose();
             
             CalculateStats();
             ApplyFilter();
         }
-        
-        
-        /*private void ToggleGrayWorld(bool active)
-        {
-            if (active)
-            {
-                // Create the Fake Infoview if it doesn't exist
-                if (fakeInfoviewEntity == Entity.Null)
-                {
-                    var entities = infoviewQuery.ToEntityArray(Allocator.Temp);
-                    var prefabs = SystemAPI.GetComponentLookup<PrefabData>(true);
-                    var infos = SystemAPI.GetComponentLookup<InfoviewData>(true);
-                    
-                    Entity sourceTrafficView = Entity.Null;
-                    foreach (var e in entities)
-                    {
-                        if (prefabs.TryGetComponent(e, out PrefabData pData))
-                        {
-                            // Use the inherited m_PrefabSystem
-                            var prefabBase = m_PrefabSystem.GetPrefab<PrefabBase>(pData);
-                            if (prefabBase != null && prefabBase.name == "Traffic")
-                            {
-                                sourceTrafficView = e;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (sourceTrafficView != Entity.Null)
-                    {
-                        fakeInfoviewEntity = EntityManager.CreateEntity();
-                        
-                        // 1. Add Visual Settings (Gray World)
-                        EntityManager.AddComponentData(fakeInfoviewEntity, infos[sourceTrafficView]);
-                        
-                        // 2. [FIX] Add Prefab Data (Enables Selection/Raycasting)
-                        // This tells the ToolSystem "We are the Traffic View" so it allows selecting roads,
-                        // but since we exclude InfoviewNetStatusData, it won't draw the green/red overlay.
-                        EntityManager.AddComponentData(fakeInfoviewEntity, prefabs[sourceTrafficView]);
-                    }
-                    entities.Dispose();
-                }
-
-                // Activate it
-                if (fakeInfoviewEntity != Entity.Null)
-                {
-                    ForceSetActiveInfoview(fakeInfoviewEntity);
-                }
-            }
-            else
-            {
-                // Deactivate
-                ForceSetActiveInfoview(Entity.Null);
-                
-                if (fakeInfoviewEntity != Entity.Null)
-                {
-                    EntityManager.DestroyEntity(fakeInfoviewEntity);
-                    fakeInfoviewEntity = Entity.Null;
-                }
-            }
-        }
-
-        // HELPER METHOD (Reflects into ToolSystem to set the read-only property)
-        private void ForceSetActiveInfoview(Entity entity)
-        {
-            // Try setting via Property (if private setter exists)
-            var prop = typeof(ToolSystem).GetProperty("activeInfoview");
-            var setter = prop?.GetSetMethod(true);
-            if (setter != null)
-            {
-                setter.Invoke(toolSystem, new object[] { entity });
-            }
-            else
-            {
-                // Fallback: Set the backing field directly (usually 'm_ActiveInfoview')
-                var field = typeof(ToolSystem).GetField("m_ActiveInfoview", BindingFlags.Instance | BindingFlags.NonPublic);
-                if (field != null)
-                {
-                    field.SetValue(toolSystem, entity);
-                }
-            }
-        }*/
     }
-    
-    
-    // --- NEW JOB: WaitingPassengerJob ---
+
     [Unity.Burst.BurstCompile]
     public struct WaitingPassengerJob : IJobChunk
     {
-        [ReadOnly] public Entity searchTarget;
-        [ReadOnly] public ComponentTypeHandle<Target> targetHandle;
+        [ReadOnly] public NativeArray<Entity> searchTargets; 
+        public NativeList<int> debugList; 
+        
+        [ReadOnly] public BufferTypeHandle<Game.Creatures.Queue> queueBufferHandle; 
         [ReadOnly] public ComponentTypeHandle<Resident> residentHandle;
+        [ReadOnly] public ComponentLookup<Game.Routes.Connected> connectedLookup; // Lookup for indirection
+        
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
         [ReadOnly] public ComponentLookup<Household> householdLookup;
         [ReadOnly] public ComponentLookup<Worker> workerLookup;
         [ReadOnly] public ComponentLookup<Game.Citizens.Student> studentLookup;
+        
         [ReadOnly] public ComponentLookup<PropertyRenter> propertyRenterLookup;
         [ReadOnly] public ComponentTypeHandle<PathOwner> pathOwnerHandle;
         [ReadOnly] public BufferTypeHandle<PathElement> pathBufferHandle;
@@ -1017,27 +805,61 @@ namespace TrafficSpy.Systems
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
-            NativeArray<Target> targets = chunk.GetNativeArray(ref targetHandle);
             NativeArray<Resident> residents = chunk.GetNativeArray(ref residentHandle);
             
-            // NEW: Get Path Buffer Accessor
-            BufferAccessor<PathElement> pathBuffers = chunk.GetBufferAccessor(ref pathBufferHandle);
+            bool hasQueue = chunk.Has(ref queueBufferHandle);
+            BufferAccessor<Game.Creatures.Queue> queues = hasQueue ? chunk.GetBufferAccessor(ref queueBufferHandle) : default;
+
+            bool hasPaths = chunk.Has(ref pathBufferHandle);
+            BufferAccessor<PathElement> pathBuffers = hasPaths ? chunk.GetBufferAccessor(ref pathBufferHandle) : default;
             
             var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
             while (enumerator.NextEntityIndex(out int i))
             {
-                if (targets[i].m_Target != searchTarget) continue;
-                if ((residents[i].m_Flags & ResidentFlags.WaitingTransport) == 0) continue;
+                if (debugList.Length < 2) { debugList.Add(0); debugList.Add(0); }
+                debugList[0]++; 
 
+                if (!hasQueue) continue; 
+
+                DynamicBuffer<Game.Creatures.Queue> myQueue = queues[i];
+                Entity matchedStop = Entity.Null;
+
+                // CHECK QUEUE (With Indirection)
+                for (int q = 0; q < myQueue.Length; q++)
+                {
+                    Entity intermediateEntity = myQueue[q].m_TargetEntity; // CORRECTED: Using m_TargetEntity
+                    
+                    // Lookup the actual Stop ID via Connected component on the Line/Route entity
+                    if (connectedLookup.TryGetComponent(intermediateEntity, out var connection))
+                    {
+                        Entity actualStop = connection.m_Connected;
+                        
+                        if (debugList.Length < 12) debugList.Add(actualStop.Index); // Debugging the resolved ID
+
+                        for(int k=0; k<searchTargets.Length; k++) 
+                        {
+                            if (searchTargets[k] == actualStop) 
+                            {
+                                matchedStop = actualStop;
+                                break;
+                            }
+                        }
+                    }
+                    if (matchedStop != Entity.Null) break;
+                }
+
+                if (matchedStop == Entity.Null) continue;
+
+                debugList[1]++;
+
+                Entity citizen = residents[i].m_Citizen;
                 Purpose purpose = Purpose.None;
                 bool isMovingIn = false;
                 bool isTourist = false;
-                Entity citizen = residents[i].m_Citizen;
                 Entity finalDestination = Entity.Null;
 
                 if (travelPurposeLookup.TryGetComponent(citizen, out var tp)) purpose = tp.m_Purpose;
 
-                // 1. FAST LOOKUP: Try static components first (Home/Work/School)
                 if (purpose == Purpose.GoingToWork && workerLookup.TryGetComponent(citizen, out var worker))
                 {
                     finalDestination = worker.m_Workplace;
@@ -1048,7 +870,6 @@ namespace TrafficSpy.Systems
                 }
                 else if (purpose == Purpose.GoingHome && householdMemberLookup.TryGetComponent(citizen, out var hm))
                 {
-                    // FIX: Use PropertyRenter to find the house (Household doesn't have m_Residence directly)
                     if (propertyRenterLookup.TryGetComponent(hm.m_Household, out var renter))
                     {
                         finalDestination = renter.m_Property;
@@ -1059,9 +880,7 @@ namespace TrafficSpy.Systems
                     }
                 }
 
-                // 2. PATH FALLBACK: Required for Shopping, Leisure, Tourism, or if static lookup failed
-                // If the citizen has a path, the LAST element is their final destination.
-                if (finalDestination == Entity.Null && i < pathBuffers.Length)
+                if (finalDestination == Entity.Null && hasPaths && i < pathBuffers.Length)
                 {
                     DynamicBuffer<PathElement> path = pathBuffers[i];
                     if (path.Length > 0)
@@ -1073,8 +892,9 @@ namespace TrafficSpy.Systems
                 results.Enqueue(new TrafficRenderData
                 {
                     entity = citizen,
-                    sourceAgent = Entity.Null,
-                    destinationEntity = finalDestination, // <--- Now populated!
+                    sourceAgent = Entity.Null, 
+                    destinationEntity = finalDestination, 
+                    waitingAtStop = matchedStop, 
                     purpose = purpose,
                     type = TrafficType.Citizen,
                     isPedestrian = true,
@@ -1083,6 +903,5 @@ namespace TrafficSpy.Systems
                 });
             }
         }
-
     }
 }
