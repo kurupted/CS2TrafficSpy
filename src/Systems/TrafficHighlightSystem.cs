@@ -51,7 +51,11 @@ namespace TrafficSpy.Systems
             {
                 foreach (var item in TrafficUISystem.CurrentRenderList)
                 {
-                    if (EntityManager.Exists(item.entity)) newSet.Add(item.entity);
+                    Entity agentToHighlight = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
+                    if (EntityManager.Exists(agentToHighlight)) newSet.Add(agentToHighlight);
+                    
+                    if (item.destinationEntity != Entity.Null && EntityManager.Exists(item.destinationEntity))
+                        newSet.Add(item.destinationEntity);
                 }
             }
 

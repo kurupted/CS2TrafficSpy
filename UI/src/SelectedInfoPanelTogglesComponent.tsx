@@ -7,7 +7,9 @@ import {
     directionMode, setDirectionMode,
     showRoutes, setShowRoutes,
     rangeMode, setRangeMode,
-    associatedStops, selectStop
+    associatedStops, selectStop,
+    walkingOnly, setWalkingOnly,
+    isTransitStopSelected
 } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
@@ -19,7 +21,6 @@ interface InfoSectionComponent {
     tooltipTags: Array<string>;
 }
 
-// NEW: Structure for the stop data
 interface StopOption {
     index: number;
     version: number;
@@ -52,7 +53,6 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '5px', width: '100%' }}>
                 <div style={{ color: "rgba(255,255,255,0.8)", fontSize: "0.9em", marginBottom: '2px', marginLeft: '4px' }}>{label}</div>
-                {/* Added flexWrap so buttons don't squash */}
                 <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '4px', width: '100%' }}>
                     {buttons.map((btn, idx) => (
                         <div
@@ -107,10 +107,10 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         const showPathLines = useValue(showRoutes);
         const currentDirMode = useValue(directionMode) || 0;
         const currentRangeMode = useValue(rangeMode) ?? 1;
-        //const isGrayWorld = useValue(grayWorld);
+        const currentWalkingOnly = useValue(walkingOnly) ?? true;
+        const isTransitStop = useValue(isTransitStopSelected) ?? false;
         const [activeFilter, setActiveFilter] = useState<string>("");
 
-        // NEW: Get the list of associated stops using the correct binding
         const associatedStopsJson = useValue(associatedStops);
         const stops: StopOption[] = useMemo(() => {
             try { return JSON.parse(associatedStopsJson || "[]"); } catch(e) { return []; }
@@ -153,21 +153,34 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true}
                 className={InfoSectionTheme?.infoSection}
             >
-                {/* 1. STOPS & PLATFORMS (Top Priority) */}
-                {stops.length > 0 && renderButtonRow("Select Stop / Platform", stops.map(stop => ({
-                    label: stop.name,
-                    active: false,
-                    onClick: () => selectStop({ index: stop.index, version: stop.version })
-                })))}
-
-                {/* 2. MODE TOGGLES (Vehicles vs Peds) */}
-                {renderButtonRow("Traffic Type", [
-                    { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
-                    { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
+                {/* 1. STOPS & PLATFORMS */}
+                {stops.length > 0 && renderButtonRow("Select Stop / Platform", [
+                    ...stops.map(stop => ({
+                        label: stop.name,
+                        active: false,
+                        onClick: () => selectStop({ index: stop.index, version: stop.version })
+                    })),
+                    ...(!isTransitStop && currentDisplayMode === 1 ? [{
+                        label: "Walking Only",
+                        active: currentWalkingOnly,
+                        onClick: () => setWalkingOnly(!currentWalkingOnly)
+                    }] : [])
                 ])}
 
+                {/* 2. MODE TOGGLES (Vehicles vs Peds vs Transit) */}
+                {isTransitStop ? (
+                    renderButtonRow("Traffic Type", [
+                        { label: "Transit Passengers", active: true, onClick: () => {} }
+                    ])
+                ) : (
+                    renderButtonRow("Traffic Type", [
+                        { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
+                        { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
+                    ])
+                )}
+
                 {/* 3. DIRECTION TOGGLES */}
-                {renderButtonRow("Road Side / Direction", [
+                {!isTransitStop && renderButtonRow("Road Side / Direction", [
                     { label: "Both", active: currentDirMode === 0, onClick: () => setDirectionMode(0) },
                     { label: "Side A", active: currentDirMode === 1, onClick: () => setDirectionMode(1) },
                     { label: "Side B", active: currentDirMode === 2, onClick: () => setDirectionMode(2) }
@@ -195,7 +208,7 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                     </div>
                 </div>
 
-                {/* 6. RESET FILTER / TOTAL ROW (Moved Here) */}
+                {/* 6. RESET FILTER / TOTAL ROW */}
                 <div onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }} style={{ cursor: "pointer", marginBottom: "5px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "5px" }}>
                     <InfoRow
                         left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}

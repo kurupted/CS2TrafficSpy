@@ -66,6 +66,8 @@ namespace TrafficSpy.Systems
         private ValueBinding<int> directionModeBinding;
         private ValueBinding<int> rangeModeBinding; 
         private ValueBinding<string> associatedStopsBinding;
+        private ValueBinding<bool> walkingOnlyBinding;
+        private ValueBinding<bool> isTransitStopSelectedBinding;
 
         private bool highlightAgents = false;
         private int displayMode = 0; 
@@ -81,6 +83,7 @@ namespace TrafficSpy.Systems
 
         private bool isToolActive = false;
         private bool usePathBasedAnalysis = true;
+        private bool walkingOnly = true;
 
         private bool wasToggleKeyDown = false;
 
@@ -132,7 +135,6 @@ namespace TrafficSpy.Systems
                 {
                     ComponentType.ReadOnly<Resident>(),
                     ComponentType.ReadOnly<Game.Creatures.Queue>(),
-                    // Added Target here to be safe, though job handles missing components
                     ComponentType.ReadOnly<Target>(), 
                 },
                 None = new ComponentType[]
@@ -163,6 +165,8 @@ namespace TrafficSpy.Systems
             this.directionModeBinding = new ValueBinding<int>("TrafficSpy", "directionMode", 0);
             this.rangeModeBinding = new ValueBinding<int>("TrafficSpy", "rangeMode", 1);
             this.associatedStopsBinding = new ValueBinding<string>("TrafficSpy", "associatedStops", "[]");
+            this.walkingOnlyBinding = new ValueBinding<bool>("TrafficSpy", "walkingOnly", true);
+            this.isTransitStopSelectedBinding = new ValueBinding<bool>("TrafficSpy", "isTransitStopSelected", false);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
@@ -172,6 +176,8 @@ namespace TrafficSpy.Systems
             AddBinding(this.directionModeBinding);
             AddBinding(this.rangeModeBinding);
             AddBinding(this.associatedStopsBinding);
+            AddBinding(this.walkingOnlyBinding);
+            AddBinding(this.isTransitStopSelectedBinding);
 
             AddBinding(new TriggerBinding<Entity>("TrafficSpy", "selectStop", (entity) => {
                 this.toolSystem.selected = entity; 
@@ -219,6 +225,15 @@ namespace TrafficSpy.Systems
                 else if (this.currentFilter == filter) this.currentFilter = "";
                 else this.currentFilter = filter;
                 ApplyFilter();
+            }));
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setWalkingOnly", (bool active) => {
+                this.walkingOnly = active;
+                this.walkingOnlyBinding.Update(active);
+                if (lastSelectedEntity != Entity.Null)
+                {
+                    RunAnalysis(lastSelectedEntity);
+                }
             }));
             
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", SetToolActive));
@@ -290,6 +305,9 @@ namespace TrafficSpy.Systems
                 this.directionMode = 0;
                 this.directionModeBinding.Update(0);
                 
+                bool isStopOrStation = EntityManager.HasComponent<Game.Routes.TransportStop>(selected) || EntityManager.HasComponent<Game.Buildings.TransportStation>(selected);
+                this.isTransitStopSelectedBinding.Update(isStopOrStation);
+
                 FindAssociatedStops(selected);
                 RunAnalysis(selected);
             }
@@ -357,8 +375,21 @@ namespace TrafficSpy.Systems
         private bool IsItemVisible(TrafficRenderData item, ComponentLookup<Transform> transformLookup)
         {
             bool isPed = item.isPedestrian;
-            if (this.displayMode == 0 && !item.isVehicle) return false; 
-            if (this.displayMode == 1 && !isPed) return false; 
+
+            bool isStopOrStation = lastSelectedEntity != Entity.Null && 
+                                  (EntityManager.HasComponent<Game.Routes.TransportStop>(lastSelectedEntity) || 
+                                   EntityManager.HasComponent<Game.Buildings.TransportStation>(lastSelectedEntity));
+
+            // Strictly enforce pedestrian/passenger mode when viewing a stop or station
+            if (isStopOrStation)
+            {
+                if (!isPed) return false; 
+            }
+            else
+            {
+                if (this.displayMode == 0 && !item.isVehicle) return false; 
+                if (this.displayMode == 1 && !isPed) return false; 
+            }
 
             if (item.sourceAgent == Entity.Null) return true;
 
@@ -457,9 +488,14 @@ namespace TrafficSpy.Systems
         private void FindAssociatedStops(Entity selected)
         {
             m_AssociatedStops.Clear();
-            if (selected == Entity.Null) return;
+            if (selected == Entity.Null) {
+                this.associatedStopsBinding.Update("[]");
+                return;
+            }
 
-            if (EntityManager.HasComponent<Game.Routes.TransportStop>(selected))
+            bool isDirectStop = EntityManager.HasComponent<Game.Routes.TransportStop>(selected);
+
+            if (isDirectStop)
             {
                 AddStopToAssociatedList(selected);
             }
@@ -483,6 +519,14 @@ namespace TrafficSpy.Systems
             for (int i = 0; i < stopEntities.Length; i++)
             {
                 Entity stopEntity = stopEntities[i];
+                
+                // Exclude bicycle parking and any stop that connects exclusively to a parking lane
+                if (EntityManager.HasComponent<Game.Routes.Connected>(stopEntity))
+                {
+                    Entity connectedLane = EntityManager.GetComponentData<Game.Routes.Connected>(stopEntity).m_Connected;
+                    if (EntityManager.HasComponent<Game.Net.ParkingLane>(connectedLane)) continue; 
+                }
+
                 Entity currentChecker = stopEntity;
                 if (EntityManager.HasComponent<Game.Routes.Connected>(stopEntity))
                     currentChecker = EntityManager.GetComponentData<Game.Routes.Connected>(stopEntity).m_Connected;
@@ -519,15 +563,23 @@ namespace TrafficSpy.Systems
             }
             targetParts.Dispose();
             
-            var sb = new System.Text.StringBuilder("[");
-            foreach(var stop in m_AssociatedStops)
+            // Only hide the UI stop list if the user has explicitly selected a single stop
+            if (isDirectStop)
             {
-                sb.Append($"{{\"index\":{stop.Entity.Index}, \"version\":{stop.Entity.Version}, \"name\":\"{stop.Name}\"}},");
+                this.associatedStopsBinding.Update("[]");
             }
-            if (m_AssociatedStops.Count > 0) sb.Length--; 
-            sb.Append("]");
-            
-            this.associatedStopsBinding.Update(sb.ToString());
+            else
+            {
+                var sb = new System.Text.StringBuilder("[");
+                foreach(var stop in m_AssociatedStops)
+                {
+                    sb.Append($"{{\"index\":{stop.Entity.Index}, \"version\":{stop.Entity.Version}, \"name\":\"{stop.Name}\"}},");
+                }
+                if (m_AssociatedStops.Count > 0) sb.Length--; 
+                sb.Append("]");
+                
+                this.associatedStopsBinding.Update(sb.ToString());
+            }
         }
 
         private void FindStopsRecursive(Entity entity, ref NativeHashSet<Entity> results)
@@ -548,6 +600,10 @@ namespace TrafficSpy.Systems
             if (EntityManager.HasComponent<Game.Routes.Connected>(stopEntity))
             {
                 Entity laneEntity = EntityManager.GetComponentData<Game.Routes.Connected>(stopEntity).m_Connected;
+                
+                // Final safety net, never add a parking lane to our list
+                if (EntityManager.HasComponent<Game.Net.ParkingLane>(laneEntity)) return; 
+                
                 if (EntityManager.HasComponent<Game.Net.TrainTrack>(laneEntity)) typeName = "Platform";
                 else if (EntityManager.HasComponent<Game.Net.SubwayTrack>(laneEntity)) typeName = "Subway";
                 else if (EntityManager.HasComponent<Game.Net.PedestrianLane>(laneEntity)) typeName = "Bus/Tram";
@@ -627,14 +683,34 @@ namespace TrafficSpy.Systems
         private void RunAnalysis(Entity selectedSegment)
         {
             allAnalysisResults.Clear();
+            AnalyzedLanes.Clear(); // Clears any old road highlights when we select a new stop
+            
+            // Set FilterPosition Unconditionally BEFORE we check usePathBasedAnalysis
+            if (EntityManager.HasComponent<Curve>(selectedSegment)) {
+                Curve curve = EntityManager.GetComponentData<Curve>(selectedSegment);
+                FilterPosition = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
+            } else if (SystemAPI.GetComponentLookup<Transform>(true).TryGetComponent(selectedSegment, out Transform tr)) {
+                FilterPosition = tr.m_Position;
+            } else {
+                FilterPosition = float3.zero;
+            }
+            UpdateRangeDistance();
+
             NativeQueue<TrafficRenderData> resultsQueue = new NativeQueue<TrafficRenderData>(Allocator.TempJob);
 
-            // 1. COLLECT STOPS (Use the actual Stop Entity IDs)
             NativeList<Entity> stopsToAnalyze = new NativeList<Entity>(Allocator.TempJob);
             
-            if (EntityManager.HasComponent<Game.Routes.TransportStop>(selectedSegment))
+            bool isDirectStop = EntityManager.HasComponent<Game.Routes.TransportStop>(selectedSegment);
+            bool isStation = EntityManager.HasComponent<Game.Buildings.TransportStation>(selectedSegment);
+
+            if (isDirectStop)
             {
                 stopsToAnalyze.Add(selectedSegment);
+                AnalyzedLanes.Add(selectedSegment); // highlight stop
+            }
+            else if (isStation)
+            {
+                AnalyzedLanes.Add(selectedSegment); // highlight station
             }
             
             foreach(var option in m_AssociatedStops)
@@ -644,11 +720,12 @@ namespace TrafficSpy.Systems
                 if(!alreadyAdded) stopsToAnalyze.Add(option.Entity);
             }
 
-            // 2. SCHEDULE WAITING PASSENGER JOB (QUEUE BASED)
+            bool shouldAnalyzeStops = stopsToAnalyze.Length > 0 && (isDirectStop || isStation || !this.walkingOnly);
+
             JobHandle waitingJobHandle = default;
             NativeList<int> debugList = new NativeList<int>(Allocator.TempJob);
 
-            if (stopsToAnalyze.Length > 0)
+            if (shouldAnalyzeStops)
             {
                 Mod.log.Info($"TrafficSpy: Analyzing Queue for {stopsToAnalyze.Length} stops.");
                 
@@ -660,7 +737,6 @@ namespace TrafficSpy.Systems
                     queueBufferHandle = SystemAPI.GetBufferTypeHandle<Game.Creatures.Queue>(true), 
                     residentHandle = SystemAPI.GetComponentTypeHandle<Resident>(true),
                     
-                    // NEW: Pass EntityHandle to get the physical body entity
                     entityHandle = SystemAPI.GetEntityTypeHandle(),
                     targetHandle = SystemAPI.GetComponentTypeHandle<Target>(true),
                     
@@ -678,26 +754,14 @@ namespace TrafficSpy.Systems
                 waitingJobHandle = waitJob.Schedule(waitingPassengersQuery, default); 
             }
 
-            // 3. SCHEDULE PATH ACTIVITY JOB
             JobHandle pathJobHandle = default;
             NativeHashSet<Entity> targets = default; 
             
-            if (usePathBasedAnalysis && !EntityManager.HasComponent<Game.Routes.TransportStop>(selectedSegment))
+            if (usePathBasedAnalysis && !isDirectStop && !isStation)
             {
-                if (EntityManager.HasComponent<Curve>(selectedSegment)) {
-                    Curve curve = EntityManager.GetComponentData<Curve>(selectedSegment);
-                    FilterPosition = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
-                } else if (SystemAPI.GetComponentLookup<Transform>(true).TryGetComponent(selectedSegment, out Transform tr)) {
-                    FilterPosition = tr.m_Position;
-                } else {
-                    FilterPosition = float3.zero;
-                }
-                UpdateRangeDistance();
-
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
                 
                 targets = GetTargetEntities(selectedSegment, Allocator.TempJob, this.directionMode);
-                AnalyzedLanes.Clear();
                 if (this.directionMode != 0) {
                     NativeArray<Entity> targetArray = targets.ToNativeArray(Allocator.Temp);
                     foreach (var entity in targetArray) {
@@ -744,11 +808,12 @@ namespace TrafficSpy.Systems
                 pathJobHandle = pathJob.ScheduleParallel(pathOwnerQuery, default);
             }
 
-            if (stopsToAnalyze.Length > 0) 
+            if (shouldAnalyzeStops) 
             {
                 waitingJobHandle.Complete();
-                debugList.Dispose();
             }
+            debugList.Dispose();
+
             if (targets.IsCreated) pathJobHandle.Complete();
 
             while (resultsQueue.TryDequeue(out TrafficRenderData item)) allAnalysisResults.Add(item);
@@ -771,7 +836,7 @@ namespace TrafficSpy.Systems
         [ReadOnly] public BufferTypeHandle<Game.Creatures.Queue> queueBufferHandle; 
         [ReadOnly] public ComponentTypeHandle<Resident> residentHandle;
         [ReadOnly] public ComponentTypeHandle<Target> targetHandle;
-        [ReadOnly] public EntityTypeHandle entityHandle; // NEW: To get the physical entity ID
+        [ReadOnly] public EntityTypeHandle entityHandle; 
         
         [ReadOnly] public ComponentLookup<Game.Routes.Connected> connectedLookup; 
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
@@ -789,7 +854,7 @@ namespace TrafficSpy.Systems
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
             NativeArray<Resident> residents = chunk.GetNativeArray(ref residentHandle);
-            NativeArray<Entity> entities = chunk.GetNativeArray(entityHandle); // Get physical entities
+            NativeArray<Entity> entities = chunk.GetNativeArray(entityHandle); 
             
             bool hasQueue = chunk.Has(ref queueBufferHandle);
             BufferAccessor<Game.Creatures.Queue> queues = hasQueue ? chunk.GetBufferAccessor(ref queueBufferHandle) : default;
@@ -874,7 +939,7 @@ namespace TrafficSpy.Systems
                 results.Enqueue(new TrafficRenderData
                 {
                     entity = citizen,
-                    sourceAgent = entities[i], // FIXED: Use physical entity ID for highlighting
+                    sourceAgent = entities[i], 
                     destinationEntity = finalDestination, 
                     waitingAtStop = matchedStop, 
                     purpose = purpose,

@@ -7,6 +7,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Game.Routes;
 using UnityEngine;
+using Unity.Collections;
 using PedestrianLane = Game.Net.PedestrianLane;
 using TrackLane = Game.Net.TrackLane;
 
@@ -19,12 +20,14 @@ namespace TrafficSpy.Systems
         private ToolSystem _toolSystem;
         private TrafficUISystem _uiSystem;
         private Entity _hoveredEntity = Entity.Null;
+        private EntityQuery m_HighlightedQuery;
 
         protected override void OnCreate()
         {
             base.OnCreate();
             _toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             _uiSystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
+            m_HighlightedQuery = GetEntityQuery(ComponentType.ReadWrite<Highlighted>());
         }
 
         public override void InitializeRaycast()
@@ -141,6 +144,14 @@ namespace TrafficSpy.Systems
         public void Enable()
         {
             _toolSystem.activeTool = this;
+            
+            // Clear any lingering highlights left by the default tool before we start
+            using var entities = m_HighlightedQuery.ToEntityArray(Allocator.Temp);
+            foreach (var e in entities)
+            {
+                EntityManager.RemoveComponent<Highlighted>(e);
+                EntityManager.AddComponent<BatchesUpdated>(e);
+            }
         }
 
         public void Disable()

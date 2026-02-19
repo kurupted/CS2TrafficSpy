@@ -51,7 +51,8 @@ namespace TrafficSpy.Systems
 
             foreach (var item in renderList)
             {
-                if (EntityManager.Exists(item.entity))
+                Entity routeTarget = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
+                if (EntityManager.Exists(routeTarget))
                 {
                     byte type = 4; // Default Vehicle
                     
@@ -61,7 +62,7 @@ namespace TrafficSpy.Systems
 
                     entityInputList.Add(new EntityRouteInput 
                     { 
-                        entity = item.entity, 
+                        entity = routeTarget, 
                         type = type 
                     });
                 }
