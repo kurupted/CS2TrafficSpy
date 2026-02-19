@@ -24,4 +24,5 @@ export const setWalkingOnly = (active: boolean) => trigger("TrafficSpy", "setWal
 
 export const isTransitStopSelected = bindValue<boolean>("TrafficSpy", "isTransitStopSelected", false);
 
-//export const setGrayWorld = (active: boolean) => trigger("TrafficSpy", "setGrayWorld", active);
+export const hasParent = bindValue<boolean>("TrafficSpy", "hasParent", false);
+export const selectParent = () => trigger("TrafficSpy", "selectParent");

@@ -108,11 +108,11 @@ namespace TrafficSpy.Jobs
                 return true;
             }
 
-            // Taxis (Check before PublicTransport to be specific)
+            // Taxis
             if (taxiLookup.HasComponent(entity))
             {
                 Purpose passengerPurpose = Purpose.None;
-                TrafficType type = TrafficType.Service; // Default to Service (Yellow/Other)
+                TrafficType type = TrafficType.Service; 
                 bool isMovingIn = false;
                 bool isTourist = false;
 
@@ -158,28 +158,16 @@ namespace TrafficSpy.Jobs
             // 3. Delivery / Cargo
             if (deliveryTruckLookup.TryGetComponent(entity, out DeliveryTruck truck))
             {
-                if ((truck.m_State & DeliveryTruckFlags.Returning) != 0)
-                {
-                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo, false, false);
-                }
-                else
-                {
-                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo, false, false);
-                }
+                Purpose p = (truck.m_State & DeliveryTruckFlags.Returning) != 0 ? Purpose.None : Purpose.Delivery;
+                EnqueueVehicleDestination(entity, p, TrafficType.Cargo, false, false);
                 return true;
             }
 
             // 4. Cargo
             if (cargoTransportLookup.TryGetComponent(entity, out CargoTransport cargo))
             {
-                if ((cargo.m_State & CargoTransportFlags.Returning) != 0)
-                {
-                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Cargo, false, false);
-                }
-                else
-                {
-                    EnqueueVehicleDestination(entity, Purpose.Delivery, TrafficType.Cargo, false, false);
-                }
+                Purpose p = (cargo.m_State & CargoTransportFlags.Returning) != 0 ? Purpose.None : Purpose.Delivery;
+                EnqueueVehicleDestination(entity, p, TrafficType.Cargo, false, false);
                 return true;
             }
 
@@ -251,12 +239,18 @@ namespace TrafficSpy.Jobs
 
         private void EnqueueVehicleDestination(Entity vehicleEntity, Purpose purpose, TrafficType type, bool isMovingIn, bool isTourist)
         {
-            // Vehicle Agent
-            // isVehicle = true, isDestination = false
+            Entity physicalDest = Entity.Null;
+            if (targetLookup.TryGetComponent(vehicleEntity, out Target dest) && dest.m_Target != Entity.Null)
+            {
+                physicalDest = ResolvePhysicalEntity(dest.m_Target);
+                if (targets.Contains(physicalDest)) physicalDest = Entity.Null;
+            }
+
             results.Enqueue(new TrafficRenderData
             {
                 entity = vehicleEntity,
-                sourceAgent = vehicleEntity, // Self
+                sourceAgent = vehicleEntity, // self
+                destinationEntity = physicalDest, // Combined into one item
                 purpose = purpose,
                 type = type,
                 isOrigin = false,
@@ -266,85 +260,31 @@ namespace TrafficSpy.Jobs
                 isMovingIn = isMovingIn,
                 isTourist = isTourist
             });
-
-            // Vehicle Destination (Building)
-            if (targetLookup.TryGetComponent(vehicleEntity, out Target dest) && dest.m_Target != Entity.Null)
-            {
-                Entity physicalDest = ResolvePhysicalEntity(dest.m_Target);
-                if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
-                {
-                    results.Enqueue(new TrafficRenderData
-                    {
-                        entity = physicalDest,
-                        sourceAgent = vehicleEntity, // Linked to vehicle
-                        purpose = purpose,
-                        type = type,
-                        isOrigin = false,
-                        isVehicle = true, // Set isVehicle = true so Destination is visible in Vehicle Mode
-                        isPedestrian = false,
-                        isDestination = true,
-                        isMovingIn = isMovingIn,
-                        isTourist = isTourist
-                    });
-                }
-            }
         }
 
         private void EnqueueDestination(Entity entity, Purpose purpose, bool isMovingIn, bool isTourist)
         {
-            Entity renderEntity = entity;
-            TrafficType type = TrafficType.Citizen;
+            Entity physicalDest = Entity.Null;
+            if (targetLookup.TryGetComponent(entity, out Target dest) && dest.m_Target != Entity.Null)
+            {
+                physicalDest = ResolvePhysicalEntity(dest.m_Target);
+                if (targets.Contains(physicalDest)) physicalDest = Entity.Null;
+            }
 
-            // Note: Since we return early for CurrentVehicle/CurrentTransport in AnalyzeCitizen, 
-            // we can assume anyone reaching here is a pedestrian.
-            bool isPedestrian = true;
-            bool isVehicle = false;
-
-            // Citizen Agent
-            // isDestination = false
             results.Enqueue(new TrafficRenderData
             {
-                entity = renderEntity,
-                sourceAgent = renderEntity, // Self
+                entity = entity,
+                sourceAgent = entity, 
+                destinationEntity = physicalDest, // Combined into one item
                 purpose = purpose,
-                type = type,
+                type = TrafficType.Citizen,
                 isOrigin = false,
-                isVehicle = isVehicle,
-                isPedestrian = isPedestrian,
+                isVehicle = false,
+                isPedestrian = true,
                 isDestination = false,
                 isMovingIn = isMovingIn,
                 isTourist = isTourist
             });
-
-            Entity rawDest = Entity.Null;
-            if (targetLookup.TryGetComponent(entity, out Target dest))
-            {
-                rawDest = dest.m_Target;
-            }
-
-            if (rawDest != Entity.Null)
-            {
-                Entity physicalDest = ResolvePhysicalEntity(rawDest);
-                if (physicalDest != Entity.Null && !targets.Contains(physicalDest))
-                {
-                    // Destination Building
-                    // isVehicle = false, isDestination = true
-                    // Keep isPedestrian = true (if they were walking) to allow filtering "Pedestrian Destinations" out.
-                    results.Enqueue(new TrafficRenderData
-                    {
-                        entity = physicalDest,
-                        sourceAgent = renderEntity, // Linked to Pedestrian
-                        purpose = purpose,
-                        type = type,
-                        isOrigin = false,
-                        isVehicle = false,
-                        isPedestrian = isPedestrian,
-                        isDestination = true,
-                        isMovingIn = isMovingIn,
-                        isTourist = isTourist
-                    });
-                }
-            }
         }
 
         private Entity ResolvePhysicalEntity(Entity target)

@@ -89,31 +89,42 @@ namespace TrafficSpy.Systems
             return inputDeps;
         }
 
-        // Helper to filter for only Roads, Tracks, and Transit Stations
         private bool IsValidSpyTarget(Entity entity)
         {
             if (entity == Entity.Null) return false;
 
-            // A. Networks (Roads & Rails)
+            // A. Networks (Roads & Rails & Paths)
             if (EntityManager.HasComponent<Road>(entity) || 
                 EntityManager.HasComponent<TrainTrack>(entity) ||
                 EntityManager.HasComponent<TramTrack>(entity) ||
-                EntityManager.HasComponent<SubwayTrack>(entity))
+                EntityManager.HasComponent<SubwayTrack>(entity) ||
+                EntityManager.HasComponent<PedestrianLane>(entity) ||
+                EntityManager.HasComponent<TrackLane>(entity) ||
+                EntityManager.HasComponent<Waterway>(entity))
             {
                 return true;
             }
 
-            // B. Transit Stations (Plopped Buildings Only)
-            // This filters out Zoned Buildings (Res/Com/Ind) because they lack this component.
+            // B. Transit Stations 
             if (EntityManager.HasComponent<Game.Buildings.TransportStation>(entity))
             {
                 return true;
             }
             
-            // C. Direct Stops (If a stop icon is directly clickable)
+            // C. Direct Stops (If a stop icon is directly clickable, reject bicycles)
             if (EntityManager.HasComponent<Game.Routes.TransportStop>(entity))
             {
-                return true;
+                if (EntityManager.HasComponent<Game.Routes.BusStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.TrainStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.TramStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.SubwayStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.ShipStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.AirplaneStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.FerryStop>(entity) ||
+                    EntityManager.HasComponent<Game.Routes.TaxiStand>(entity))
+                {
+                    return true;
+                }
             }
 
             return false;

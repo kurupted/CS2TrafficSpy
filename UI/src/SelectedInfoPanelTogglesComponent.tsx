@@ -9,7 +9,8 @@ import {
     rangeMode, setRangeMode,
     associatedStops, selectStop,
     walkingOnly, setWalkingOnly,
-    isTransitStopSelected
+    isTransitStopSelected,
+    hasParent, selectParent
 } from "./bindings";
 import { useValue } from "cs2/api";
 import { useMemo, useState } from "react";
@@ -109,6 +110,8 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         const currentRangeMode = useValue(rangeMode) ?? 1;
         const currentWalkingOnly = useValue(walkingOnly) ?? true;
         const isTransitStop = useValue(isTransitStopSelected) ?? false;
+        const currentHasParent = useValue(hasParent) ?? false;
+
         const [activeFilter, setActiveFilter] = useState<string>("");
 
         const associatedStopsJson = useValue(associatedStops);
@@ -153,6 +156,11 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
                 disableFocus={true}
                 className={InfoSectionTheme?.infoSection}
             >
+                {/* 0. PARENT BUTTON */}
+                {isTransitStop && currentHasParent && renderButtonRow("Navigation", [
+                    { label: "< Back to Parent Station / Road", active: false, onClick: () => selectParent() }
+                ])}
+
                 {/* 1. STOPS & PLATFORMS */}
                 {stops.length > 0 && renderButtonRow("Select Stop / Platform", [
                     ...stops.map(stop => ({
