@@ -131,7 +131,9 @@ namespace TrafficSpy.Systems
                 All = new ComponentType[] 
                 {
                     ComponentType.ReadOnly<Resident>(),
-                    ComponentType.ReadOnly<Game.Creatures.Queue>(), 
+                    ComponentType.ReadOnly<Game.Creatures.Queue>(),
+                    // Added Target here to be safe, though job handles missing components
+                    ComponentType.ReadOnly<Target>(), 
                 },
                 None = new ComponentType[]
                 {
@@ -457,21 +459,13 @@ namespace TrafficSpy.Systems
             m_AssociatedStops.Clear();
             if (selected == Entity.Null) return;
 
-            string selectedType = "Unknown";
-            if (EntityManager.HasComponent<Building>(selected)) selectedType = "Building";
-            else if (EntityManager.HasComponent<Game.Net.Edge>(selected)) selectedType = "Road Edge";
-            else if (EntityManager.HasComponent<Game.Routes.TransportStop>(selected)) selectedType = "Transport Stop";
-            
-            Mod.log.Info($"TrafficSpy: Searching for stops. Selected: {selected.Index} ({selectedType})");
-
             if (EntityManager.HasComponent<Game.Routes.TransportStop>(selected))
             {
                 AddStopToAssociatedList(selected);
             }
 
             var stopEntities = m_AllStopsQuery.ToEntityArray(Allocator.Temp);
-            Mod.log.Info($"TrafficSpy: Query returned {stopEntities.Length} TOTAL stops in city to check.");
-
+            
             NativeList<Entity> targetParts = new NativeList<Entity>(Allocator.Temp);
             targetParts.Add(selected);
             
@@ -533,7 +527,6 @@ namespace TrafficSpy.Systems
             if (m_AssociatedStops.Count > 0) sb.Length--; 
             sb.Append("]");
             
-            Mod.log.Info($"TrafficSpy: Final Associated Stops Count: {m_AssociatedStops.Count}");
             this.associatedStopsBinding.Update(sb.ToString());
         }
 
@@ -667,9 +660,11 @@ namespace TrafficSpy.Systems
                     queueBufferHandle = SystemAPI.GetBufferTypeHandle<Game.Creatures.Queue>(true), 
                     residentHandle = SystemAPI.GetComponentTypeHandle<Resident>(true),
                     
-                    // NEW: Lookup for reading Connected component from the Line/TargetEntity
-                    connectedLookup = SystemAPI.GetComponentLookup<Game.Routes.Connected>(true),
+                    // NEW: Pass EntityHandle to get the physical body entity
+                    entityHandle = SystemAPI.GetEntityTypeHandle(),
+                    targetHandle = SystemAPI.GetComponentTypeHandle<Target>(true),
                     
+                    connectedLookup = SystemAPI.GetComponentLookup<Game.Routes.Connected>(true),
                     travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
                     householdMemberLookup = SystemAPI.GetComponentLookup<HouseholdMember>(true),
                     householdLookup = SystemAPI.GetComponentLookup<Household>(true),
@@ -752,20 +747,6 @@ namespace TrafficSpy.Systems
             if (stopsToAnalyze.Length > 0) 
             {
                 waitingJobHandle.Complete();
-                int total = debugList.Length > 0 ? debugList[0] : 0;
-                int matches = debugList.Length > 1 ? debugList[1] : 0;
-                Mod.log.Info($"TrafficSpy Job Debug: Checked {total} potential passengers. Found {matches} matches via Queue.");
-                
-                if (debugList.Length > 2)
-                {
-                    var sb = new System.Text.StringBuilder("TrafficSpy SAMPLES: ");
-                    for(int k=2; k<debugList.Length; k++)
-                    {
-                        sb.Append($"[StopID:{debugList[k]}] ");
-                    }
-                    Mod.log.Info(sb.ToString());
-                }
-                
                 debugList.Dispose();
             }
             if (targets.IsCreated) pathJobHandle.Complete();
@@ -789,8 +770,10 @@ namespace TrafficSpy.Systems
         
         [ReadOnly] public BufferTypeHandle<Game.Creatures.Queue> queueBufferHandle; 
         [ReadOnly] public ComponentTypeHandle<Resident> residentHandle;
-        [ReadOnly] public ComponentLookup<Game.Routes.Connected> connectedLookup; // Lookup for indirection
+        [ReadOnly] public ComponentTypeHandle<Target> targetHandle;
+        [ReadOnly] public EntityTypeHandle entityHandle; // NEW: To get the physical entity ID
         
+        [ReadOnly] public ComponentLookup<Game.Routes.Connected> connectedLookup; 
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
         [ReadOnly] public ComponentLookup<Household> householdLookup;
@@ -806,6 +789,7 @@ namespace TrafficSpy.Systems
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
             NativeArray<Resident> residents = chunk.GetNativeArray(ref residentHandle);
+            NativeArray<Entity> entities = chunk.GetNativeArray(entityHandle); // Get physical entities
             
             bool hasQueue = chunk.Has(ref queueBufferHandle);
             BufferAccessor<Game.Creatures.Queue> queues = hasQueue ? chunk.GetBufferAccessor(ref queueBufferHandle) : default;
@@ -813,29 +797,24 @@ namespace TrafficSpy.Systems
             bool hasPaths = chunk.Has(ref pathBufferHandle);
             BufferAccessor<PathElement> pathBuffers = hasPaths ? chunk.GetBufferAccessor(ref pathBufferHandle) : default;
             
+            NativeArray<Target> targetComponents = chunk.GetNativeArray(ref targetHandle);
+
             var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
             while (enumerator.NextEntityIndex(out int i))
             {
-                if (debugList.Length < 2) { debugList.Add(0); debugList.Add(0); }
-                debugList[0]++; 
-
                 if (!hasQueue) continue; 
 
                 DynamicBuffer<Game.Creatures.Queue> myQueue = queues[i];
                 Entity matchedStop = Entity.Null;
 
-                // CHECK QUEUE (With Indirection)
                 for (int q = 0; q < myQueue.Length; q++)
                 {
-                    Entity intermediateEntity = myQueue[q].m_TargetEntity; // CORRECTED: Using m_TargetEntity
+                    Entity intermediateEntity = myQueue[q].m_TargetEntity; 
                     
-                    // Lookup the actual Stop ID via Connected component on the Line/Route entity
                     if (connectedLookup.TryGetComponent(intermediateEntity, out var connection))
                     {
                         Entity actualStop = connection.m_Connected;
                         
-                        if (debugList.Length < 12) debugList.Add(actualStop.Index); // Debugging the resolved ID
-
                         for(int k=0; k<searchTargets.Length; k++) 
                         {
                             if (searchTargets[k] == actualStop) 
@@ -849,8 +828,6 @@ namespace TrafficSpy.Systems
                 }
 
                 if (matchedStop == Entity.Null) continue;
-
-                debugList[1]++;
 
                 Entity citizen = residents[i].m_Citizen;
                 Purpose purpose = Purpose.None;
@@ -880,6 +857,11 @@ namespace TrafficSpy.Systems
                     }
                 }
 
+                if (finalDestination == Entity.Null)
+                {
+                    finalDestination = targetComponents[i].m_Target;
+                }
+
                 if (finalDestination == Entity.Null && hasPaths && i < pathBuffers.Length)
                 {
                     DynamicBuffer<PathElement> path = pathBuffers[i];
@@ -892,7 +874,7 @@ namespace TrafficSpy.Systems
                 results.Enqueue(new TrafficRenderData
                 {
                     entity = citizen,
-                    sourceAgent = Entity.Null, 
+                    sourceAgent = entities[i], // FIXED: Use physical entity ID for highlighting
                     destinationEntity = finalDestination, 
                     waitingAtStop = matchedStop, 
                     purpose = purpose,
