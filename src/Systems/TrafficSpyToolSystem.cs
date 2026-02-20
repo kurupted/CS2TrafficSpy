@@ -93,14 +93,11 @@ namespace TrafficSpy.Systems
         {
             if (entity == Entity.Null) return false;
 
-            // A. Networks (Roads & Rails & Paths)
-            if (EntityManager.HasComponent<Road>(entity) || 
-                EntityManager.HasComponent<TrainTrack>(entity) ||
-                EntityManager.HasComponent<TramTrack>(entity) ||
-                EntityManager.HasComponent<SubwayTrack>(entity) ||
-                EntityManager.HasComponent<PedestrianLane>(entity) ||
-                EntityManager.HasComponent<TrackLane>(entity) ||
-                EntityManager.HasComponent<Waterway>(entity))
+            // A. Networks (Roads, Rails, Paths, Waterways)
+            // Checking Edge/Node ensures standalone pathways are clickable because ALL networks use them.
+            // This safely replaces the need to check for missing Pathway or PedestrianLane components.
+            if (EntityManager.HasComponent<Game.Net.Edge>(entity) || 
+                EntityManager.HasComponent<Game.Net.Node>(entity))
             {
                 return true;
             }

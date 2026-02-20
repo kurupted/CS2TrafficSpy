@@ -137,7 +137,7 @@ namespace TrafficSpy.Systems
                 All = new ComponentType[] 
                 {
                     ComponentType.ReadOnly<Resident>(),
-                    ComponentType.ReadOnly<Game.Creatures.Queue>(),
+                    ComponentType.ReadOnly<Creature>(),
                     ComponentType.ReadOnly<Target>(), 
                 },
                 None = new ComponentType[]
@@ -765,6 +765,9 @@ namespace TrafficSpy.Systems
                     queueBufferHandle = SystemAPI.GetBufferTypeHandle<Game.Creatures.Queue>(true), 
                     residentHandle = SystemAPI.GetComponentTypeHandle<Resident>(true),
                     
+                    creatureHandle = SystemAPI.GetComponentTypeHandle<Creature>(true),
+                    humanLaneHandle = SystemAPI.GetComponentTypeHandle<HumanCurrentLane>(true),
+                    
                     entityHandle = SystemAPI.GetEntityTypeHandle(),
                     targetHandle = SystemAPI.GetComponentTypeHandle<Target>(true),
                     
@@ -866,6 +869,9 @@ namespace TrafficSpy.Systems
         [ReadOnly] public ComponentTypeHandle<Target> targetHandle;
         [ReadOnly] public EntityTypeHandle entityHandle; 
         
+        [ReadOnly] public ComponentTypeHandle<Creature> creatureHandle;
+        [ReadOnly] public ComponentTypeHandle<HumanCurrentLane> humanLaneHandle;
+        
         [ReadOnly] public ComponentLookup<Game.Routes.Connected> connectedLookup; 
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
         [ReadOnly] public ComponentLookup<HouseholdMember> householdMemberLookup;
@@ -884,6 +890,10 @@ namespace TrafficSpy.Systems
             NativeArray<Resident> residents = chunk.GetNativeArray(ref residentHandle);
             NativeArray<Entity> entities = chunk.GetNativeArray(entityHandle); 
             
+            NativeArray<Creature> creatures = chunk.GetNativeArray(ref creatureHandle);
+            bool hasHumanLanes = chunk.Has(ref humanLaneHandle);
+            NativeArray<HumanCurrentLane> humanLanes = hasHumanLanes ? chunk.GetNativeArray(ref humanLaneHandle) : default;
+            
             bool hasQueue = chunk.Has(ref queueBufferHandle);
             BufferAccessor<Game.Creatures.Queue> queues = hasQueue ? chunk.GetBufferAccessor(ref queueBufferHandle) : default;
 
@@ -895,31 +905,71 @@ namespace TrafficSpy.Systems
             var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
             while (enumerator.NextEntityIndex(out int i))
             {
-                if (!hasQueue) continue; 
-
-                DynamicBuffer<Game.Creatures.Queue> myQueue = queues[i];
                 Entity matchedStop = Entity.Null;
 
-                for (int q = 0; q < myQueue.Length; q++)
+                // 1. Check Buffer-Based Queue (Game.Creatures.Queue)
+                if (hasQueue)
                 {
-                    Entity intermediateEntity = myQueue[q].m_TargetEntity; 
-                    
-                    if (connectedLookup.TryGetComponent(intermediateEntity, out var connection))
+                    DynamicBuffer<Game.Creatures.Queue> myQueue = queues[i];
+                    for (int q = 0; q < myQueue.Length; q++)
                     {
-                        Entity actualStop = connection.m_Connected;
+                        Entity intermediateEntity = myQueue[q].m_TargetEntity; 
                         
+                        if (connectedLookup.TryGetComponent(intermediateEntity, out var connection))
+                        {
+                            Entity actualStop = connection.m_Connected;
+                            for(int k=0; k<searchTargets.Length; k++) 
+                            {
+                                if (searchTargets[k] == actualStop || searchTargets[k] == intermediateEntity) 
+                                {
+                                    matchedStop = searchTargets[k];
+                                    break;
+                                }
+                            }
+                        }
+                        if (matchedStop != Entity.Null) break;
+                    }
+                }
+
+                // 2. Check Component-Based Queue (Game.Creatures.Creature.m_QueueEntity)
+                if (matchedStop == Entity.Null)
+                {
+                    Entity queueEntity = creatures[i].m_QueueEntity;
+                    if (queueEntity != Entity.Null)
+                    {
+                        Entity actualStop = queueEntity;
+                        if (connectedLookup.TryGetComponent(queueEntity, out var connection))
+                        {
+                            actualStop = connection.m_Connected;
+                        }
+
                         for(int k=0; k<searchTargets.Length; k++) 
                         {
-                            if (searchTargets[k] == actualStop) 
+                            if (searchTargets[k] == actualStop || searchTargets[k] == queueEntity) 
                             {
-                                matchedStop = actualStop;
+                                matchedStop = searchTargets[k];
                                 break;
                             }
                         }
                     }
-                    if (matchedStop != Entity.Null) break;
                 }
 
+                // 3. Fallback: If they have a queue entity (meaning they are waiting for transit), 
+                // but it was a TransportLine instead of a stop, check if they are physically standing on the platform.
+                if (matchedStop == Entity.Null && creatures[i].m_QueueEntity != Entity.Null && hasHumanLanes)
+                {
+                    Entity physicalLane = humanLanes[i].m_Lane;
+                    for(int k=0; k<searchTargets.Length; k++) 
+                    {
+                        if (searchTargets[k] == physicalLane) 
+                        {
+                            matchedStop = searchTargets[k];
+                            break;
+                        }
+                    }
+                }
+
+                // If ALL THREE failed, skip them
                 if (matchedStop == Entity.Null) continue;
 
                 Entity citizen = residents[i].m_Citizen;
