@@ -26,7 +26,7 @@ Provides detailed traffic analysis for selected road segments. Displays route li
 - When selecting a road you can exclude the pedestrians waiting at an attached bus stop, or analyze only the transit passengers. For stations, you can analyze each individual stop/platform, or all together.
 ## How to Use:
 Click the Traffic Spy icon, and then click a road/path segment, or a transit structure.
-## Removals:
+## Removal:
 This mod is safe to remove and doesn't add data to your save files.
 </LongDescription>
 
@@ -66,7 +66,7 @@ This mod is safe to remove and doesn't add data to your save files.
     <!-- Change log.  Copied from ChangeLog.md file.  Supports minimal markdown subset. -->
     <ChangeLog>
 - You can now analyze transit stops and stations.
-- When analyzing pedestrian traffic on a road, you can now exclude those waiting for transit
+- When analyzing pedestrian traffic on a road, you can now exclude those waiting for transit.
 </ChangeLog>
 
     <!-- External links.  Can be set multiple times. -->
