@@ -3,8 +3,8 @@
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
 		<Title>Traffic Spy</Title>
-		<Version>2.1.1</Version>
-		<Copyright>Copyright © 2025</Copyright>
+		<Version>2.2</Version>
+		<Copyright>Copyright © 2026</Copyright>
 	
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>

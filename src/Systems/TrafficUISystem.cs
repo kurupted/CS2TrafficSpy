@@ -442,12 +442,13 @@ namespace TrafficSpy.Systems
                 // Display Mode Check
                 if (this.displayMode == 0 && !item.isVehicle) return false; 
                 if (this.displayMode == 1 && !isPed) return false; 
+                if (this.displayMode == 1 && this.walkingOnly && item.waitingAtStop != Entity.Null) return false;
             }
 
             if (item.sourceAgent == Entity.Null) return true;
 
             // Range Check
-            if (FilterDistance < 1000000f)
+            if (!isStopOrStation && FilterDistance < 1000000f)
             {
                 Entity entityToCheck = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
                 if (transformLookup.TryGetComponent(entityToCheck, out Transform trans))

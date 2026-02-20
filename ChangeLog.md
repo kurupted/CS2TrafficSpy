@@ -1,2 +1,2 @@
-- Fixed: Tourists going back home were being categorized as Moving Away
-- Changed default hotkey to /
+- You can now analyze transit stops and stations.
+- When analyzing pedestrian traffic on a road, you can now exclude those waiting for transit.

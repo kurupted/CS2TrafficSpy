@@ -56,7 +56,7 @@ namespace TrafficSpy.Jobs
         private void DrawWeightedCurve(CurveDef curveDef, int weight)
         {
             float baseWidth = 1.0f; 
-            float maxAdditionalWidth = 2.2f;
+            float maxAdditionalWidth = 2.0f;
             float widthMultiplier = 0.15f;
 
             float width = baseWidth + math.min(weight * widthMultiplier, maxAdditionalWidth);

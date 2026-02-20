@@ -5,8 +5,10 @@ Provides detailed traffic analysis for selected road segments. Displays route li
 - Filtering Options: Isolate one side of a two-way road, filter to specific travel purposes, or limit analysis based on agents' distance from the selected path.
 - Destination Visualization: Highlights destination buildings.
 - Travel Purpose Summary: View agent counts, grouped by their travel purpose (e.g., commuting, cargo delivery, etc).
-- Works with either vehicles or pedestrians.
+- When analyzing a road segment, choose either vehicle or pedestrian analysis.
+- In addition to roads and pedestrian paths, you can analyze bus stops, subway stations, train stations, and ferry stops.
+- When selecting a road you can exclude the pedestrians waiting at an attached bus stop, or analyze only the transit passengers. For stations, you can analyze each individual stop/platform, or all together.
 ## How to Use:
-Click the Traffic Spy icon, and then click a road/path segment.
+Click the Traffic Spy icon, and then click a road/path segment, or a transit structure.
 ## Removal:
 This mod is safe to remove and doesn't add data to your save files.
