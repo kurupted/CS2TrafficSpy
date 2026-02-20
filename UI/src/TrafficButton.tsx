@@ -40,7 +40,7 @@ const TrafficButton = () => {
                             pointerEvents: "none",
                             zIndex: 10000
                         }}>
-                            Pick a road or path segment.
+                            Pick a road segment, path, or transit structure.
                         </div>
                     </Portal>
                 )}
