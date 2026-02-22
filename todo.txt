@@ -3,7 +3,6 @@
 
 
 TO DO
-direction lane highlights
 
 
 - gray world

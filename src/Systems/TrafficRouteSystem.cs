@@ -57,6 +57,7 @@ namespace TrafficSpy.Systems
                     nodeLookup = GetComponentLookup<Game.Net.Node>(true),
                     edgeLookup = GetComponentLookup<Game.Net.Edge>(true),
                     subLaneBufferLookup = GetBufferLookup<Game.Net.SubLane>(true),
+                    ownerLookup = GetComponentLookup<Game.Common.Owner>(true),
                     
                     overlayBuffer = overlayRenderSystem.GetBuffer(out JobHandle outlineDep)
                 };
@@ -182,26 +183,29 @@ public struct DrawCustomOutlineJob : IJob
     [ReadOnly] public ComponentLookup<Game.Net.Node> nodeLookup;
     [ReadOnly] public ComponentLookup<Game.Net.Edge> edgeLookup;
     [ReadOnly] public BufferLookup<Game.Net.SubLane> subLaneBufferLookup;
-    
+    [ReadOnly] public ComponentLookup<Game.Common.Owner> ownerLookup;
+
     public SimpleOverlayRendererSystem.Buffer overlayBuffer;
 
     public void Execute()
     {
-        UnityEngine.Color spyCyan = new UnityEngine.Color(0f, 215f / 255f, 1f, 0.7f);
+        UnityEngine.Color outlineColor = new UnityEngine.Color(0f, 210f / 255f, 1f, 0.7f);
         float lineWidth = 0.5f;
 
-        // 1. Build a fast lookup set for selected entities
         Unity.Collections.NativeHashSet<Entity> selectedSet = new Unity.Collections.NativeHashSet<Entity>(selectedEntities.Length, Unity.Collections.Allocator.Temp);
         for (int i = 0; i < selectedEntities.Length; i++)
         {
             selectedSet.Add(selectedEntities[i]);
         }
 
+        // Keep track of which roads we've already drawn a box for, so we don't draw overlapping boxes
+        Unity.Collections.NativeHashSet<Entity> processedEdges = new Unity.Collections.NativeHashSet<Entity>(16, Unity.Collections.Allocator.Temp);
+
         for (int i = 0; i < selectedEntities.Length; i++)
         {
             Entity e = selectedEntities[i];
 
-            // 2. BUILDINGS / STOPS
+            // 1. BUILDINGS / STOPS
             if (transformLookup.TryGetComponent(e, out Game.Objects.Transform transform) &&
                 prefabRefLookup.TryGetComponent(e, out Game.Prefabs.PrefabRef prefabRef))
             {
@@ -215,15 +219,15 @@ public struct DrawCustomOutlineJob : IJob
                     Unity.Mathematics.float3 c3 = transform.m_Position + Unity.Mathematics.math.mul(transform.m_Rotation, new Unity.Mathematics.float3(halfX, 0, halfZ));
                     Unity.Mathematics.float3 c4 = transform.m_Position + Unity.Mathematics.math.mul(transform.m_Rotation, new Unity.Mathematics.float3(halfX, 0, -halfZ));
 
-                    overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(c1, c2), lineWidth);
-                    overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(c2, c3), lineWidth);
-                    overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(c3, c4), lineWidth);
-                    overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(c4, c1), lineWidth);
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(c1, c2), lineWidth);
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(c2, c3), lineWidth);
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(c3, c4), lineWidth);
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(c4, c1), lineWidth);
                     continue;
                 }
             }
 
-            // 3. INTERSECTIONS (Nodes)
+            // 2. INTERSECTIONS (Nodes)
             if (nodeLookup.TryGetComponent(e, out Game.Net.Node node))
             {
                 int segments = 24;
@@ -238,89 +242,120 @@ public struct DrawCustomOutlineJob : IJob
                     Unity.Mathematics.float3 p1 = center + new Unity.Mathematics.float3(Unity.Mathematics.math.cos(angle1) * radius, 0, Unity.Mathematics.math.sin(angle1) * radius);
                     Unity.Mathematics.float3 p2 = center + new Unity.Mathematics.float3(Unity.Mathematics.math.cos(angle2) * radius, 0, Unity.Mathematics.math.sin(angle2) * radius);
 
-                    overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(p1, p2), lineWidth);
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(p1, p2), lineWidth);
                 }
                 continue;
             }
 
-            // 4. ROADS & DIRECTIONS (SMART EDGES)
-            if (edgeLookup.HasComponent(e) && curveLookup.TryGetComponent(e, out Game.Net.Curve curve))
+            // 3. UNIFIED ROADS & SUBLANES (The Smart Box)
+            Entity edgeEntity = Entity.Null;
+            if (edgeLookup.HasComponent(e)) 
             {
-                float halfWidth = 4.0f; 
-                if (prefabRefLookup.TryGetComponent(e, out Game.Prefabs.PrefabRef netPrefabRef) &&
-                    netGeomLookup.TryGetComponent(netPrefabRef.m_Prefab, out Game.Prefabs.NetGeometryData netGeom))
+                edgeEntity = e; // We selected the whole road
+            } 
+            else if (ownerLookup.TryGetComponent(e, out Game.Common.Owner owner) && edgeLookup.HasComponent(owner.m_Owner)) 
+            {
+                edgeEntity = owner.m_Owner; // We selected a sublane, map it to the parent road!
+            }
+
+            if (edgeEntity != Entity.Null)
+            {
+                // If we already drew the group box for this road, skip to the next entity
+                if (processedEdges.Contains(edgeEntity)) continue; 
+                processedEdges.Add(edgeEntity);
+
+                if (curveLookup.TryGetComponent(edgeEntity, out Game.Net.Curve curve))
                 {
-                    halfWidth = netGeom.m_DefaultWidth * 0.5f;
-                }
-
-                float minOffset = -halfWidth;
-                float maxOffset = halfWidth;
-
-                // SMART OUTLINE: If we only selected SOME sublanes (one direction), tighten the bounding box
-                if (subLaneBufferLookup.TryGetBuffer(e, out DynamicBuffer<Game.Net.SubLane> subLanes))
-                {
-                    float tempMin = float.MaxValue;
-                    float tempMax = float.MinValue;
-                    bool foundSubLanes = false;
-
-                    Unity.Mathematics.float3 edgePos = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
-                    Unity.Mathematics.float3 edgeTan = Colossal.Mathematics.MathUtils.Tangent(curve.m_Bezier, 0.5f);
-                    Unity.Mathematics.float3 edgeRight = Unity.Mathematics.math.normalize(Unity.Mathematics.math.cross(edgeTan, new Unity.Mathematics.float3(0, 1, 0)));
-
-                    for (int j = 0; j < subLanes.Length; j++)
+                    float halfWidth = 4.0f; 
+                    if (prefabRefLookup.TryGetComponent(edgeEntity, out Game.Prefabs.PrefabRef netPrefabRef) &&
+                        netGeomLookup.TryGetComponent(netPrefabRef.m_Prefab, out Game.Prefabs.NetGeometryData netGeom))
                     {
-                        Entity subLane = subLanes[j].m_SubLane;
-                        // Only measure sublanes that the UI says are active/selected
-                        if (selectedSet.Contains(subLane) && curveLookup.TryGetComponent(subLane, out Game.Net.Curve laneCurve))
+                        halfWidth = netGeom.m_DefaultWidth * 0.5f;
+                    }
+
+                    float minOffset = -halfWidth;
+                    float maxOffset = halfWidth;
+
+                    // SMART OUTLINE: Tighten box around selected sublanes
+                    if (subLaneBufferLookup.TryGetBuffer(edgeEntity, out DynamicBuffer<Game.Net.SubLane> subLanes))
+                    {
+                        float tempMin = float.MaxValue;
+                        float tempMax = float.MinValue;
+                        bool foundSubLanes = false;
+
+                        Unity.Mathematics.float3 edgePos = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
+                        Unity.Mathematics.float3 edgeTan = Colossal.Mathematics.MathUtils.Tangent(curve.m_Bezier, 0.5f);
+                        if (Unity.Mathematics.math.lengthsq(edgeTan) < 0.001f) edgeTan = curve.m_Bezier.d - curve.m_Bezier.a;
+                        if (Unity.Mathematics.math.lengthsq(edgeTan) < 0.001f) edgeTan = new Unity.Mathematics.float3(0, 0, 1);
+
+                        Unity.Mathematics.float3 edgeRight = Unity.Mathematics.math.normalize(Unity.Mathematics.math.cross(edgeTan, new Unity.Mathematics.float3(0, 1, 0)));
+
+                        for (int j = 0; j < subLanes.Length; j++)
                         {
-                            Unity.Mathematics.float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
-                            float offset = Unity.Mathematics.math.dot(lanePos - edgePos, edgeRight);
+                            Entity subLane = subLanes[j].m_SubLane;
                             
-                            if (offset < tempMin) tempMin = offset;
-                            if (offset > tempMax) tempMax = offset;
-                            foundSubLanes = true;
+                            // Include this lane in the math if the ENTIRE road is selected, 
+                            // OR if this specific sublane is selected (directional filter).
+                            bool isLaneSelected = selectedSet.Contains(edgeEntity) || selectedSet.Contains(subLane);
+                            
+                            if (isLaneSelected && curveLookup.TryGetComponent(subLane, out Game.Net.Curve laneCurve))
+                            {
+                                Unity.Mathematics.float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
+                                float offset = Unity.Mathematics.math.dot(lanePos - edgePos, edgeRight);
+                                
+                                if (offset < tempMin) tempMin = offset;
+                                if (offset > tempMax) tempMax = offset;
+                                foundSubLanes = true;
+                            }
+                        }
+
+                        if (foundSubLanes)
+                        {
+                            minOffset = tempMin - 2.0f;
+                            maxOffset = tempMax + 2.0f;
                         }
                     }
 
-                    if (foundSubLanes)
-                    {
-                        // Add 1.8m padding (approx 1 lane width / 2) around the outermost selected lanes
-                        minOffset = tempMin - 1.8f;
-                        maxOffset = tempMax + 1.8f;
+                    Unity.Mathematics.float3 tA = Colossal.Mathematics.MathUtils.Tangent(curve.m_Bezier, 0f);
+                    if (Unity.Mathematics.math.lengthsq(tA) < 0.001f) tA = curve.m_Bezier.d - curve.m_Bezier.a;
+                    if (Unity.Mathematics.math.lengthsq(tA) < 0.001f) tA = new Unity.Mathematics.float3(0, 0, 1); 
+                    Unity.Mathematics.float3 dirA = Unity.Mathematics.math.normalize(tA);
+                    Unity.Mathematics.float3 rightA = Unity.Mathematics.math.normalize(Unity.Mathematics.math.cross(dirA, new Unity.Mathematics.float3(0, 1, 0)));
 
-                        // Clamp it to the physical road so it doesn't spill over
-                        if (minOffset < -halfWidth) minOffset = -halfWidth;
-                        if (maxOffset > halfWidth) maxOffset = halfWidth;
-                    }
+                    Unity.Mathematics.float3 tD = Colossal.Mathematics.MathUtils.Tangent(curve.m_Bezier, 1f);
+                    if (Unity.Mathematics.math.lengthsq(tD) < 0.001f) tD = curve.m_Bezier.d - curve.m_Bezier.a;
+                    if (Unity.Mathematics.math.lengthsq(tD) < 0.001f) tD = new Unity.Mathematics.float3(0, 0, 1); 
+                    Unity.Mathematics.float3 dirD = Unity.Mathematics.math.normalize(tD);
+                    Unity.Mathematics.float3 rightD = Unity.Mathematics.math.normalize(Unity.Mathematics.math.cross(dirD, new Unity.Mathematics.float3(0, 1, 0)));
+
+                    Colossal.Mathematics.Bezier4x3 leftCurve = new Colossal.Mathematics.Bezier4x3(
+                        curve.m_Bezier.a + (rightA * minOffset), 
+                        curve.m_Bezier.b + (rightA * minOffset), 
+                        curve.m_Bezier.c + (rightD * minOffset), 
+                        curve.m_Bezier.d + (rightD * minOffset));
+                    
+                    Colossal.Mathematics.Bezier4x3 rightCurve = new Colossal.Mathematics.Bezier4x3(
+                        curve.m_Bezier.a + (rightA * maxOffset), 
+                        curve.m_Bezier.b + (rightA * maxOffset), 
+                        curve.m_Bezier.c + (rightD * maxOffset), 
+                        curve.m_Bezier.d + (rightD * maxOffset));
+
+                    overlayBuffer.DrawCurve(outlineColor, leftCurve, lineWidth, new Unity.Mathematics.float2(1, 1));
+                    overlayBuffer.DrawCurve(outlineColor, rightCurve, lineWidth, new Unity.Mathematics.float2(1, 1));
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(leftCurve.a, rightCurve.a), lineWidth);
+                    overlayBuffer.DrawLine(outlineColor, new Colossal.Mathematics.Line3.Segment(leftCurve.d, rightCurve.d), lineWidth);
+                    continue;
                 }
-
-                Unity.Mathematics.float3 dirA = Unity.Mathematics.math.normalize(curve.m_Bezier.b - curve.m_Bezier.a);
-                Unity.Mathematics.float3 rightA = Unity.Mathematics.math.cross(dirA, new Unity.Mathematics.float3(0, 1, 0));
-
-                Unity.Mathematics.float3 dirD = Unity.Mathematics.math.normalize(curve.m_Bezier.d - curve.m_Bezier.c);
-                Unity.Mathematics.float3 rightD = Unity.Mathematics.math.cross(dirD, new Unity.Mathematics.float3(0, 1, 0));
-
-                Colossal.Mathematics.Bezier4x3 leftCurve = new Colossal.Mathematics.Bezier4x3(
-                    curve.m_Bezier.a + (rightA * minOffset), 
-                    curve.m_Bezier.b + (rightA * minOffset), 
-                    curve.m_Bezier.c + (rightD * minOffset), 
-                    curve.m_Bezier.d + (rightD * minOffset));
-                
-                Colossal.Mathematics.Bezier4x3 rightCurve = new Colossal.Mathematics.Bezier4x3(
-                    curve.m_Bezier.a + (rightA * maxOffset), 
-                    curve.m_Bezier.b + (rightA * maxOffset), 
-                    curve.m_Bezier.c + (rightD * maxOffset), 
-                    curve.m_Bezier.d + (rightD * maxOffset));
-
-                overlayBuffer.DrawCurve(spyCyan, leftCurve, lineWidth, new Unity.Mathematics.float2(1, 1));
-                overlayBuffer.DrawCurve(spyCyan, rightCurve, lineWidth, new Unity.Mathematics.float2(1, 1));
-                overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(leftCurve.a, rightCurve.a), lineWidth);
-                overlayBuffer.DrawLine(spyCyan, new Colossal.Mathematics.Line3.Segment(leftCurve.d, rightCurve.d), lineWidth);
-                continue;
             }
-            
+
+            // 4. FALLBACK: Standalone curves with no edge/owner (rare, but good for safety)
+            if (curveLookup.TryGetComponent(e, out Game.Net.Curve fallbackCurve) && edgeEntity == Entity.Null && !nodeLookup.HasComponent(e))
+            {
+                overlayBuffer.DrawCurve(outlineColor, fallbackCurve.m_Bezier, lineWidth, new Unity.Mathematics.float2(1, 1));
+            }
         }
 
+        processedEdges.Dispose();
         selectedSet.Dispose();
     }
 }
