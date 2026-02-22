@@ -55,6 +55,9 @@ namespace TrafficSpy.Jobs
         // For on selected segment
         [ReadOnly] public ComponentLookup<CarCurrentLane> carLaneLookup;
         [ReadOnly] public ComponentLookup<HumanCurrentLane> humanLaneLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Vehicle> vehicleLookup;
+        [ReadOnly] public ComponentLookup<TrainCurrentLane> trainLaneLookup;
+        [ReadOnly] public ComponentLookup<WatercraftCurrentLane> watercraftLaneLookup;
 
         public NativeQueue<TrafficRenderData>.ParallelWriter results;
 
@@ -84,11 +87,29 @@ namespace TrafficSpy.Jobs
                 {
                     if (targets.Contains(humanLane.m_Lane)) passesThrough = true;
                 }
+                else if (trainLaneLookup.TryGetComponent(entity, out Game.Vehicles.TrainCurrentLane trainLane))
+                {
+                    if (targets.Contains(trainLane.m_Front.m_Lane) || targets.Contains(trainLane.m_Rear.m_Lane)) 
+                    {
+                        passesThrough = true;
+                    }
+                }
+                else if (watercraftLaneLookup.TryGetComponent(entity, out WatercraftCurrentLane watercraftLane))
+                {
+                    if (targets.Contains(watercraftLane.m_Lane)) passesThrough = true;
+                }
             }
 
             if (!passesThrough) return;
-
-            if (AnalyzeVehicle(entity)) return;
+            
+            if (vehicleLookup.HasComponent(entity))
+            {
+                if (!AnalyzeVehicle(entity))
+                {
+                    EnqueueVehicleDestination(entity, Purpose.None, TrafficType.Service, false, false);
+                }
+                return;
+            }
 
             AnalyzeCitizen(entity);
         }

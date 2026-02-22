@@ -2,7 +2,7 @@
 using Game.Common;
 using Game.Creatures;
 using Game.Net;
-using Game.Objects; // Required for Transform
+using Game.Objects;
 using Game.Pathfind;
 using Game.Vehicles;
 using TrafficSpy.Utils;
@@ -34,6 +34,9 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<CarCurrentLane> carLaneLookup;
         [ReadOnly] public ComponentLookup<HumanCurrentLane> humanLaneLookup;
         [ReadOnly] public ComponentLookup<Transform> transformLookup;
+        [ReadOnly] public ComponentLookup<Game.Vehicles.Vehicle> vehicleLookup;
+        [ReadOnly] public ComponentLookup<TrainCurrentLane> trainLaneLookup;
+        [ReadOnly] public ComponentLookup<WatercraftCurrentLane> watercraftLaneLookup;
 
         public int batchSize;
 
@@ -127,6 +130,20 @@ namespace TrafficSpy.Jobs
                 curveStartT = humanLane.m_CurvePosition.x;
                 hasLane = true;
             }
+            else if (trainLaneLookup.TryGetComponent(entity, out Game.Vehicles.TrainCurrentLane trainLane) 
+                     && curveLookup.TryGetComponent(trainLane.m_Front.m_Lane, out laneCurve))
+            {
+                laneEntity = trainLane.m_Front.m_Lane;
+                curveStartT = trainLane.m_Front.m_CurvePosition.x;
+                hasLane = true;
+            }
+            else if (watercraftLaneLookup.TryGetComponent(entity, out WatercraftCurrentLane watercraftLane) 
+                && curveLookup.TryGetComponent(watercraftLane.m_Lane, out laneCurve))
+            {
+                laneEntity = watercraftLane.m_Lane;
+                curveStartT = watercraftLane.m_CurvePosition.x;
+                hasLane = true;
+            }
 
             if (hasLane)
             {
@@ -137,11 +154,11 @@ namespace TrafficSpy.Jobs
                     weight = laneCounts[laneEntity];
                 }
 
-                // CUT THE CURVE (Visual Fix)
+                // CUT THE CURVE
                 // Draw from current position (x) to end (1.0)
                 Bezier4x3 cutBezier = MathUtils.Cut(laneCurve.m_Bezier, curveStartT);
 
-                // Write with FORCED WEIGHT (Color Fix)
+                // Write with FORCED WEIGHT
                 Write(new CurveDef(cutBezier, agentType), batchIndex, weight);
             }
         }

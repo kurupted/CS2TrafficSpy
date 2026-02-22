@@ -52,7 +52,23 @@ namespace TrafficSpy.Systems
                 foreach (var item in TrafficUISystem.CurrentRenderList)
                 {
                     Entity agentToHighlight = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
-                    if (EntityManager.Exists(agentToHighlight)) newSet.Add(agentToHighlight);
+                    if (EntityManager.Exists(agentToHighlight)) 
+                    {
+                        newSet.Add(agentToHighlight);
+                        
+                        // Highlight attached trailers, train carriages, etc.
+                        if (EntityManager.HasBuffer<Game.Vehicles.LayoutElement>(agentToHighlight))
+                        {
+                            var layoutElements = EntityManager.GetBuffer<Game.Vehicles.LayoutElement>(agentToHighlight);
+                            foreach (var layoutElement in layoutElements)
+                            {
+                                if (EntityManager.Exists(layoutElement.m_Vehicle))
+                                {
+                                    newSet.Add(layoutElement.m_Vehicle);
+                                }
+                            }
+                        }
+                    }
                     
                     if (item.destinationEntity != Entity.Null && EntityManager.Exists(item.destinationEntity))
                         newSet.Add(item.destinationEntity);

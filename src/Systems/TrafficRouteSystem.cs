@@ -108,6 +108,9 @@ namespace TrafficSpy.Systems
                 carNavigationLaneSegmentLookup = GetBufferLookup<CarNavigationLane>(true),
                 carLaneLookup = GetComponentLookup<CarCurrentLane>(true),
                 humanLaneLookup = GetComponentLookup<HumanCurrentLane>(true),
+                vehicleLookup = GetComponentLookup<Game.Vehicles.Vehicle>(true),
+                trainLaneLookup = GetComponentLookup<Game.Vehicles.TrainCurrentLane>(true),
+                watercraftLaneLookup = GetComponentLookup<Game.Vehicles.WatercraftCurrentLane>(true),
                 transformLookup = GetComponentLookup<Transform>(true)
             };
 
