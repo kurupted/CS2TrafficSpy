@@ -62,7 +62,13 @@ namespace TrafficSpy.Systems
                     // check its owner to see if the OWNER is a valid target.
                     if (!IsValidSpyTarget(potentialTarget) && EntityManager.HasComponent<Owner>(potentialTarget))
                     {
-                        potentialTarget = EntityManager.GetComponentData<Owner>(potentialTarget).m_Owner;
+                        // Only inherit the owner if we clicked a physical object. 
+                        // Game.Objects.Static covers all physical props, trees, and shelters!
+                        // This prevents hovering over abstract floating text/labels from selecting the road.
+                        if (EntityManager.HasComponent<Game.Objects.Static>(potentialTarget))
+                        {
+                            potentialTarget = EntityManager.GetComponentData<Owner>(potentialTarget).m_Owner;
+                        }
                     }
 
                     // 2. FINAL VALIDATION

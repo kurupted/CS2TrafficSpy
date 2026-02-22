@@ -68,10 +68,23 @@ namespace TrafficSpy.Jobs
             // 1. Check Path Buffer (Future path)
             for (int i = 0; i < path.Length; i++)
             {
-                if (targets.Contains(path[i].m_Target))
+                Entity pathTarget = path[i].m_Target;
+    
+                // Direct match
+                if (targets.Contains(pathTarget))
                 {
                     passesThrough = true;
                     break;
+                }
+                // Fallback: Check if the path target is owned by our selected segment 
+                // (catches nested connection lanes, aggregate road chunks, etc.)
+                else if (ownerLookup.TryGetComponent(pathTarget, out Owner owner))
+                {
+                    if (targets.Contains(owner.m_Owner))
+                    {
+                        passesThrough = true;
+                        break;
+                    }
                 }
             }
 

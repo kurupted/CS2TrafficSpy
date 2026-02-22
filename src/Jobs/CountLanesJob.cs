@@ -10,7 +10,7 @@ namespace TrafficSpy.Jobs
     [BurstCompile]
     public struct CountLanesJob : IJob
     {
-        [ReadOnly] public NativeList<EntityRouteInput> input;
+        [ReadOnly] public NativeArray<EntityRouteInput> input;
         [ReadOnly] public ComponentLookup<CarCurrentLane> carLaneLookup;
         [ReadOnly] public ComponentLookup<HumanCurrentLane> humanLaneLookup;
         

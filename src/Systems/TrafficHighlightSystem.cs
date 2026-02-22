@@ -37,13 +37,13 @@ namespace TrafficSpy.Systems
 
             // 1. ALWAYS Highlight Selected Lanes/Road
             // accessing the STATIC list on the CLASS
-            if (TrafficUISystem.AnalyzedLanes != null) 
+            /*if (TrafficUISystem.AnalyzedLanes != null) 
             {
                 foreach (var entity in TrafficUISystem.AnalyzedLanes)
                 {
                     if (EntityManager.Exists(entity)) newSet.Add(entity);
                 }
-            }
+            }*/
 
             // 2. CONDITIONALLY Highlight Agents
             // accessing the INSTANCE property on the SYSTEM

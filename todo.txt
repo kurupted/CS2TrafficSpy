@@ -3,7 +3,7 @@
 
 
 TO DO
-    maybe don't highlight the road segment being analyzed, instead doing our own tracing, so that highlights within will work. objs that are highlighted but on a highlighted road do not appear highlighted
+direction lane highlights
 
 
 - gray world

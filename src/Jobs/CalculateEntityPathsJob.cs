@@ -24,7 +24,7 @@ namespace TrafficSpy.Jobs
     [BurstCompile]
     public struct CalculateEntityPathsJob : IJobParallelForBatch
     {
-        [ReadOnly] public NativeList<EntityRouteInput> input;
+        [ReadOnly] public NativeArray<EntityRouteInput> input;
         [ReadOnly] public NativeHashMap<Entity, int> laneCounts; // Pre-Pass Data
         
         [ReadOnly] public ComponentLookup<PathOwner> pathOwnerLookup;
