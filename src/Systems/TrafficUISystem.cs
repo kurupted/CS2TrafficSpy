@@ -515,47 +515,60 @@ namespace TrafficSpy.Systems
             targets.Add(segment);
             
             // 1. Get the main road segment's geometry
-            if (EntityManager.HasComponent<Curve>(segment) && 
-                EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
+            if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
             {
-                Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
-                // Calculate the "Center" and "Right Vector" of the road at the midpoint (t=0.5)
-                // Position(0.5)
-                float3 segmentPos = Colossal.Mathematics.MathUtils.Position(segmentCurve.m_Bezier, 0.5f);
-                // Tangent(0.5) gives the forward direction
-                float3 segmentTan = Colossal.Mathematics.MathUtils.Tangent(segmentCurve.m_Bezier, 0.5f);
-                // Cross product with Up (0,1,0) gives the Right Vector
-                float3 segmentRight = math.cross(segmentTan, new float3(0, 1, 0));
-
-                for (int i = 0; i < lanes.Length; i++)
+                // 1. EDGE CASE (Standard Road Segment)
+                if (EntityManager.HasComponent<Curve>(segment))
                 {
-                    Entity subLaneEntity = lanes[i].m_SubLane;
-                    if (directionMode != 0)
-                    {
-                        // We check the geometry of the sub-lane
-                        if (EntityManager.HasComponent<Curve>(subLaneEntity))
-                        {
-                            Curve laneCurve = EntityManager.GetComponentData<Curve>(subLaneEntity);
-                            float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
-                            
-                            // Calculate vector from Road Center -> Lane Center
-                            float3 diff = lanePos - segmentPos;
-                            
-                            // Dot product determines side:
-                            // > 0 means the lane is on the Right side of the road center
-                            // < 0 means the lane is on the Left side of the road center
-                            float dot = math.dot(diff, segmentRight);
-                            
-                            // Threshold 0.1f ignores tiny floating point errors for exact center lanes
+                    Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
+                    // Calculate the "Center" and "Right Vector" of the road at the midpoint (t=0.5)
+                    // Position(0.5)
+                    float3 segmentPos = Colossal.Mathematics.MathUtils.Position(segmentCurve.m_Bezier, 0.5f);
+                    // Tangent(0.5) gives the forward direction
+                    float3 segmentTan = Colossal.Mathematics.MathUtils.Tangent(segmentCurve.m_Bezier, 0.5f);
+                    // Cross product with Up (0,1,0) gives the Right Vector
+                    float3 segmentRight = math.cross(segmentTan, new float3(0, 1, 0));
 
-                            // Mode 1 (Side A): We want ONE side (e.g. Left). So skip if dot is Positive (Right).
-                            if (directionMode == 1 && dot > 0.1f) continue;
-                            
-                            // Mode 2 (Side B): We want OTHER side (e.g. Right). So skip if dot is Negative (Left).
-                            if (directionMode == 2 && dot < -0.1f) continue;
+                    for (int i = 0; i < lanes.Length; i++)
+                    {
+                        Entity subLaneEntity = lanes[i].m_SubLane;
+                        if (directionMode != 0)
+                        {
+                            // We check the geometry of the sub-lane
+                            if (EntityManager.HasComponent<Curve>(subLaneEntity))
+                            {
+                                Curve laneCurve = EntityManager.GetComponentData<Curve>(subLaneEntity);
+                                float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
+                                
+                                // Calculate vector from Road Center -> Lane Center
+                                float3 diff = lanePos - segmentPos;
+                                
+                                // Dot product determines side:
+                                // > 0 means the lane is on the Right side of the road center
+                                // < 0 means the lane is on the Left side of the road center
+                                float dot = math.dot(diff, segmentRight);
+                                
+                                // Threshold 0.1f ignores tiny floating point errors for exact center lanes
+
+                                // Mode 1 (Side A): We want ONE side (e.g. Left). So skip if dot is Positive (Right).
+                                if (directionMode == 1 && dot > 0.1f) continue;
+                                
+                                // Mode 2 (Side B): We want OTHER side (e.g. Right). So skip if dot is Negative (Left).
+                                if (directionMode == 2 && dot < -0.1f) continue;
+                            }
                         }
+                        targets.Add(subLaneEntity);
                     }
-                    targets.Add(subLaneEntity);
+                }
+                // 2. NODE CASE (Intersection / Roundabout)
+                else if (EntityManager.HasComponent<Game.Net.Node>(segment))
+                {
+                    // Nodes don't have a simple forward/backward direction.
+                    // Ignore directionMode and just add all internal connection lanes.
+                    for (int i = 0; i < lanes.Length; i++)
+                    {
+                        targets.Add(lanes[i].m_SubLane);
+                    }
                 }
             }
             return targets;
@@ -896,6 +909,9 @@ namespace TrafficSpy.Systems
                     maintenanceVehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.MaintenanceVehicle>(true),
                     carLaneLookup = SystemAPI.GetComponentLookup<CarCurrentLane>(true),
                     humanLaneLookup = SystemAPI.GetComponentLookup<HumanCurrentLane>(true),
+                    vehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Vehicle>(true),
+                    trainLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.TrainCurrentLane>(true),
+                    watercraftLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.WatercraftCurrentLane>(true),
                     results = resultsQueue.AsParallelWriter()
                 };
                 pathJobHandle = pathJob.ScheduleParallel(pathOwnerQuery, default);
