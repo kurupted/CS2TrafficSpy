@@ -1,4 +1,5 @@
-﻿using Game.Common;
+﻿using Colossal.Entities;
+using Game.Common;
 using Game.Input;
 using Game.Net;
 using Game.Prefabs;
@@ -131,24 +132,47 @@ namespace TrafficSpy.Systems
         {
             if (newHover == _hoveredEntity) return;
 
-            if (_hoveredEntity != Entity.Null)
+            // Remove old hover highlights
+            if (_hoveredEntity != Entity.Null && _toolSystem.selected != _hoveredEntity)
             {
-                if (_toolSystem.selected != _hoveredEntity)
+                EntityManager.RemoveComponent<Highlighted>(_hoveredEntity);
+                EntityManager.AddComponent<BatchesUpdated>(_hoveredEntity);
+        
+                // ONLY highlight sublanes if the hovered entity is an intersection node
+                if (EntityManager.HasComponent<Game.Net.Node>(_hoveredEntity) && 
+                    EntityManager.TryGetBuffer(_hoveredEntity, true, out DynamicBuffer<Game.Net.SubLane> subLanes)) 
                 {
-                    EntityManager.RemoveComponent<Highlighted>(_hoveredEntity);
-                    EntityManager.AddComponent<BatchesUpdated>(_hoveredEntity);
+                    foreach (var lane in subLanes) {
+                        if (EntityManager.Exists(lane.m_SubLane)) {
+                            EntityManager.RemoveComponent<Highlighted>(lane.m_SubLane);
+                            EntityManager.AddComponent<BatchesUpdated>(lane.m_SubLane);
+                        }
+                    }
                 }
             }
 
+            // Apply new hover highlights
             if (newHover != Entity.Null)
             {
                 EntityManager.AddComponent<Highlighted>(newHover);
                 EntityManager.AddComponent<BatchesUpdated>(newHover);
+        
+                // ONLY highlight sublanes if the hovered entity is an intersection node
+                if (EntityManager.HasComponent<Game.Net.Node>(newHover) && 
+                    EntityManager.TryGetBuffer(newHover, true, out DynamicBuffer<Game.Net.SubLane> subLanes)) 
+                {
+                    foreach (var lane in subLanes) {
+                        if (EntityManager.Exists(lane.m_SubLane)) {
+                            EntityManager.AddComponent<Highlighted>(lane.m_SubLane);
+                            EntityManager.AddComponent<BatchesUpdated>(lane.m_SubLane);
+                        }
+                    }
+                }
             }
 
             _hoveredEntity = newHover;
         }
-
+        
         public void Enable()
         {
             _toolSystem.activeTool = this;
@@ -176,9 +200,21 @@ namespace TrafficSpy.Systems
             // Cleanup highlights
             if (_hoveredEntity != Entity.Null)
             {
-                 EntityManager.RemoveComponent<Highlighted>(_hoveredEntity);
-                 EntityManager.AddComponent<BatchesUpdated>(_hoveredEntity);
-                 _hoveredEntity = Entity.Null;
+                EntityManager.RemoveComponent<Highlighted>(_hoveredEntity);
+                EntityManager.AddComponent<BatchesUpdated>(_hoveredEntity);
+         
+                // ONLY remove sublane highlights if it was a node
+                if (EntityManager.HasComponent<Game.Net.Node>(_hoveredEntity) && 
+                    EntityManager.TryGetBuffer(_hoveredEntity, true, out DynamicBuffer<Game.Net.SubLane> subLanes)) 
+                {
+                    foreach (var lane in subLanes) {
+                        if (EntityManager.Exists(lane.m_SubLane)) {
+                            EntityManager.RemoveComponent<Highlighted>(lane.m_SubLane);
+                            EntityManager.AddComponent<BatchesUpdated>(lane.m_SubLane);
+                        }
+                    }
+                }
+                _hoveredEntity = Entity.Null;
             }
         }
 
