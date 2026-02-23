@@ -58,6 +58,7 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Game.Vehicles.Vehicle> vehicleLookup;
         [ReadOnly] public ComponentLookup<TrainCurrentLane> trainLaneLookup;
         [ReadOnly] public ComponentLookup<WatercraftCurrentLane> watercraftLaneLookup;
+        [ReadOnly] public BufferLookup<CarNavigationLane> carNavigationLaneLookup;
 
         public NativeQueue<TrafficRenderData>.ParallelWriter results;
 
@@ -65,22 +66,22 @@ namespace TrafficSpy.Jobs
         {
             bool passesThrough = false;
             
-            // 1. Check Path Buffer (Future path)
+            // Check Path Buffer (Future macro-path)
             for (int i = 0; i < path.Length; i++)
             {
-                Entity pathTarget = path[i].m_Target;
-    
-                // Direct match
-                if (targets.Contains(pathTarget))
+                if (IsTargetMatch(path[i].m_Target))
                 {
                     passesThrough = true;
                     break;
                 }
-                // Fallback: Check if the path target is owned by our selected segment 
-                // (catches nested connection lanes, aggregate road chunks, etc.)
-                else if (ownerLookup.TryGetComponent(pathTarget, out Owner owner))
+            }
+
+            // Check Navigation Lane Buffer (Immediate short-term future path)
+            if (!passesThrough && carNavigationLaneLookup.TryGetBuffer(entity, out DynamicBuffer<CarNavigationLane> navLanes))
+            {
+                for (int i = 0; i < navLanes.Length; i++)
                 {
-                    if (targets.Contains(owner.m_Owner))
+                    if (IsTargetMatch(navLanes[i].m_Lane))
                     {
                         passesThrough = true;
                         break;
@@ -88,8 +89,7 @@ namespace TrafficSpy.Jobs
                 }
             }
 
-            // 2. Check Current Physical Position
-            // If the path check failed, check if they are physically on one of the target lanes right now.
+            // Check Current Physical Position
             if (!passesThrough)
             {
                 if (carLaneLookup.TryGetComponent(entity, out CarCurrentLane carLane))
@@ -125,6 +125,27 @@ namespace TrafficSpy.Jobs
             }
 
             AnalyzeCitizen(entity);
+        }
+
+        // HELPER METHOD: Climbs up to 2 levels of parents to catch micro-pathing entities
+        private bool IsTargetMatch(Entity pathTarget)
+        {
+            // Direct Match (Edges, Nodes, SubLanes)
+            if (targets.Contains(pathTarget)) return true;
+            
+            // 1st Level Parent Check (e.g. Lane -> SubLane)
+            if (ownerLookup.TryGetComponent(pathTarget, out Owner owner1))
+            {
+                if (targets.Contains(owner1.m_Owner)) return true;
+                
+                // 2nd Level Parent Check (e.g. SubLane -> Edge)
+                if (ownerLookup.TryGetComponent(owner1.m_Owner, out Owner owner2))
+                {
+                    if (targets.Contains(owner2.m_Owner)) return true;
+                }
+            }
+            
+            return false;
         }
 
         private bool AnalyzeVehicle(Entity entity)

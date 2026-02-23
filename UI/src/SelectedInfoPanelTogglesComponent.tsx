@@ -196,9 +196,9 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
 
                 {/* 4. RANGE TOGGLES */}
                 { !isTransitStop && renderButtonRow("Max Range", [
-                    { label: "S", active: currentRangeMode === 0, onClick: () => setRangeMode(0) },
-                    { label: "M", active: currentRangeMode === 1, onClick: () => setRangeMode(1) },
-                    { label: "L", active: currentRangeMode === 2, onClick: () => setRangeMode(2) },
+                    { label: "1km (0.6mi)", active: currentRangeMode === 0, onClick: () => setRangeMode(0) },
+                    { label: "3km (1.8mi)", active: currentRangeMode === 1, onClick: () => setRangeMode(1) },
+                    { label: "10km (6mi)", active: currentRangeMode === 2, onClick: () => setRangeMode(2) },
                     { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
                 ])}
 

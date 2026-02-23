@@ -514,6 +514,18 @@ namespace TrafficSpy.Systems
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
             targets.Add(segment);
             
+            // 1. MACRO-PATHFINDING FIX (Highways & Long Distances)
+            // CS2 groups highways into "Aggregate" entities. Cars far away target this aggregate 
+            // instead of the specific micro-segment. By adding it to our targets, we catch them!
+            if (EntityManager.HasComponent<Game.Net.Aggregated>(segment))
+            {
+                Game.Net.Aggregated aggregated = EntityManager.GetComponentData<Game.Net.Aggregated>(segment);
+                if (aggregated.m_Aggregate != Entity.Null)
+                {
+                    targets.Add(aggregated.m_Aggregate);
+                }
+            }
+            
             // 1. Get the main road segment's geometry
             if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
             {
@@ -786,7 +798,10 @@ namespace TrafficSpy.Systems
             AnalyzedLanes.Clear(); // Clear lanes
             
             // Calculate Center Position for Range Filtering
-            if (EntityManager.HasComponent<Curve>(selectedSegment)) {
+            if (EntityManager.HasComponent<Game.Net.Node>(selectedSegment)) {
+                Game.Net.Node node = EntityManager.GetComponentData<Game.Net.Node>(selectedSegment);
+                FilterPosition = node.m_Position;
+            } else if (EntityManager.HasComponent<Curve>(selectedSegment)) {
                 Curve curve = EntityManager.GetComponentData<Curve>(selectedSegment);
                 FilterPosition = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
             } else if (SystemAPI.GetComponentLookup<Transform>(true).TryGetComponent(selectedSegment, out Transform tr)) {
@@ -912,6 +927,7 @@ namespace TrafficSpy.Systems
                     vehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Vehicle>(true),
                     trainLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.TrainCurrentLane>(true),
                     watercraftLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.WatercraftCurrentLane>(true),
+                    carNavigationLaneLookup = SystemAPI.GetBufferLookup<CarNavigationLane>(true),
                     results = resultsQueue.AsParallelWriter()
                 };
                 pathJobHandle = pathJob.ScheduleParallel(pathOwnerQuery, default);
