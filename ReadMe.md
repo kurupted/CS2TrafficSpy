@@ -12,8 +12,7 @@ Click the Traffic Spy icon, and then click a road/path segment, or a transit str
 ## Tips:
 - Except at short distances, the routes of cims are not lane-specific.
 - When analyzing an intersection, you can choose "Lane Data Only" to see only the routes of vehicles who have chosen specific lanes.
+- Bikes count as vehicles.
+- Check out my other mod, Radius Delete :) 
 ## Removal:
 This mod is safe to remove and doesn't add data to your save files.
-
-
-Check out my other mod, Radius Delete :)

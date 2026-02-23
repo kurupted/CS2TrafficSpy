@@ -37,6 +37,9 @@ namespace TrafficSpy.Jobs
         [ReadOnly] public ComponentLookup<Game.Vehicles.Vehicle> vehicleLookup;
         [ReadOnly] public ComponentLookup<TrainCurrentLane> trainLaneLookup;
         [ReadOnly] public ComponentLookup<WatercraftCurrentLane> watercraftLaneLookup;
+        [ReadOnly] public ComponentLookup<Game.Net.PedestrianLane> pedestrianLaneLookup;
+        [ReadOnly] public ComponentLookup<Game.Net.CarLane> netCarLaneLookup;
+        [ReadOnly] public ComponentLookup<Game.Net.TrackLane> trackLaneLookup;
 
         public int batchSize;
 
@@ -56,7 +59,7 @@ namespace TrafficSpy.Jobs
             }
         }
 
-        private void WriteEntityRoute(EntityRouteInput item, int batchIndex)
+    private void WriteEntityRoute(EntityRouteInput item, int batchIndex)
         {
             Entity entity = item.entity;
             byte agentType = item.type;
@@ -69,9 +72,22 @@ namespace TrafficSpy.Jobs
             for (int i = pathOwner.m_ElementIndex + 1; i < pathElements.Length; ++i)
             {
                 PathElement element = pathElements[i];
-                if (curveLookup.TryGetComponent(element.m_Target, out Curve curve))
+                Entity target = element.m_Target;
+
+                // BURST-SAFE CHECK: Try to get the Curve FIRST.
+                // This acts as an ECS validity guard. If it's a stale entity, an abstract routing node, 
+                // or a building, TryGetComponent safely returns false without crashing.
+                if (curveLookup.TryGetComponent(target, out Curve curve))
                 {
-                    // Weight 1, will sum up in the results map
+                    if (agentType == 4) // Vehicle
+                    {
+                        if (pedestrianLaneLookup.HasComponent(target)) continue;
+                    }
+                    else if (agentType == 2) // Pedestrian
+                    {
+                        if (netCarLaneLookup.HasComponent(target) || trackLaneLookup.HasComponent(target)) continue;
+                    }
+
                     Write(new CurveDef(curve.m_Bezier, agentType), batchIndex, 1);
                 }
             }

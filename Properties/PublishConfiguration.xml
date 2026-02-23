@@ -28,11 +28,11 @@ Click the Traffic Spy icon, and then click a road/path segment, or a transit str
 ## Tips:
 - Except at short distances, the routes of cims are not lane-specific.
 - When analyzing an intersection, you can choose "Lane Data Only" to see only the routes of vehicles who have chosen specific lanes.
+- Bikes count as vehicles.
+- Check out my other mod, Radius Delete :) 
 ## Removal:
 This mod is safe to remove and doesn't add data to your save files.
-
-
-Check out my other mod, Radius Delete :)
+~~~~
 </LongDescription>
 
     <!-- Thumbnail. -->
@@ -56,7 +56,7 @@ Check out my other mod, Radius Delete :)
     <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/traffic-spy.1884568/" />
 
     <!-- Version of the mod.  Copied from assembly Version. -->
-    <ModVersion Value="3.0" />
+    <ModVersion Value="3.0.1" />
 
     <!-- Recommended version of the base game to use the mod. -->
     <GameVersion Value="1.5.*" />

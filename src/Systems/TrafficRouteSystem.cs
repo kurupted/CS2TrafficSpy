@@ -137,7 +137,10 @@ namespace TrafficSpy.Systems
                 vehicleLookup = GetComponentLookup<Game.Vehicles.Vehicle>(true),
                 trainLaneLookup = GetComponentLookup<Game.Vehicles.TrainCurrentLane>(true),
                 watercraftLaneLookup = GetComponentLookup<Game.Vehicles.WatercraftCurrentLane>(true),
-                transformLookup = GetComponentLookup<Transform>(true)
+                transformLookup = GetComponentLookup<Transform>(true),
+                pedestrianLaneLookup = GetComponentLookup<Game.Net.PedestrianLane>(true),
+                netCarLaneLookup = GetComponentLookup<Game.Net.CarLane>(true),
+                trackLaneLookup = GetComponentLookup<Game.Net.TrackLane>(true)
             };
 
             JobHandle calcHandle = calcJob.ScheduleBatch(entityInputList.Length, batchSize, countHandle);
@@ -190,7 +193,7 @@ public struct DrawCustomOutlineJob : IJob
 
     public void Execute()
     {
-        UnityEngine.Color outlineColor = new UnityEngine.Color(0f, 210f / 255f, 1f, 0.7f);
+        UnityEngine.Color outlineColor = new UnityEngine.Color(255f, 255f, 255f, 0.5f);
         float lineWidth = 0.5f;
 
         Unity.Collections.NativeHashSet<Entity> selectedSet = new Unity.Collections.NativeHashSet<Entity>(selectedEntities.Length, Unity.Collections.Allocator.Temp);

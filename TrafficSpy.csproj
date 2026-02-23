@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
 		<Title>Traffic Spy</Title>
-		<Version>3.0</Version>
+		<Version>3.0.1</Version>
 		<Copyright>Copyright © 2026</Copyright>
 	
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
