@@ -80,6 +80,7 @@ namespace TrafficSpy.Systems
         public bool ShowRoutes { get; private set; } = true; // Default to True
         private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
         private int rangeMode = 1; // Default to Medium
+        public int RangeMode => rangeMode;
 
         // Statics for the Route System to read
         public static float3 FilterPosition = float3.zero;
@@ -240,8 +241,10 @@ namespace TrafficSpy.Systems
                 this.rangeMode = mode;
                 this.rangeModeBinding.Update(mode);
                 UpdateRangeDistance();
-                CalculateStats();
-                ApplyFilter();
+                if (lastSelectedEntity != Entity.Null)
+                {
+                    RunAnalysis(lastSelectedEntity);
+                }
             }));
 
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
@@ -416,11 +419,11 @@ namespace TrafficSpy.Systems
         {
             switch (rangeMode)
             {
-                case 0: FilterDistance = 1000f; break; // Short (1km)
-                case 1: FilterDistance = 3000f; break; // Medium (3km)
-                case 2: FilterDistance = 10000f; break; // Long (10km)
+                case 0: FilterDistance = float.MaxValue; break; // Lane Data Only (distance doesn't matter, handled by job skipping PathElements)
+                case 1: FilterDistance = 1000f; break; // 1km
+                case 2: FilterDistance = 2000f; break; // 2km
                 case 3: FilterDistance = float.MaxValue; break; // Unlimited
-                default: FilterDistance = 3000f; break;
+                default: FilterDistance = 2000f; break;
             }
         }
         
@@ -455,6 +458,12 @@ namespace TrafficSpy.Systems
                 {
                     if (math.distancesq(trans.m_Position, FilterPosition) > (FilterDistance * FilterDistance))
                         return false;
+                }
+                else 
+                {
+                    // unspawned / in a building have no transform
+                    // Return false here so they get excluded if range isn't unlimited.
+                    return false;
                 }
             }
             return true;
@@ -512,24 +521,27 @@ namespace TrafficSpy.Systems
         private NativeHashSet<Entity> GetTargetEntities(Entity segment, Allocator allocator, int directionMode)
         {
             NativeHashSet<Entity> targets = new NativeHashSet<Entity>(16, allocator);
-            targets.Add(segment);
             
-            // 1. MACRO-PATHFINDING FIX (Highways & Long Distances)
-            // CS2 groups highways into "Aggregate" entities. Cars far away target this aggregate 
-            // instead of the specific micro-segment. By adding it to our targets, we catch them!
-            if (EntityManager.HasComponent<Game.Net.Aggregated>(segment))
+            if (directionMode == 0 || EntityManager.HasComponent<Game.Net.Node>(segment))
             {
-                Game.Net.Aggregated aggregated = EntityManager.GetComponentData<Game.Net.Aggregated>(segment);
-                if (aggregated.m_Aggregate != Entity.Null)
+                targets.Add(segment);
+
+                // 1. MACRO-PATHFINDING (Highways & Long Distances)
+                // CS2 groups highways into "Aggregate" entities. Cars far away may target this aggregate instead of the specific micro-segment
+                if (EntityManager.HasComponent<Game.Net.Aggregated>(segment))
                 {
-                    targets.Add(aggregated.m_Aggregate);
+                    Game.Net.Aggregated aggregated = EntityManager.GetComponentData<Game.Net.Aggregated>(segment);
+                    if (aggregated.m_Aggregate != Entity.Null)
+                    {
+                        targets.Add(aggregated.m_Aggregate);
+                    }
                 }
             }
             
-            // 1. Get the main road segment's geometry
+            // Get the main road segment's geometry
             if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
             {
-                // 1. EDGE CASE (Standard Road Segment)
+                // EDGE CASE (Standard Road Segment)
                 if (EntityManager.HasComponent<Curve>(segment))
                 {
                     Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
@@ -572,7 +584,7 @@ namespace TrafficSpy.Systems
                         targets.Add(subLaneEntity);
                     }
                 }
-                // 2. NODE CASE (Intersection / Roundabout)
+                // NODE CASE (Intersection / Roundabout)
                 else if (EntityManager.HasComponent<Game.Net.Node>(segment))
                 {
                     // Nodes don't have a simple forward/backward direction.
@@ -586,6 +598,7 @@ namespace TrafficSpy.Systems
             return targets;
         }
 
+        
         private bool IsValidTransitStop(Entity entity)
         {
             return EntityManager.HasComponent<Game.Routes.BusStop>(entity) ||
@@ -896,6 +909,7 @@ namespace TrafficSpy.Systems
                 PathActivityJob pathJob = new PathActivityJob
                 {
                     targets = targets,
+                    checkPathElements = (this.rangeMode != 0),
                     travelPurposeLookup = SystemAPI.GetComponentLookup<TravelPurpose>(true),
                     targetLookup = SystemAPI.GetComponentLookup<Target>(true),
                     householdLookup = SystemAPI.GetComponentLookup<Household>(true),

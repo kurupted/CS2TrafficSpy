@@ -148,7 +148,8 @@ namespace TrafficSpy.Systems
                 overlayBuffer = overlayRenderSystem.GetBuffer(out JobHandle renderDependency),
                 maxVehicleTraffic = ModSettings.ModSettings.Instance.MaxVehicleTraffic,
                 maxPedestrianTraffic = ModSettings.ModSettings.Instance.MaxPedestrianTraffic,
-                alphaMultiplier = TrafficSpy.ModSettings.ModSettings.Instance.RouteOpacity / 100f
+                alphaMultiplier = TrafficSpy.ModSettings.ModSettings.Instance.RouteOpacity / 100f,
+                isLaneDataOnly = trafficUISystem.RangeMode == 0
             };
 
             JobHandle finalHandle = renderJob.Schedule(JobHandle.CombineDependencies(calcHandle, renderDependency));

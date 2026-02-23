@@ -17,6 +17,7 @@ namespace TrafficSpy.Jobs
     public partial struct PathActivityJob : IJobEntity
     {
         [ReadOnly] public NativeHashSet<Entity> targets;
+        [ReadOnly] public bool checkPathElements;
 
         // Citizen Lookups
         [ReadOnly] public ComponentLookup<TravelPurpose> travelPurposeLookup;
@@ -67,12 +68,15 @@ namespace TrafficSpy.Jobs
             bool passesThrough = false;
             
             // Check Path Buffer (Future macro-path)
-            for (int i = 0; i < path.Length; i++)
+            if (checkPathElements)
             {
-                if (IsTargetMatch(path[i].m_Target))
+                for (int i = 0; i < path.Length; i++)
                 {
-                    passesThrough = true;
-                    break;
+                    if (IsTargetMatch(path[i].m_Target))
+                    {
+                        passesThrough = true;
+                        break;
+                    }
                 }
             }
 

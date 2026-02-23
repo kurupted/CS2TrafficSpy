@@ -7,6 +7,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace TrafficSpy.Jobs
 {
@@ -19,14 +20,32 @@ namespace TrafficSpy.Jobs
         public float maxPedestrianTraffic;
         
         public float alphaMultiplier;
+        public bool isLaneDataOnly;
 
         [ReadOnly]
         public NativeArray<NativeHashMap<CurveDef, int>> curveData;
+
+        // Helper struct for sorting
+        private struct WeightedCurve
+        {
+            public CurveDef Curve;
+            public int Weight;
+        }
+
+        // Comparer to sort ascending (Low Density -> High Density)
+        private struct WeightedCurveComparer : IComparer<WeightedCurve>
+        {
+            public int Compare(WeightedCurve x, WeightedCurve y)
+            {
+                return x.Weight.CompareTo(y.Weight);
+            }
+        }
 
         public void Execute()
         {
             NativeHashMap<CurveDef, int> aggregatedCurves = new NativeHashMap<CurveDef, int>(1000, Allocator.Temp);
 
+            // 1. Aggregate results from parallel batches
             for (int i = 0; i < curveData.Length; i++)
             {
                 var batchMap = curveData[i];
@@ -34,8 +53,6 @@ namespace TrafficSpy.Jobs
                 {
                     if (aggregatedCurves.ContainsKey(kvp.Key))
                     {
-                        // Note: For "Cut" curves, this will likely only see 1 entry with high weight
-                        // For "Future" curves, this will see many entries with weight 1, summing up.
                         aggregatedCurves[kvp.Key] += kvp.Value;
                     }
                     else
@@ -45,19 +62,38 @@ namespace TrafficSpy.Jobs
                 }
             }
 
+            // 2. Transfer to a list so we can sort them
+            NativeList<WeightedCurve> sortedList = new NativeList<WeightedCurve>(aggregatedCurves.Count, Allocator.Temp);
             foreach (var kvp in aggregatedCurves)
             {
-                DrawWeightedCurve(kvp.Key, kvp.Value);
+                sortedList.Add(new WeightedCurve { Curve = kvp.Key, Weight = kvp.Value });
             }
 
+            // 3. Sort: Ascending order means Low traffic is drawn first, High traffic (Red) is drawn last (on top)
+            sortedList.Sort(new WeightedCurveComparer());
+
+            // 4. Draw
+            foreach (var item in sortedList)
+            {
+                DrawWeightedCurve(item.Curve, item.Weight);
+            }
+
+            sortedList.Dispose();
             aggregatedCurves.Dispose();
         }
 
         private void DrawWeightedCurve(CurveDef curveDef, int weight)
         {
-            float baseWidth = 1.0f; 
-            float maxAdditionalWidth = 2.0f;
+            float baseWidth = 0.9f; 
+            float maxAdditionalWidth = 1.8f;
             float widthMultiplier = 0.15f;
+
+            if (isLaneDataOnly)
+            {
+                baseWidth *= 0.5f;
+                maxAdditionalWidth *= 0.5f;
+                widthMultiplier *= 0.5f;
+            }
 
             float width = baseWidth + math.min(weight * widthMultiplier, maxAdditionalWidth);
             float t = 0f;
