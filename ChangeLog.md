@@ -1,3 +1,3 @@
 - Now captures vehicles that are close to the selected road segment and have switched to lane-specific pathing.
 - You can now analyze intersections (nodes).
-- Switched to custom outlines so that highlighted peds are visible on selected roads/transit
+- Switched to custom outlines so that highlighted peds are visible on selected roads/transit.

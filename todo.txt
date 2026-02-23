@@ -6,7 +6,5 @@ TO DO
 
 
 - gray world
-- lines on the wrong side of the street -- maybe from agents that are crossing?
-- not including all vehicles?
-- don't show for powerlines
+- stray route lines eg on road shoulders etc (sometimes this is cars being parked, but i've seen it on highways)
 

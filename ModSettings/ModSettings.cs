@@ -25,7 +25,7 @@ namespace TrafficSpy.ModSettings
 
         [SettingsUISlider(min = 10, max = 100, step = 5, unit = Unit.kPercentage)]
         [SettingsUISection(kSection, kVisualsGroup)]
-        public int RouteOpacity { get; set; } = 80;
+        public int RouteOpacity { get; set; } = 70;
         
         [SettingsUISlider(min = 10, max = 200, step = 5, unit = Unit.kInteger)]
         [SettingsUISection(kSection, kVisualsGroup)]
