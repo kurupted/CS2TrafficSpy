@@ -9,8 +9,8 @@ using Game.Input;
 using Game.Net;
 using Game.Objects;
 using Game.Routes;
-using Game.Prefabs; 
-using System.Reflection; 
+using Game.Prefabs; // for GrayWorld
+using System.Reflection; // for GrayWorld
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -39,7 +39,7 @@ namespace TrafficSpy.Systems
     public struct TrafficRenderData
     {
         public Entity entity;
-        public Entity sourceAgent; 
+        public Entity sourceAgent; // The agent responsible for this entry (for distance checks)
         public Entity destinationEntity; 
         public Entity waitingAtStop;
         public Game.Citizens.Purpose purpose;
@@ -63,31 +63,33 @@ namespace TrafficSpy.Systems
         private ValueBinding<string> activityDataBinding;
         private ValueBinding<bool> toolActiveBinding;
         private ValueBinding<bool> highlightAgentsBinding;
-        private ValueBinding<int> displayModeBinding; 
+        private ValueBinding<int> displayModeBinding; // 0 = Vehicles, 1 = Pedestrians
         private ValueBinding<bool> showRoutesBinding;
         private ValueBinding<int> directionModeBinding;
-        private ValueBinding<int> rangeModeBinding; 
+        private ValueBinding<int> rangeModeBinding; // 0=Short, 1=Med, 2=Long, 3=Unlimited
         private ValueBinding<string> associatedStopsBinding;
         private ValueBinding<bool> walkingOnlyBinding;
         private ValueBinding<bool> isTransitStopSelectedBinding;
         private ValueBinding<bool> hasParentBinding;
 
         private bool highlightAgents = false;
-        private int displayMode = 0; 
+        private int displayMode = 0; // Default to Vehicles
         
         public static List<Entity> AnalyzedLanes = new List<Entity>();
         public bool HighlightAgents => highlightAgents;
-        public bool ShowRoutes { get; private set; } = true; 
-        private int directionMode = 0; 
-        private int rangeMode = 1; 
+        public bool ShowRoutes { get; private set; } = true; // Default to True
+        private int directionMode = 0; // 0 = Both, 1 = Side A (Fwd), 2 = Side B (Bwd) 
+        private int rangeMode = 1; // Default to Medium
         public int RangeMode => rangeMode;
 
+        // Statics for the Route System to read
         public static float3 FilterPosition = float3.zero;
-        public static float FilterDistance = 3000f; 
+        public static float FilterDistance = 3000f; // Default Medium
 
         private bool isToolActive = false;
         private bool usePathBasedAnalysis = true;
         private bool walkingOnly = true;
+
         private bool wasToggleKeyDown = false;
 
         private List<TrafficRenderData> allAnalysisResults = new List<TrafficRenderData>();
@@ -104,24 +106,22 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> showTransitPanelBinding;
         private ValueBinding<string> transitLinesDataBinding;
         
-        // --- Custom Render & Infoview Variables ---
+        // --- Dual Infoview Variables ---
+        private Entity m_VanillaInfoviewEntity = Entity.Null; // Caches the vanilla search so we don't query every click
         private Game.Prefabs.InfoviewPrefab m_CustomInfoview;
         private Entity m_CustomInfoviewEntity = Entity.Null;
-        private Game.UI.InGame.InfoviewsUISystem m_InfoviewsUISystem;
-        private Game.Rendering.OverlayRenderSystem m_OverlayRenderSystem;
-        private NativeHashSet<Entity> m_VisibleTransitLines;
+        private string m_ActiveTransitMode = "none"; 
+        private NativeHashSet<Entity> m_OriginallyHiddenRoutes;
         
+        private Game.UI.InGame.InfoviewsUISystem m_InfoviewsUISystem;
         public bool IsTransitPanelActive => this.showTransitPanelBinding?.value ?? false;
         private EntityQuery m_TransitLinesQuery;
         private int m_TransitUpdateFrame = 0;
         
-        // --- Thread Safety for UI Communication ---
-        private object m_ThreadLock = new object();
+        // --- Safe UI Communication Channels ---
+        private string m_PendingTransitMode = "none";
         private bool m_ModeChangeRequested = false;
-        private bool m_TargetTransitState = false;
-        private List<int> m_LinesToShow = new List<int>();
-        private List<int> m_LinesToHide = new List<int>();
-        
+        public static HashSet<Entity> HiddenCustomRoutes = new HashSet<Entity>();
         private struct StopOption
         {
             public Entity Entity;
@@ -139,21 +139,49 @@ namespace TrafficSpy.Systems
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
             this.trafficSpyToolSystem = World.GetOrCreateSystemManaged<TrafficSpyToolSystem>();
             
+            // Listen for tool changes
             this.toolSystem.EventToolChanged += OnToolChanged;
             
-            this.pathOwnerQuery = GetEntityQuery(new EntityQueryDesc {
-                All = new ComponentType[] { ComponentType.ReadOnly<PathOwner>(), ComponentType.ReadOnly<PathElement>() },
-                None = new ComponentType[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+            this.pathOwnerQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<PathOwner>(),
+                    ComponentType.ReadOnly<PathElement>()
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
             });
 
-            this.waitingPassengersQuery = GetEntityQuery(new EntityQueryDesc {
-                All = new ComponentType[] { ComponentType.ReadOnly<Game.Creatures.Resident>(), ComponentType.ReadOnly<Creature>(), ComponentType.ReadOnly<Target>() },
-                None = new ComponentType[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+            this.waitingPassengersQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[] 
+                {
+                    ComponentType.ReadOnly<Game.Creatures.Resident>(),
+                    ComponentType.ReadOnly<Creature>(),
+                    ComponentType.ReadOnly<Target>(), 
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
             });
 
-            this.m_AllStopsQuery = GetEntityQuery(new EntityQueryDesc {
-                All = new ComponentType[] { ComponentType.ReadOnly<Game.Routes.TransportStop>() },
-                None = new ComponentType[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+            this.m_AllStopsQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Game.Routes.TransportStop>()
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
             });
 
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
@@ -180,48 +208,91 @@ namespace TrafficSpy.Systems
             AddBinding(this.isTransitStopSelectedBinding);
             AddBinding(this.hasParentBinding);
 
-            AddBinding(new TriggerBinding<Entity>("TrafficSpy", "selectStop", (entity) => { this.toolSystem.selected = entity; }));
+            AddBinding(new TriggerBinding<Entity>("TrafficSpy", "selectStop", (entity) => {
+                this.toolSystem.selected = entity; 
+            }));
+            
             AddBinding(new TriggerBinding("TrafficSpy", "selectParent", () => {
-                if (lastParentEntity != Entity.Null && EntityManager.Exists(lastParentEntity)) this.toolSystem.selected = lastParentEntity;
+                if (lastParentEntity != Entity.Null && EntityManager.Exists(lastParentEntity)) {
+                    this.toolSystem.selected = lastParentEntity;
+                }
             }));
+
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "sethighlightAgents", (bool active) => {
-                this.highlightAgents = active; this.highlightAgentsBinding.Update(active); ApplyFilter();
+                this.highlightAgents = active;
+                this.highlightAgentsBinding.Update(active);
+                ApplyFilter();
             }));
+
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setDisplayMode", (int mode) => {
-                this.displayMode = mode; this.displayModeBinding.Update(mode); CalculateStats(); ApplyFilter();
+                this.displayMode = mode;
+                this.displayModeBinding.Update(mode);
+                CalculateStats();
+                ApplyFilter();
             }));
+            
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowRoutes", (bool active) => {
-                this.ShowRoutes = active; this.showRoutesBinding.Update(active); IsDirty = true; ApplyFilter();
+                this.ShowRoutes = active;
+                this.showRoutesBinding.Update(active);
+                // We set IsDirty to true so the RouteSystem knows to check immediately
+                IsDirty = true; 
+                ApplyFilter();
             }));
+
+            // Handler for setting direction mode
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setDirectionMode", (int mode) => {
-                this.directionMode = mode; this.directionModeBinding.Update(mode);
-                if (lastSelectedEntity != Entity.Null) RunAnalysis(lastSelectedEntity);
+                this.directionMode = mode;
+                this.directionModeBinding.Update(mode);
+                if (lastSelectedEntity != Entity.Null)
+                {
+                    RunAnalysis(lastSelectedEntity);
+                }
             }));
+
+            // Handler for setting range mode
             AddBinding(new TriggerBinding<int>("TrafficSpy", "setRangeMode", (int mode) => {
-                this.rangeMode = mode; this.rangeModeBinding.Update(mode); UpdateRangeDistance();
-                if (lastSelectedEntity != Entity.Null) RunAnalysis(lastSelectedEntity);
+                this.rangeMode = mode;
+                this.rangeModeBinding.Update(mode);
+                UpdateRangeDistance();
+                if (lastSelectedEntity != Entity.Null)
+                {
+                    RunAnalysis(lastSelectedEntity);
+                }
             }));
+
             AddBinding(new TriggerBinding<string>("TrafficSpy", "setTrafficFilter", (string filter) => {
                 if (filter == "RESET" || string.IsNullOrEmpty(filter)) this.currentFilter = "";
                 else if (this.currentFilter == filter) this.currentFilter = "";
                 else this.currentFilter = filter;
                 ApplyFilter();
             }));
+
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setWalkingOnly", (bool active) => {
-                this.walkingOnly = active; this.walkingOnlyBinding.Update(active);
-                if (lastSelectedEntity != Entity.Null) RunAnalysis(lastSelectedEntity);
+                this.walkingOnly = active;
+                this.walkingOnlyBinding.Update(active);
+                if (lastSelectedEntity != Entity.Null)
+                {
+                    RunAnalysis(lastSelectedEntity);
+                }
             }));
             
-            // --- Custom Transit Init ---
-            m_InfoviewsUISystem = World.GetOrCreateSystemManaged<Game.UI.InGame.InfoviewsUISystem>();
-            m_OverlayRenderSystem = World.GetOrCreateSystemManaged<Game.Rendering.OverlayRenderSystem>();
-            m_VisibleTransitLines = new NativeHashSet<Entity>(128, Allocator.Persistent);
             
+            m_InfoviewsUISystem = World.GetOrCreateSystemManaged<Game.UI.InGame.InfoviewsUISystem>();
+            
+            // Safe to do here because it doesn't query the ECS!
             SetupCustomInfoview();
             
-            m_TransitLinesQuery = GetEntityQuery(new EntityQueryDesc {
-                All = new ComponentType[] { ComponentType.ReadOnly<Route>(), ComponentType.ReadOnly<TransportLine>(), ComponentType.ReadOnly<Game.Prefabs.PrefabRef>() },
-                None = new ComponentType[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+            m_TransitLinesQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[] {
+                    ComponentType.ReadOnly<Route>(),
+                    ComponentType.ReadOnly<TransportLine>(),
+                    ComponentType.ReadOnly<Game.Prefabs.PrefabRef>()
+                },
+                None = new ComponentType[] {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
             });
             
             this.showTransitPanelBinding = new ValueBinding<bool>("TrafficSpy", "showTransitPanel", false);
@@ -229,23 +300,36 @@ namespace TrafficSpy.Systems
             AddBinding(this.showTransitPanelBinding);
             AddBinding(this.transitLinesDataBinding);
             
-            // THREAD SAFE BINDING
+
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "toggleTransitCustom", (active) => {
-                lock (m_ThreadLock) {
-                    m_TargetTransitState = active;
-                    m_ModeChangeRequested = true;
-                }
+                m_PendingTransitMode = active ? "custom" : "none";
+                m_ModeChangeRequested = true;
             }));
 
-            // THREAD SAFE TOGGLE
             AddBinding(new TriggerBinding<int, bool>("TrafficSpy", "setLineVisible", (entityIndex, show) => {
-                lock (m_ThreadLock) {
-                    if (show) m_LinesToShow.Add(entityIndex);
-                    else m_LinesToHide.Add(entityIndex);
+                using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+                foreach (var e in entities)
+                {
+                    if (e.Index == entityIndex)
+                    {
+                        if (show) 
+                            HiddenCustomRoutes.Remove(e);
+                        else 
+                            HiddenCustomRoutes.Add(e);
+            
+                        // Immediately update the UI to reflect the toggle without waiting
+                        UpdateTransitLinesData(); 
+                        break;
+                    }
                 }
             }));
+            
+            string mockTransitData = @"[
+                { ""id"": 1, ""type"": ""bus"", ""name"": ""My Route A"", ""color"": ""#4287f5"", ""vehicles"": 3, ""passengers"": 123, ""length"": ""12km"", ""usage"": 85 },
+                { ""id"": 2, ""type"": ""train"", ""name"": ""Express Line"", ""color"": ""#e67e22"", ""vehicles"": 2, ""passengers"": 450, ""length"": ""45km"", ""usage"": 92 }
+            ]";
+            this.transitLinesDataBinding.Update(mockTransitData);
 
-            this.transitLinesDataBinding.Update("[]");
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", SetToolActive));
         }
 
@@ -268,49 +352,29 @@ namespace TrafficSpy.Systems
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            if (this.toolSystem != null) this.toolSystem.EventToolChanged -= OnToolChanged;
-            if (m_VisibleTransitLines.IsCreated) m_VisibleTransitLines.Dispose();
+            if (this.toolSystem != null)
+            {
+                this.toolSystem.EventToolChanged -= OnToolChanged;
+            }
         }
 
         protected override void OnUpdate()
         {
             if (!Enabled) Enabled = true;
-
-            // --- SAFELY PROCESS UI EVENTS ON MAIN THREAD ---
-            lock (m_ThreadLock)
+            
+            // 1. Process Mode Changes Safely on the Main Thread
+            if (m_ModeChangeRequested)
             {
-                if (m_ModeChangeRequested)
-                {
-                    m_ModeChangeRequested = false;
-                    this.showTransitPanelBinding.Update(m_TargetTransitState);
-                    
-                    if (m_TargetTransitState && m_CustomInfoviewEntity != Entity.Null) {
-                        m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
-                        UpdateTransitLinesData();
-                    } else {
-                        m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
-                        m_VisibleTransitLines.Clear();
-                    }
-                }
-
-                if (m_LinesToShow.Count > 0 || m_LinesToHide.Count > 0)
-                {
-                    using var entities = m_TransitLinesQuery.ToEntityArray(Allocator.Temp);
-                    foreach (int idx in m_LinesToShow) {
-                        foreach(var e in entities) if (e.Index == idx) { m_VisibleTransitLines.Add(e); break; }
-                    }
-                    foreach (int idx in m_LinesToHide) {
-                        foreach(var e in entities) if (e.Index == idx) { m_VisibleTransitLines.Remove(e); break; }
-                    }
-                    m_LinesToShow.Clear();
-                    m_LinesToHide.Clear();
-                    UpdateTransitLinesData();
-                }
+                if (m_PendingTransitMode == "none") DeactivateTransitMode();
+                else ActivateTransitMode(m_PendingTransitMode);
+                m_ModeChangeRequested = false;
             }
 
+            // 1. CHECK KEYBOARD INPUT
             if (Mod.m_ToggleAction != null)
             {
                 bool isPressed = Mod.m_ToggleAction.IsPressed();
+                // Only trigger if pressed NOW but wasn't pressed LAST frame
                 if (isPressed && !wasToggleKeyDown) SetToolActive(!isToolActive);
                 wasToggleKeyDown = isPressed;
             }
@@ -318,25 +382,33 @@ namespace TrafficSpy.Systems
             if (this.IsTransitPanelActive)
             {
                 m_TransitUpdateFrame++;
-                if (m_TransitUpdateFrame % 60 == 0) UpdateTransitLinesData();
-
-                if (m_CustomInfoviewEntity != Entity.Null && !m_VisibleTransitLines.IsEmpty)
+                // Update the data every 60 frames (~1 second) to save performance
+                if (m_TransitUpdateFrame % 60 == 0) 
                 {
-                    DrawCustomTransitLines();
+                    UpdateTransitLinesData();
                 }
             }
             
             base.OnUpdate();
             
+            // Auto-Reactivate Tool
             if (_isSpyModeActive)
             {
+                // If we are currently in Default Tool (viewing info or idle)
                 if (toolSystem.activeTool == defaultToolSystem && toolSystem.selected == Entity.Null)
+                {
+                    // And nothing is selected (User just pressed Esc to close Info Panel)
+                    // Reactivate the Spy Tool immediately
                     trafficSpyToolSystem.Enable();
+                }
             }
 
             Entity selected = this.toolSystem.selected;
 
-            if (ShouldBeVisible(selected)) this.visible = true;
+            if (ShouldBeVisible(selected))
+            {
+                this.visible = true;
+            }
             else
             {
                 this.visible = false;
@@ -347,11 +419,15 @@ namespace TrafficSpy.Systems
             if (selected != lastSelectedEntity)
             {
                 bool isDirectStop = EntityManager.HasComponent<Game.Routes.TransportStop>(selected);
+                
+                // Track Parent Entity for the "Back" button
                 if (!isDirectStop) lastParentEntity = selected;
                 this.hasParentBinding.Update(isDirectStop && lastParentEntity != Entity.Null && EntityManager.Exists(lastParentEntity));
 
                 lastSelectedEntity = selected;
                 currentFilter = "";
+
+                // Reset direction to All Sides (0)
                 this.directionMode = 0;
                 this.directionModeBinding.Update(0);
                 
@@ -362,55 +438,9 @@ namespace TrafficSpy.Systems
                 RunAnalysis(selected);
             }
         }
-
-        private void DrawCustomTransitLines()
-        {
-            var overlayBuffer = m_OverlayRenderSystem.GetBuffer(out JobHandle deps);
-            deps.Complete(); // MUST COMPLETE TO PREVENT CRASHES
-
-            using var entities = m_TransitLinesQuery.ToEntityArray(Allocator.Temp);
-            foreach (var entity in entities)
-            {
-                if (!m_VisibleTransitLines.Contains(entity)) continue;
-
-                UnityEngine.Color renderColor = UnityEngine.Color.white;
-                if (EntityManager.TryGetComponent<Game.Routes.Color>(entity, out var colorData))
-                {
-                    renderColor = new UnityEngine.Color32(colorData.m_Color.r, colorData.m_Color.g, colorData.m_Color.b, 255);
-                }
-
-                if (EntityManager.TryGetBuffer<RouteSegment>(entity, true, out var segments))
-                {
-                    foreach (var seg in segments)
-                    {
-                        if (EntityManager.TryGetComponent<Curve>(seg.m_Segment, out var curve))
-                        {
-                            overlayBuffer.DrawCurve(renderColor, curve.m_Bezier, 4f); 
-                        }
-                    }
-                }
-
-                if (EntityManager.TryGetBuffer<RouteWaypoint>(entity, true, out var waypoints))
-                {
-                    foreach (var wp in waypoints)
-                    {
-                        if (EntityManager.TryGetComponent<Game.Objects.Transform>(wp.m_Waypoint, out var trans))
-                        {
-                            overlayBuffer.DrawCircle(renderColor, trans.m_Position, 10f);
-                        }
-                        
-                        if (EntityManager.TryGetComponent<Game.Routes.Connected>(wp.m_Waypoint, out var connected))
-                        {
-                             if (EntityManager.TryGetComponent<Game.Objects.Transform>(connected.m_Connected, out var buildingTrans))
-                             {
-                                 overlayBuffer.DrawCircle(renderColor, buildingTrans.m_Position, 30f); 
-                             }
-                        }
-                    }
-                }
-            }
-        }
-
+        
+        
+        
         private void UpdateTransitLinesData()
         {
             if (!this.IsTransitPanelActive) return;
@@ -420,6 +450,7 @@ namespace TrafficSpy.Systems
             result.Append("[");
 
             var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+            
             bool first = true;
 
             for (int i = 0; i < entities.Length; i++)
@@ -430,7 +461,7 @@ namespace TrafficSpy.Systems
                 var prefab = prefabSystem.GetPrefab<Game.Prefabs.TransportLinePrefab>(prefabRef.m_Prefab);
                 if (prefab == null) continue;
                 string type = prefab.m_TransportType.ToString().ToLower();
-
+                
                 string displayType = "Route";
                 if (!string.IsNullOrEmpty(type) && type != "none") displayType = char.ToUpper(type[0]) + type.Substring(1);
 
@@ -452,9 +483,10 @@ namespace TrafficSpy.Systems
                 int usage = capacity > 0 ? UnityEngine.Mathf.RoundToInt(((float)cargo / capacity) * 100) : 0;
                 string lengthStr = (length / 1000f).ToString("0.1") + "km";
 
-                bool isVisible = m_VisibleTransitLines.Contains(entity);
+                bool isVisible = !HiddenCustomRoutes.Contains(entity);
 
                 if (!first) result.Append(",");
+                
                 string safeName = name?.Replace("\"", "\\\"") ?? "Unnamed Route";
                 
                 result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""usage"": {usage}, ""visible"": {isVisible.ToString().ToLower()} }}");
@@ -465,14 +497,15 @@ namespace TrafficSpy.Systems
             result.Append("]");
             this.transitLinesDataBinding.Update(result.ToString());
         }
-
+        
+        // --- 1. INFOVIEW GENERATION ---
         private void SetupCustomInfoview()
         {
             var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
 
             m_CustomInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
             m_CustomInfoview.name = "TrafficSpyCustomView";
-            m_CustomInfoview.m_Group = 99; 
+            m_CustomInfoview.m_Group = 99; // High group number to prevent vanilla collisions
             m_CustomInfoview.m_Priority = 1;
             
             Game.Prefabs.BuildingStatusInfomodePrefab dummyInfomode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
@@ -485,9 +518,37 @@ namespace TrafficSpy.Systems
             prefabSystem.AddPrefab(m_CustomInfoview);
             m_CustomInfoviewEntity = prefabSystem.GetEntity(m_CustomInfoview);
         }
+        
+        private void ActivateTransitMode(string mode)
+        {
+            m_ActiveTransitMode = mode;
+            this.showTransitPanelBinding.Update(true);
+            UpdateTransitLinesData(); 
 
-        // --- EVERYTHING BELOW IS YOUR EXISTING ANALYSIS CODE ---
+            if (mode == "custom" && m_CustomInfoviewEntity != Entity.Null)
+            {
+                m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
+            }
+        }
 
+        private void DeactivateTransitMode()
+        {
+            m_ActiveTransitMode = "none";
+            this.showTransitPanelBinding.Update(false);
+            
+            m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
+        }
+
+        private void BackupAndHideAllRoutes()
+        {
+            // Method kept for reference, but skipped above to avoid ECS syncing freeze
+        }
+
+        private void RestoreRoutes()
+        {
+            // Method kept for reference, but skipped above to avoid ECS syncing freeze
+        }
+        
         private void OnToolChanged(ToolBaseSystem newTool)
         {
             if (_isSpyModeActive)
@@ -510,6 +571,7 @@ namespace TrafficSpy.Systems
                 if (active) trafficSpyToolSystem.Enable();
                 else
                 {
+                    // If disabling, ensure we switch back to default tool if we were spying
                     if (toolSystem.activeTool == trafficSpyToolSystem) trafficSpyToolSystem.Disable();
                     ClearData();
                 }
@@ -530,7 +592,7 @@ namespace TrafficSpy.Systems
                 this.activityDataBinding.Update("{}");
                 allAnalysisResults.Clear();
                 CurrentRenderList.Clear();
-                AnalyzedLanes.Clear(); 
+                AnalyzedLanes.Clear(); // Clear lanes
                 IsDirty = true;
                 this.associatedStopsBinding.Update("[]"); 
                 this.hasParentBinding.Update(false);
@@ -541,10 +603,10 @@ namespace TrafficSpy.Systems
         {
             switch (rangeMode)
             {
-                case 0: FilterDistance = float.MaxValue; break; 
-                case 1: FilterDistance = 1000f; break; 
-                case 2: FilterDistance = 2000f; break; 
-                case 3: FilterDistance = float.MaxValue; break; 
+                case 0: FilterDistance = float.MaxValue; break; // Lane Data Only (distance doesn't matter, handled by job skipping PathElements)
+                case 1: FilterDistance = 1000f; break; // 1km
+                case 2: FilterDistance = 2000f; break; // 2km
+                case 3: FilterDistance = float.MaxValue; break; // Unlimited
                 default: FilterDistance = 2000f; break;
             }
         }
@@ -557,12 +619,14 @@ namespace TrafficSpy.Systems
                                   (EntityManager.HasComponent<Game.Routes.TransportStop>(lastSelectedEntity) || 
                                    EntityManager.HasComponent<Game.Buildings.TransportStation>(lastSelectedEntity));
 
+            // Strictly enforce pedestrian/passenger mode when viewing a stop or station
             if (isStopOrStation)
             {
                 if (!isPed) return false; 
             }
             else
             {
+                // Display Mode Check
                 if (this.displayMode == 0 && !item.isVehicle) return false; 
                 if (this.displayMode == 1 && !isPed) return false; 
                 if (this.displayMode == 1 && this.walkingOnly && item.waitingAtStop != Entity.Null) return false;
@@ -570,6 +634,7 @@ namespace TrafficSpy.Systems
 
             if (item.sourceAgent == Entity.Null) return true;
 
+            // Range Check
             if (!isStopOrStation && FilterDistance < 1000000f)
             {
                 Entity entityToCheck = item.sourceAgent != Entity.Null ? item.sourceAgent : item.entity;
@@ -580,6 +645,8 @@ namespace TrafficSpy.Systems
                 }
                 else 
                 {
+                    // unspawned / in a building have no transform
+                    // Return false here so they get excluded if range isn't unlimited.
                     return false;
                 }
             }
@@ -594,6 +661,7 @@ namespace TrafficSpy.Systems
 
             foreach (var item in allAnalysisResults)
             {
+                // Use centralized visibility check
                 if (!IsItemVisible(item, transformLookup)) continue;
 
                 bool matchesFilter = false;
@@ -622,7 +690,9 @@ namespace TrafficSpy.Systems
                 case "school": return item.purpose == Purpose.GoingToSchool || item.purpose == Purpose.Studying;
                 case "transporting": return (item.type == TrafficType.Cargo && item.purpose == Purpose.Delivery) || (item.type == TrafficType.Citizen && (item.purpose == Purpose.Delivery || item.purpose == Purpose.Exporting || item.purpose == Purpose.UpkeepDelivery || item.purpose == Purpose.StorageTransfer || item.purpose == Purpose.Collect || item.purpose == Purpose.CompanyShopping));
                 case "returning": return item.type == TrafficType.Cargo && item.purpose == Purpose.None;
-                case "tourism": return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions || ((item.purpose == Purpose.GoingHome || item.purpose == Purpose.MovingAway) && item.isTourist);  
+                case "tourism": 
+                    // Includes standard tourism purposes OR Tourists going home (leaving city)
+                    return item.purpose == Purpose.Sightseeing || item.purpose == Purpose.Traveling || item.purpose == Purpose.VisitAttractions || ((item.purpose == Purpose.GoingHome || item.purpose == Purpose.MovingAway) && item.isTourist);  
                 case "services": return item.type == TrafficType.Service || item.purpose == Purpose.Hospital || item.purpose == Purpose.InHospital || item.purpose == Purpose.Deathcare || item.purpose == Purpose.ReturnGarbage || item.purpose == Purpose.InDeathcare || item.purpose == Purpose.ReturnUnsortedMail || item.purpose == Purpose.ReturnLocalMail || item.purpose == Purpose.ReturnOutgoingMail || item.purpose == Purpose.SendMail;
                 case "other":
                     if (item.type == TrafficType.Cargo || item.type == TrafficType.Service) return false;
@@ -640,6 +710,8 @@ namespace TrafficSpy.Systems
             {
                 targets.Add(segment);
 
+                // 1. MACRO-PATHFINDING (Highways & Long Distances)
+                // CS2 groups highways into "Aggregate" entities. Cars far away may target this aggregate instead of the specific micro-segment
                 if (EntityManager.HasComponent<Game.Net.Aggregated>(segment))
                 {
                     Game.Net.Aggregated aggregated = EntityManager.GetComponentData<Game.Net.Aggregated>(segment);
@@ -650,13 +722,19 @@ namespace TrafficSpy.Systems
                 }
             }
             
+            // Get the main road segment's geometry
             if (EntityManager.TryGetBuffer(segment, true, out DynamicBuffer<Game.Net.SubLane> lanes))
             {
+                // EDGE CASE (Standard Road Segment)
                 if (EntityManager.HasComponent<Curve>(segment))
                 {
                     Curve segmentCurve = EntityManager.GetComponentData<Curve>(segment);
+                    // Calculate the "Center" and "Right Vector" of the road at the midpoint (t=0.5)
+                    // Position(0.5)
                     float3 segmentPos = Colossal.Mathematics.MathUtils.Position(segmentCurve.m_Bezier, 0.5f);
+                    // Tangent(0.5) gives the forward direction
                     float3 segmentTan = Colossal.Mathematics.MathUtils.Tangent(segmentCurve.m_Bezier, 0.5f);
+                    // Cross product with Up (0,1,0) gives the Right Vector
                     float3 segmentRight = math.cross(segmentTan, new float3(0, 1, 0));
 
                     for (int i = 0; i < lanes.Length; i++)
@@ -664,22 +742,37 @@ namespace TrafficSpy.Systems
                         Entity subLaneEntity = lanes[i].m_SubLane;
                         if (directionMode != 0)
                         {
+                            // We check the geometry of the sub-lane
                             if (EntityManager.HasComponent<Curve>(subLaneEntity))
                             {
                                 Curve laneCurve = EntityManager.GetComponentData<Curve>(subLaneEntity);
                                 float3 lanePos = Colossal.Mathematics.MathUtils.Position(laneCurve.m_Bezier, 0.5f);
+                                
+                                // Calculate vector from Road Center -> Lane Center
                                 float3 diff = lanePos - segmentPos;
+                                
+                                // Dot product determines side:
+                                // > 0 means the lane is on the Right side of the road center
+                                // < 0 means the lane is on the Left side of the road center
                                 float dot = math.dot(diff, segmentRight);
                                 
+                                // Threshold 0.1f ignores tiny floating point errors for exact center lanes
+
+                                // Mode 1 (Side A): We want ONE side (e.g. Left). So skip if dot is Positive (Right).
                                 if (directionMode == 1 && dot > 0.1f) continue;
+                                
+                                // Mode 2 (Side B): We want OTHER side (e.g. Right). So skip if dot is Negative (Left).
                                 if (directionMode == 2 && dot < -0.1f) continue;
                             }
                         }
                         targets.Add(subLaneEntity);
                     }
                 }
+                // NODE CASE (Intersection / Roundabout)
                 else if (EntityManager.HasComponent<Game.Net.Node>(segment))
                 {
+                    // Nodes don't have a simple forward/backward direction.
+                    // Ignore directionMode and just add all internal connection lanes.
                     for (int i = 0; i < lanes.Length; i++)
                     {
                         targets.Add(lanes[i].m_SubLane);
@@ -750,6 +843,7 @@ namespace TrafficSpy.Systems
             {
                 Entity stopEntity = stopEntities[i];
                 
+                // Exclude bicycle parking and strictly enforce whitelist
                 if (!IsValidTransitStop(stopEntity)) continue;
 
                 Entity currentChecker = stopEntity;
@@ -791,12 +885,14 @@ namespace TrafficSpy.Systems
             }
             targetParts.Dispose();
             
+            // hide the UI stop list if the user has explicitly selected a single stop
             if (isDirectStop)
             {
                 this.associatedStopsBinding.Update("[]");
             }
             else
             {
+                // Sort by Entity Index so stops remain consistently in the exact same order visually
                 m_AssociatedStops.Sort((a, b) => a.Entity.Index.CompareTo(b.Entity.Index));
                 
                 var sb = new System.Text.StringBuilder("[");
@@ -804,7 +900,7 @@ namespace TrafficSpy.Systems
                 {
                     var stop = m_AssociatedStops[i];
                     stop.Name = $"{GetStopPrefix(stop.Entity)} {i + 1}";
-                    m_AssociatedStops[i] = stop; 
+                    m_AssociatedStops[i] = stop; // save generated name
                     
                     sb.Append($"{{\"index\":{stop.Entity.Index}, \"version\":{stop.Entity.Version}, \"name\":\"{stop.Name}\"}},");
                 }
@@ -835,6 +931,7 @@ namespace TrafficSpy.Systems
 
             foreach (var item in allAnalysisResults)
             {
+                // Use centralized visibility check (respects Range and DisplayMode)
                 if (!IsItemVisible(item, transformLookup)) continue;
                 if (item.isDestination) continue;
 
@@ -855,7 +952,7 @@ namespace TrafficSpy.Systems
                     case Purpose.Relaxing: cntLeisure++; break;
                     case Purpose.GoingHome:
                         if (item.isMovingIn) cntMovingIn++;
-                        else if (item.isTourist) cntTourism++;
+                        else if (item.isTourist) cntTourism++; // Tourists leaving counted as Tourism
                         else cntGoingHome++;
                         break;
                     case Purpose.GoingToWork:
@@ -897,6 +994,7 @@ namespace TrafficSpy.Systems
             allAnalysisResults.Clear();
             AnalyzedLanes.Clear(); // Clear lanes
             
+            // Calculate Center Position for Range Filtering
             if (EntityManager.HasComponent<Game.Net.Node>(selectedSegment)) {
                 Game.Net.Node node = EntityManager.GetComponentData<Game.Net.Node>(selectedSegment);
                 FilterPosition = node.m_Position;
@@ -917,6 +1015,7 @@ namespace TrafficSpy.Systems
             bool isDirectStop = EntityManager.HasComponent<Game.Routes.TransportStop>(selectedSegment);
             bool isStation = EntityManager.HasComponent<Game.Buildings.TransportStation>(selectedSegment);
 
+            // highlight the road segment or its specific lanes
             if (isDirectStop)
             {
                 stopsToAnalyze.Add(selectedSegment);
@@ -978,6 +1077,7 @@ namespace TrafficSpy.Systems
             {
                 Mod.log.Info("TrafficSpy: Starting Path-Based Analysis");
                 
+                // Pass directionMode to GetTargetEntities
                 targets = GetTargetEntities(selectedSegment, Allocator.TempJob, this.directionMode);
                 if (this.directionMode != 0) {
                     NativeArray<Entity> targetArray = targets.ToNativeArray(Allocator.Temp);
@@ -989,6 +1089,7 @@ namespace TrafficSpy.Systems
                     AnalyzedLanes.Add(selectedSegment);
                 }
 
+                // for those on the selected segment
                 PathActivityJob pathJob = new PathActivityJob
                 {
                     targets = targets,
@@ -1099,6 +1200,7 @@ namespace TrafficSpy.Systems
             {
                 Entity matchedStop = Entity.Null;
 
+                // 1. Check Buffer-Based Queue (Game.Creatures.Queue)
                 if (hasQueue)
                 {
                     DynamicBuffer<Game.Creatures.Queue> myQueue = queues[i];
@@ -1122,6 +1224,7 @@ namespace TrafficSpy.Systems
                     }
                 }
 
+                // 2. Check Component-Based Queue (Game.Creatures.Creature.m_QueueEntity)
                 if (matchedStop == Entity.Null)
                 {
                     Entity queueEntity = creatures[i].m_QueueEntity;
@@ -1144,6 +1247,8 @@ namespace TrafficSpy.Systems
                     }
                 }
 
+                // 3. Fallback: If they have a queue entity (meaning they are waiting for transit), 
+                // but it was a TransportLine instead of a stop, check if they are physically standing on the platform.
                 if (matchedStop == Entity.Null && creatures[i].m_QueueEntity != Entity.Null && hasHumanLanes)
                 {
                     Entity physicalLane = humanLanes[i].m_Lane;
@@ -1157,6 +1262,7 @@ namespace TrafficSpy.Systems
                     }
                 }
 
+                // If ALL THREE failed, skip them
                 if (matchedStop == Entity.Null) continue;
 
                 Entity citizen = residents[i].m_Citizen;
