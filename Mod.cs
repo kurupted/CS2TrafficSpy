@@ -44,6 +44,9 @@ namespace TrafficSpy
             
             updateSystem.UpdateAt<SimpleOverlayRendererSystem>(SystemUpdatePhase.Rendering);
             updateSystem.UpdateAt<TrafficRouteSystem>(SystemUpdatePhase.Rendering);
+            
+            // Register the Color System so the Harmony patch intercepts the colors
+            updateSystem.UpdateAt<TrafficSpy.Systems.TrafficColorSystem>(SystemUpdatePhase.UIUpdate);
         }
 
         public void OnDispose()

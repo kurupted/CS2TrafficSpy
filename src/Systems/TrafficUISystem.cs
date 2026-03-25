@@ -9,8 +9,8 @@ using Game.Input;
 using Game.Net;
 using Game.Objects;
 using Game.Routes;
-//using Game.Prefabs; // for GrayWorld
-//using System.Reflection; // for GrayWorld
+using Game.Prefabs; // for GrayWorld
+using System.Reflection; // for GrayWorld
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -103,11 +103,12 @@ namespace TrafficSpy.Systems
         private EntityQuery pathOwnerQuery;
         private EntityQuery waitingPassengersQuery;
         
-        // for 'gray world'
-        /*private EntityQuery infoviewQuery;
-        private Entity fakeInfoviewEntity = Entity.Null;
-        private ValueBinding<bool> grayWorldBinding;
-        private bool grayWorldEnabled = false;*/
+        private ValueBinding<bool> showTransitPanelBinding;
+        private ValueBinding<string> transitLinesDataBinding;
+        private Game.Prefabs.InfoviewPrefab m_TrafficSpyInfoview;
+        private Entity m_TrafficSpyInfoviewEntity;
+        private Game.UI.InGame.InfoviewsUISystem m_InfoviewsUISystem;
+        public bool IsTransitPanelActive => this.showTransitPanelBinding?.value ?? false;
         
         private struct StopOption
         {
@@ -147,7 +148,7 @@ namespace TrafficSpy.Systems
             {
                 All = new ComponentType[] 
                 {
-                    ComponentType.ReadOnly<Resident>(),
+                    ComponentType.ReadOnly<Game.Creatures.Resident>(),
                     ComponentType.ReadOnly<Creature>(),
                     ComponentType.ReadOnly<Target>(), 
                 },
@@ -263,16 +264,22 @@ namespace TrafficSpy.Systems
                 }
             }));
             
-            /*this.grayWorldBinding = new ValueBinding<bool>("TrafficSpy", "grayWorld", false);
-            AddBinding(this.grayWorldBinding);
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setGrayWorld", (bool active) => {
-                this.grayWorldEnabled = active;
-                this.grayWorldBinding.Update(active);
-                if (this.isToolActive)
-                {
-                    ToggleGrayWorld(active);
-                }
-            }));*/
+            m_InfoviewsUISystem = World.GetOrCreateSystemManaged<Game.UI.InGame.InfoviewsUISystem>();
+            CreateCustomInfoview();
+            
+            this.showTransitPanelBinding = new ValueBinding<bool>("TrafficSpy", "showTransitPanel", false);
+            this.transitLinesDataBinding = new ValueBinding<string>("TrafficSpy", "transitLinesData", "[]");
+            AddBinding(this.showTransitPanelBinding);
+            AddBinding(this.transitLinesDataBinding);
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "toggleTransitPanel", (active) => {
+                this.showTransitPanelBinding.Update(active);
+                this.ToggleGrayWorld(active);
+            }));
+            string mockTransitData = @"[
+                { ""id"": 1, ""type"": ""bus"", ""name"": ""My Route A"", ""color"": ""#4287f5"", ""vehicles"": 3, ""passengers"": 123, ""length"": ""12km"", ""usage"": 85 },
+                { ""id"": 2, ""type"": ""train"", ""name"": ""Express Line"", ""color"": ""#e67e22"", ""vehicles"": 2, ""passengers"": 450, ""length"": ""45km"", ""usage"": 92 }
+            ]";
+            this.transitLinesDataBinding.Update(mockTransitData);
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setToolActive", SetToolActive));
         }
@@ -362,6 +369,48 @@ namespace TrafficSpy.Systems
 
                 FindAssociatedStops(selected);
                 RunAnalysis(selected);
+            }
+        }
+        
+        private void CreateCustomInfoview()
+        {
+            var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+
+            // 1. Create a native scriptable object
+            m_TrafficSpyInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
+            m_TrafficSpyInfoview.name = "TrafficSpyTransitView";
+            m_TrafficSpyInfoview.m_Group = 99; // High group number to prevent vanilla collisions
+            m_TrafficSpyInfoview.m_Priority = 1;
+            m_TrafficSpyInfoview.m_Editor = false;
+            m_TrafficSpyInfoview.m_IconPath = ""; // No icon needed, it's hidden from vanilla UI
+    
+            // Create a dummy infomode so the game doesn't crash expecting an array
+            Game.Prefabs.BuildingStatusInfomodePrefab dummyInfomode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
+            dummyInfomode.name = "TrafficSpyDummyMode";
+    
+            m_TrafficSpyInfoview.m_Infomodes = new Game.Prefabs.InfomodeInfo[] { 
+                new Game.Prefabs.InfomodeInfo() { m_Mode = dummyInfomode, m_Priority = 1 } 
+            };
+
+            // 2. Register it with the game natively
+            prefabSystem.AddPrefab(m_TrafficSpyInfoview);
+    
+            // 3. Grab the ECS Entity representation
+            m_TrafficSpyInfoviewEntity = prefabSystem.GetEntity(m_TrafficSpyInfoview);
+        }
+        
+        private void ToggleGrayWorld(bool active)
+        {
+            if (active && m_TrafficSpyInfoviewEntity != Entity.Null)
+            {
+                // Tell the native UI system to activate the view. 
+                // THIS is what triggers the gray shaders!
+                m_InfoviewsUISystem.SetActiveInfoview(m_TrafficSpyInfoviewEntity);
+            }
+            else
+            {
+                // Turn it off
+                m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
             }
         }
         
@@ -864,7 +913,7 @@ namespace TrafficSpy.Systems
                     debugList = debugList,
                     
                     queueBufferHandle = SystemAPI.GetBufferTypeHandle<Game.Creatures.Queue>(true), 
-                    residentHandle = SystemAPI.GetComponentTypeHandle<Resident>(true),
+                    residentHandle = SystemAPI.GetComponentTypeHandle<Game.Creatures.Resident>(true),
                     
                     creatureHandle = SystemAPI.GetComponentTypeHandle<Creature>(true),
                     humanLaneHandle = SystemAPI.GetComponentTypeHandle<HumanCurrentLane>(true),
@@ -1054,7 +1103,7 @@ namespace TrafficSpy.Systems
         public NativeList<int> debugList; 
         
         [ReadOnly] public BufferTypeHandle<Game.Creatures.Queue> queueBufferHandle; 
-        [ReadOnly] public ComponentTypeHandle<Resident> residentHandle;
+        [ReadOnly] public ComponentTypeHandle<Game.Creatures.Resident> residentHandle;
         [ReadOnly] public ComponentTypeHandle<Target> targetHandle;
         [ReadOnly] public EntityTypeHandle entityHandle; 
         
@@ -1076,7 +1125,7 @@ namespace TrafficSpy.Systems
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
-            NativeArray<Resident> residents = chunk.GetNativeArray(ref residentHandle);
+            NativeArray<Game.Creatures.Resident> residents = chunk.GetNativeArray(ref residentHandle);
             NativeArray<Entity> entities = chunk.GetNativeArray(entityHandle); 
             
             NativeArray<Creature> creatures = chunk.GetNativeArray(ref creatureHandle);

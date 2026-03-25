@@ -1,18 +1,17 @@
-import { useValue } from "cs2/api";
 import { trigger } from "cs2/api";
-import { Button, Portal, Tooltip } from "cs2/ui";
+import { useValue } from "cs2/api";
+import { Button, Tooltip, Portal } from "cs2/ui";
 import { toolActive } from "./bindings";
 
-const TrafficButton = () => {
+export const TrafficButton = () => {
     console.log("[TrafficSpy] TrafficButton rendering...");
 
     try {
         const active = useValue(toolActive);
 
-        console.log("[TrafficSpy] Button state:", active);
-
         return (
             <>
+                {/* 1. Original Traffic Spy Button */}
                 <Tooltip tooltip="Traffic Spy">
                     <Button
                         src="coui://uil/Standard/GenericVehicles.svg"
@@ -25,6 +24,16 @@ const TrafficButton = () => {
                     />
                 </Tooltip>
 
+                {/* 2. New Transit Panel Button */}
+                <Tooltip tooltip="Transit Lines Panel">
+                    <Button
+                        src="coui://uil/Standard/PublicTransportLine.svg"
+                        variant="floating"
+                        onSelect={() => trigger("TrafficSpy", "toggleTransitPanel", true)}
+                    />
+                </Tooltip>
+
+                {/* Portal overlay */}
                 {active && (
                     <Portal>
                         <div style={{

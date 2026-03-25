@@ -2,19 +2,23 @@ import { ModRegistrar, ModuleRegistry } from "cs2/modding";
 import TrafficButton from "./TrafficButton";
 import { SelectedInfoPanelTogglesComponent } from "./SelectedInfoPanelTogglesComponent";
 import { VanillaComponentResolver } from "./VanillaComponentResolver";
+import { TransitPanel } from "./TransitPanel"; // 1. Import the new panel
 
 const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
-    
+
     // 1. Setup Resolver
     VanillaComponentResolver.setRegistry(moduleRegistry);
 
     // 2. Add Toolbar Button
     moduleRegistry.append("GameTopLeft", TrafficButton);
 
-    // 3. Extend Info Panel
+    // 3. Mount the Floating Transit Panel
+    moduleRegistry.append("Game", TransitPanel); // <--- Add this line
+
+    // 4. Extend Info Panel
     const infoPanelPath = "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx";
     const infoPanelExport = "selectedInfoSectionComponents";
-    
+
     try {
         moduleRegistry.extend(
             infoPanelPath,

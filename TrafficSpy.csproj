@@ -94,6 +94,10 @@
 	<ItemGroup>
 		<None Include="UI\mod.json.csproj" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Lib.Harmony" Version="2.2.2" />
+	</ItemGroup>
 	
 	<!-- Automatically build the UI with the project. -->
 	<Target Name="BuildUI" AfterTargets="AfterBuild">
