@@ -1,11 +1,11 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { bindValue, trigger } from "cs2/api";
 import { useValue } from "cs2/api";
 
 const showTransitPanel$ = bindValue<boolean>("TrafficSpy", "showTransitPanel", false);
 const transitLinesData$ = bindValue<string>("TrafficSpy", "transitLinesData", "[]");
 
-type TransitType = 'bus' | 'train' | 'subway' | 'tram';
+type TransitType = 'bus' | 'train' | 'subway' | 'tram' | 'airplane' | 'ship' | 'none';
 
 interface TransitLine {
     id: number;
@@ -16,7 +16,22 @@ interface TransitLine {
     passengers: number;
     length: string;
     usage: number;
+    // We get visible from C#, but we rely on our local React state for snappiness
+    visible: boolean;
 }
+
+const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
+    <div
+        onClick={onChange}
+        style={{
+            width: '18rem', height: '18rem', border: '1rem solid rgba(255,255,255,0.3)',
+            borderRadius: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', backgroundColor: checked ? '#4287f5' : 'rgba(0,0,0,0.5)', flexShrink: 0
+        }}
+    >
+        {checked && <span style={{ color: 'white', fontSize: '14rem', lineHeight: '18rem' }}>✓</span>}
+    </div>
+);
 
 export const TransitPanel = () => {
     const isVisible = useValue(showTransitPanel$);
@@ -26,64 +41,80 @@ export const TransitPanel = () => {
     const [activeTab, setActiveTab] = useState<TransitType>('bus');
     const [showDepots, setShowDepots] = useState(true);
     const [showStations, setShowStations] = useState(true);
-    const [activeLines, setActiveLines] = useState<Set<number>>(new Set([1, 2]));
+
+    // RESTORED: Local React state for instant checkbox response
+    const [activeLines, setActiveLines] = useState<Set<number>>(new Set());
+
+    // Sync React state when C# initially loads data
+    useEffect(() => {
+        if (isVisible && lines.length > 0 && activeLines.size === 0) {
+            const visibleIds = lines.filter(l => l.visible).map(l => l.id);
+            setActiveLines(new Set(visibleIds));
+        }
+    }, [isVisible, lines]);
 
     if (!isVisible) return null;
 
+    const currentLines = lines.filter(l => l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
+
+    // Evaluate if all lines in the current tab are selected
+    const allVisible = currentLines.length > 0 && currentLines.every(l => activeLines.has(l.id));
+
+    // Individual Toggle
     const toggleLine = (id: number) => {
         const next = new Set(activeLines);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        let willShow = false;
+        if (next.has(id)) {
+            next.delete(id);
+        } else {
+            next.add(id);
+            willShow = true;
+        }
+        setActiveLines(next);
+        trigger("TrafficSpy", "setLineVisible", id, willShow); // Tell C# to update the game
+    };
+
+    // Toggle All Button
+    const toggleAll = () => {
+        const next = new Set(activeLines);
+        const targetState = !allVisible;
+
+        currentLines.forEach(l => {
+            if (targetState) next.add(l.id);
+            else next.delete(l.id);
+
+            // Tell C# to update the game for each line
+            trigger("TrafficSpy", "setLineVisible", l.id, targetState);
+        });
+
         setActiveLines(next);
     };
 
-    const currentLines = lines.filter(l => l.type === activeTab);
-
     return (
         <div style={{
-            position: 'absolute',
-            left: '60rem',
-            top: '60rem',
-            width: '320rem',
-            backgroundColor: 'rgba(25, 30, 35, 0.95)',
-            backdropFilter: 'blur(10px)',
-            border: '1rem solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8rem',
-            color: 'white',
-            display: 'flex',
-            flexDirection: 'column',
-            maxHeight: '80vh',
-            fontFamily: 'sans-serif',
-            boxShadow: '0 4rem 12rem rgba(0,0,0,0.5)',
-            zIndex: 1000,
-            pointerEvents: 'auto' // Crucial so clicks don't pass through to the game map
+            position: 'absolute', left: '60rem', top: '60rem', width: '320rem',
+            backgroundColor: 'rgba(25, 30, 35, 0.95)', backdropFilter: 'blur(10px)',
+            border: '1rem solid rgba(255, 255, 255, 0.1)', borderRadius: '8rem',
+            color: 'white', display: 'flex', flexDirection: 'column',
+            maxHeight: '80vh', fontFamily: 'sans-serif',
+            boxShadow: '0 4rem 12rem rgba(0,0,0,0.5)', zIndex: 1000, pointerEvents: 'auto'
         }}>
-            {/* Header */}
             <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
                 <button
-                    onClick={() => trigger("TrafficSpy", "toggleTransitPanel", false)}
-                    style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '16rem' }}>
-                    ✕
-                </button>
+                    onClick={() => trigger("TrafficSpy", "toggleTransitVanilla", false)}
+                    style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '16rem' }}>✕</button>
             </div>
 
-            {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1rem solid rgba(255,255,255,0.1)' }}>
                 {['bus', 'train', 'subway', 'tram'].map((tab) => (
                     <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab as TransitType)}
+                        key={tab} onClick={() => setActiveTab(tab as TransitType)}
                         style={{
-                            flex: 1,
-                            padding: '10rem 0',
-                            background: activeTab === tab ? 'rgba(255,255,255,0.1)' : 'transparent',
-                            border: 'none',
+                            flex: 1, padding: '10rem 0', cursor: 'pointer', textTransform: 'capitalize', fontSize: '14rem',
+                            background: activeTab === tab ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none',
                             color: activeTab === tab ? 'white' : '#888',
                             borderBottom: activeTab === tab ? '2rem solid #4287f5' : '2rem solid transparent',
-                            cursor: 'pointer',
-                            textTransform: 'capitalize',
-                            fontSize: '14rem'
                         }}
                     >
                         {tab}
@@ -91,50 +122,47 @@ export const TransitPanel = () => {
                 ))}
             </div>
 
-            {/* Infrastructure Toggles */}
-            <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', gap: '15rem' }}>
+            <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', gap: '20rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={showDepots} onChange={e => setShowDepots(e.target.checked)} style={{ width: '16rem', height: '16rem' }}/>
-                    Show Depots
+                    <CustomCheckbox checked={showDepots} onChange={() => setShowDepots(!showDepots)} /> Show Depots
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} style={{ width: '16rem', height: '16rem' }}/>
-                    Show Stations
+                    <CustomCheckbox checked={showStations} onChange={() => setShowStations(!showStations)} /> Show Stations
                 </label>
             </div>
 
-            {/* Line List */}
+            {/* Toggle All Row */}
+            <div style={{ padding: '10rem 15rem', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13rem', fontWeight: 'bold', color: '#aaa' }}>{activeTab.toUpperCase()} LINES</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer' }}>
+                    Toggle All
+                    <CustomCheckbox checked={allVisible} onChange={toggleAll} />
+                </label>
+            </div>
+
             <div style={{ padding: '10rem', overflowY: 'auto', flex: 1 }}>
                 {currentLines.length === 0 ? (
                     <div style={{ padding: '20rem', textAlign: 'center', color: '#666', fontSize: '13rem' }}>No lines found.</div>
                 ) : currentLines.map(line => (
                     <div key={line.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '10rem',
-                        marginBottom: '8rem',
-                        backgroundColor: 'rgba(255,255,255,0.05)',
-                        borderRadius: '6rem',
+                        display: 'flex', alignItems: 'center', padding: '10rem', marginBottom: '8rem',
+                        backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6rem',
                         borderLeft: `4rem solid ${line.color}`
                     }}>
-                        <input
-                            type="checkbox"
-                            checked={activeLines.has(line.id)}
-                            onChange={() => toggleLine(line.id)}
-                            style={{ marginRight: '12rem', cursor: 'pointer', width: '16rem', height: '16rem' }}
-                        />
-                        <div style={{ flex: 1 }}>
-                            {/* Top Row: Name */}
-                            <div style={{ fontWeight: 'bold', fontSize: '14rem', marginBottom: '4rem' }}>
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '14rem', marginBottom: '4rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                                 {line.name}
                             </div>
-                            {/* Bottom Row: Stats */}
                             <div style={{ fontSize: '12rem', color: '#bbb', display: 'flex', gap: '10rem' }}>
                                 <span>{line.vehicles} 🚌</span>
                                 <span>{line.passengers} 👤</span>
                                 <span>{line.length}</span>
-                                <span>{line.usage}% full</span>
+                                <span>{line.usage}%</span>
                             </div>
+                        </div>
+                        <div style={{ marginLeft: '10rem' }}>
+                            {/* Individual Checkbox referencing local state */}
+                            <CustomCheckbox checked={activeLines.has(line.id)} onChange={() => toggleLine(line.id)} />
                         </div>
                     </div>
                 ))}

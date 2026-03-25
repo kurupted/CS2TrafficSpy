@@ -24,12 +24,21 @@ export const TrafficButton = () => {
                     />
                 </Tooltip>
 
-                {/* 2. New Transit Panel Button */}
-                <Tooltip tooltip="Transit Lines Panel">
+                {/* Test Button A: Vanilla Clone */}
+                <Tooltip tooltip="Transit (Vanilla Ribbons)">
                     <Button
                         src="coui://uil/Standard/PublicTransportLine.svg"
                         variant="floating"
-                        onSelect={() => trigger("TrafficSpy", "toggleTransitPanel", true)}
+                        onSelect={() => trigger("TrafficSpy", "toggleTransitVanilla", true)}
+                    />
+                </Tooltip>
+
+                {/* Test Button B: Custom (Blank Canvas) */}
+                <Tooltip tooltip="Transit (Custom Canvas)">
+                    <Button
+                        src="coui://uil/Standard/PublicTransportBus.svg"
+                        variant="floating"
+                        onSelect={() => trigger("TrafficSpy", "toggleTransitCustom", true)}
                     />
                 </Tooltip>
 
