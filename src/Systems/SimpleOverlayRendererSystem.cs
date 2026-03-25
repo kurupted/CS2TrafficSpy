@@ -4,6 +4,8 @@ using Game.Net;
 using Game.Rendering;
 using Game.Routes;
 using Game.Tools;
+using Game.Pathfind; // Required for PathElement
+using Game.Prefabs; // Required for TransportLineData
 using TrafficSpy.Jobs;
 using Unity.Collections;
 using Unity.Entities;
@@ -13,34 +15,34 @@ using Color = UnityEngine.Color;
 
 namespace TrafficSpy.Systems
 {
-    // A simple system to render lines and curves on the map overlay.
-    // Adapted from EmploymentTracker.
     public partial class SimpleOverlayRendererSystem : SystemBase
     {
         private OverlayRenderSystem m_OverlayRenderSystem;
         private TrafficUISystem m_TrafficUISystem;
+        private CameraUpdateSystem m_CameraUpdateSystem; 
         private EntityQuery m_TransitLinesQuery;
 
         protected override void OnCreate()
         {
             base.OnCreate();
             m_OverlayRenderSystem = World.GetExistingSystemManaged<OverlayRenderSystem>();
-            
             m_TrafficUISystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
-    
-            // Define the query for routes that have colors and waypoints
+            m_CameraUpdateSystem = World.GetExistingSystemManaged<CameraUpdateSystem>();
+
             m_TransitLinesQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { 
                     ComponentType.ReadOnly<Route>(), 
                     ComponentType.ReadOnly<Game.Routes.Color>(), 
-                    ComponentType.ReadOnly<RouteWaypoint>() 
+                    ComponentType.ReadOnly<RouteSegment>() 
                 },
-                None = new[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+                None = new[] { 
+                    ComponentType.ReadOnly<Deleted>(), 
+                    ComponentType.ReadOnly<Game.Tools.Temp>() // Explicit namespace fix
+                }
             });
         }
 
-// Inside SimpleOverlayRendererSystem.OnUpdate()
         protected override void OnUpdate()
         {
             if (m_TrafficUISystem == null || !m_TrafficUISystem.IsTransitPanelActive) return;
@@ -48,29 +50,30 @@ namespace TrafficSpy.Systems
             var hiddenSet = new NativeHashSet<Entity>(TrafficUISystem.HiddenCustomRoutes.Count, Allocator.TempJob);
             foreach (var e in TrafficUISystem.HiddenCustomRoutes) hiddenSet.Add(e);
 
-            // Assuming m_OverlayRenderSystem is your reference to vanilla OverlayRenderSystem
             OverlayRenderSystem.Buffer buffer = m_OverlayRenderSystem.GetBuffer(out JobHandle deps);
 
             var transitJob = new RenderTransitLineOverlayJob
             {
                 overlayBuffer = buffer,
-                // FIX: Pass EntityTypeHandle correctly
-                EntityType = GetEntityTypeHandle(),
-                ColorType = GetComponentTypeHandle<Game.Routes.Color>(true),
-                WaypointBufferType = GetBufferTypeHandle<RouteWaypoint>(true),
-                CurveLookup = GetComponentLookup<Curve>(true),
-                ConnectedLookup = GetComponentLookup<Connected>(true), // Added this
-                HiddenRoutes = hiddenSet
+                EntityType = SystemAPI.GetEntityTypeHandle(),
+                ColorType = SystemAPI.GetComponentTypeHandle<Game.Routes.Color>(true),
+                SegmentBufferType = SystemAPI.GetBufferTypeHandle<RouteSegment>(true),
+                PathElementLookup = SystemAPI.GetBufferLookup<PathElement>(true),
+                CurveLookup = SystemAPI.GetComponentLookup<Curve>(true),
+                PrefabRefLookup = SystemAPI.GetComponentLookup<PrefabRef>(true),
+                TransportLineDataLookup = SystemAPI.GetComponentLookup<TransportLineData>(true),
+                HiddenRoutes = hiddenSet,
+                // FIX: Use .zoom as per your decompiler snippet
+                ZoomLevel = m_CameraUpdateSystem.zoom 
             };
 
-            // FIX: Use the local m_TransitLinesQuery
             JobHandle transitHandle = transitJob.Schedule(m_TransitLinesQuery, JobHandle.CombineDependencies(Dependency, deps));
-    
             hiddenSet.Dispose(transitHandle);
             Dependency = transitHandle;
             m_OverlayRenderSystem.AddBufferWriter(Dependency);
         }
 
+        // Wrapper methods for TrafficRouteSystem compatibility
         public Buffer GetBuffer(out JobHandle dependencies)
         {
             return new Buffer(m_OverlayRenderSystem.GetBuffer(out dependencies));
@@ -84,21 +87,11 @@ namespace TrafficSpy.Systems
         public struct Buffer
         {
             private OverlayRenderSystem.Buffer m_Buffer;
-
-            public Buffer(OverlayRenderSystem.Buffer buffer)
-            {
-                m_Buffer = buffer;
-            }
-
+            public Buffer(OverlayRenderSystem.Buffer buffer) { m_Buffer = buffer; }
             public void DrawCurve(Color color, Bezier4x3 curve, float width, float2 roundness)
-            {
-                m_Buffer.DrawCurve(color, curve, width, roundness);
-            }
-
+            { m_Buffer.DrawCurve(color, curve, width, roundness); }
             public void DrawLine(Color color, Line3.Segment line, float width)
-            {
-                m_Buffer.DrawLine(color, line, width);
-            }
+            { m_Buffer.DrawLine(color, line, width); }
         }
     }
 }

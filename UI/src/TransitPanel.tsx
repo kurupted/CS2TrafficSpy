@@ -1,9 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { bindValue, trigger } from "cs2/api";
-import { useValue } from "cs2/api";
+// Added 'trigger' and 'bindValue' to the imports
+import { bindValue, trigger, useValue } from "cs2/api";
 
+// 1. Define the binding for Zone Colors
 const showTransitPanel$ = bindValue<boolean>("TrafficSpy", "showTransitPanel", false);
 const transitLinesData$ = bindValue<string>("TrafficSpy", "transitLinesData", "[]");
+const useZoneColors$ = bindValue<boolean>("TrafficSpy", "useZoneColors", false);
 
 type TransitType = 'bus' | 'train' | 'subway' | 'tram' | 'airplane' | 'ship' | 'none';
 
@@ -16,10 +18,10 @@ interface TransitLine {
     passengers: number;
     length: string;
     usage: number;
-    // We get visible from C#, but we rely on our local React state for snappiness
     visible: boolean;
 }
 
+// CustomCheckbox remains the same, accepting () => void
 const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
     <div
         onClick={onChange}
@@ -36,16 +38,32 @@ const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () 
 export const TransitPanel = () => {
     const isVisible = useValue(showTransitPanel$);
     const rawData = useValue(transitLinesData$);
-    const lines: TransitLine[] = JSON.parse(rawData);
 
+    let lines: TransitLine[] = [];
+    try {
+        if (rawData && rawData !== "[]") {
+            lines = JSON.parse(rawData);
+        }
+    } catch (e) {
+        console.error("TrafficSpy UI: Failed to parse transit data", e);
+    }
+
+    // Safety: If data isn't ready, show a loading state instead of crashing
+    if (!isVisible) return null;
+    if (lines.length === 0) {
+        return (
+            <div>
+                <div>Loading Transit Data...</div>
+            </div>
+        );
+    }
+    
+    const useZoneColors = useValue(useZoneColors$);
     const [activeTab, setActiveTab] = useState<TransitType>('bus');
     const [showDepots, setShowDepots] = useState(true);
     const [showStations, setShowStations] = useState(true);
-
-    // RESTORED: Local React state for instant checkbox response
     const [activeLines, setActiveLines] = useState<Set<number>>(new Set());
 
-    // Sync React state when C# initially loads data
     useEffect(() => {
         if (isVisible && lines.length > 0 && activeLines.size === 0) {
             const visibleIds = lines.filter(l => l.visible).map(l => l.id);
@@ -56,11 +74,8 @@ export const TransitPanel = () => {
     if (!isVisible) return null;
 
     const currentLines = lines.filter(l => l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
-
-    // Evaluate if all lines in the current tab are selected
     const allVisible = currentLines.length > 0 && currentLines.every(l => activeLines.has(l.id));
 
-    // Individual Toggle
     const toggleLine = (id: number) => {
         const next = new Set(activeLines);
         let willShow = false;
@@ -71,22 +86,17 @@ export const TransitPanel = () => {
             willShow = true;
         }
         setActiveLines(next);
-        trigger("TrafficSpy", "setLineVisible", id, willShow); // Tell C# to update the game
+        trigger("TrafficSpy", "setLineVisible", id, willShow);
     };
 
-    // Toggle All Button
     const toggleAll = () => {
         const next = new Set(activeLines);
         const targetState = !allVisible;
-
         currentLines.forEach(l => {
             if (targetState) next.add(l.id);
             else next.delete(l.id);
-
-            // Tell C# to update the game for each line
             trigger("TrafficSpy", "setLineVisible", l.id, targetState);
         });
-
         setActiveLines(next);
     };
 
@@ -101,8 +111,18 @@ export const TransitPanel = () => {
         }}>
             <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
+
+                {/* 3. Updated Zone Colors Checkbox Fix */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '12rem' }}>
+                    <CustomCheckbox
+                        checked={useZoneColors}
+                        onChange={() => trigger('TrafficSpy', 'setUseZoneColors', !useZoneColors)}
+                    />
+                    <span>Zones</span>
+                </div>
+
                 <button
-                    onClick={() => trigger("TrafficSpy", "toggleTransitVanilla", false)}
+                    onClick={() => trigger("TrafficSpy", "toggleTransitCustom", false)}
                     style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '16rem' }}>✕</button>
             </div>
 

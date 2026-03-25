@@ -1,58 +1,68 @@
 ﻿using Game.Net;
+using Game.Prefabs;
 using Game.Rendering;
 using Game.Routes;
+using Game.Pathfind; // Fixes PathElement symbol
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace TrafficSpy.Jobs
 {
     [BurstCompile]
     public struct RenderTransitLineOverlayJob : IJobChunk
     {
-        public OverlayRenderSystem.Buffer overlayBuffer;
+        public OverlayRenderSystem.Buffer overlayBuffer; // Uses vanilla type
         
-        // FIX: Use EntityTypeHandle instead of ComponentTypeHandle<Entity>
         [ReadOnly] public EntityTypeHandle EntityType;
         [ReadOnly] public ComponentTypeHandle<Game.Routes.Color> ColorType;
-        [ReadOnly] public BufferTypeHandle<RouteWaypoint> WaypointBufferType;
+        [ReadOnly] public BufferTypeHandle<RouteSegment> SegmentBufferType;
         
+        [ReadOnly] public BufferLookup<PathElement> PathElementLookup;
         [ReadOnly] public ComponentLookup<Curve> CurveLookup;
-        // FIX: Need ConnectedLookup to find the road segment from the waypoint
-        [ReadOnly] public ComponentLookup<Connected> ConnectedLookup;
         [ReadOnly] public NativeHashSet<Entity> HiddenRoutes;
+
+        [ReadOnly] public ComponentLookup<PrefabRef> PrefabRefLookup;
+        [ReadOnly] public ComponentLookup<TransportLineData> TransportLineDataLookup;
+        public float ZoomLevel; 
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
             NativeArray<Entity> entities = chunk.GetNativeArray(EntityType);
             NativeArray<Game.Routes.Color> colors = chunk.GetNativeArray(ref ColorType);
-            BufferAccessor<RouteWaypoint> waypointAccess = chunk.GetBufferAccessor(ref WaypointBufferType);
+            BufferAccessor<RouteSegment> segmentAccess = chunk.GetBufferAccessor(ref SegmentBufferType);
+
+            // Scale thickness based on zoom (thicker when zoomed out)
+            float baseWidth = 6.0f;
+            float thickness = baseWidth; // * math.lerp(1f, 4f, ZoomLevel);
 
             for (int i = 0; i < chunk.Count; i++)
             {
                 Entity routeEntity = entities[i];
                 if (HiddenRoutes.Contains(routeEntity)) continue;
 
-                UnityEngine.Color renderColor = colors[i].m_Color;
-                DynamicBuffer<RouteWaypoint> waypoints = waypointAccess[i];
-
-                for (int j = 0; j < waypoints.Length; j++)
+                // Hide Airplane transit lines
+                if (PrefabRefLookup.TryGetComponent(routeEntity, out var prefabRef) &&
+                    TransportLineDataLookup.TryGetComponent(prefabRef.m_Prefab, out var lineData))
                 {
-                    Entity wpEntity = waypoints[j].m_Waypoint;
-                    
-                    // FIX: Waypoints use the 'Connected' component to link to the road/track Edge
-                    if (ConnectedLookup.TryGetComponent(wpEntity, out Connected connected))
+                    if (lineData.m_TransportType == TransportType.Airplane) continue;
+                }
+
+                UnityEngine.Color renderColor = colors[i].m_Color;
+                DynamicBuffer<RouteSegment> segments = segmentAccess[i];
+
+                for (int j = 0; j < segments.Length; j++)
+                {
+                    Entity segmentEntity = segments[j].m_Segment;
+                    if (PathElementLookup.TryGetBuffer(segmentEntity, out DynamicBuffer<PathElement> path))
                     {
-                        if (CurveLookup.TryGetComponent(connected.m_Connected, out Curve curve))
+                        for (int k = 0; k < path.Length; k++)
                         {
-                            overlayBuffer.DrawCurve(
-                                renderColor, 
-                                curve.m_Bezier, 
-                                4.0f,            // Line width
-                                new float2(0, 1) 
-                            );
+                            if (CurveLookup.TryGetComponent(path[k].m_Target, out Curve curve))
+                            {
+                                overlayBuffer.DrawCurve(renderColor, curve.m_Bezier, thickness, new Unity.Mathematics.float2(0, 1));
+                            }
                         }
                     }
                 }

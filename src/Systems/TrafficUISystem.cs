@@ -25,6 +25,8 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.Diagnostics;
 using Entity = Unity.Entities.Entity;
+using UnityEngine;
+using Transform = Game.Objects.Transform;
 
 namespace TrafficSpy.Systems
 {
@@ -111,7 +113,6 @@ namespace TrafficSpy.Systems
         private Game.Prefabs.InfoviewPrefab m_CustomInfoview;
         private Entity m_CustomInfoviewEntity = Entity.Null;
         private string m_ActiveTransitMode = "none"; 
-        private NativeHashSet<Entity> m_OriginallyHiddenRoutes;
         
         private Game.UI.InGame.InfoviewsUISystem m_InfoviewsUISystem;
         public bool IsTransitPanelActive => this.showTransitPanelBinding?.value ?? false;
@@ -129,6 +130,9 @@ namespace TrafficSpy.Systems
         }
         private List<StopOption> m_AssociatedStops = new List<StopOption>();
         private EntityQuery m_AllStopsQuery;
+        
+        private ValueBinding<bool> useZoneColorsBinding;
+        public bool UseZoneColors { get; private set; } = false;
         
         protected override void OnCreate()
         {
@@ -279,7 +283,6 @@ namespace TrafficSpy.Systems
             
             m_InfoviewsUISystem = World.GetOrCreateSystemManaged<Game.UI.InGame.InfoviewsUISystem>();
             
-            // Safe to do here because it doesn't query the ECS!
             SetupCustomInfoview();
             
             m_TransitLinesQuery = GetEntityQuery(new EntityQueryDesc
@@ -299,6 +302,14 @@ namespace TrafficSpy.Systems
             this.transitLinesDataBinding = new ValueBinding<string>("TrafficSpy", "transitLinesData", "[]");
             AddBinding(this.showTransitPanelBinding);
             AddBinding(this.transitLinesDataBinding);
+            
+            this.useZoneColorsBinding = new ValueBinding<bool>("TrafficSpy", "useZoneColors", false);
+            AddBinding(this.useZoneColorsBinding);
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setUseZoneColors", (bool active) => {
+                this.UseZoneColors = active;
+                this.useZoneColorsBinding.Update(active);
+            }));
             
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "toggleTransitCustom", (active) => {
@@ -496,21 +507,30 @@ namespace TrafficSpy.Systems
             this.transitLinesDataBinding.Update(result.ToString());
         }
         
-        // --- 1. INFOVIEW GENERATION ---
         private void SetupCustomInfoview()
         {
             var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
 
             m_CustomInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
             m_CustomInfoview.name = "TrafficSpyCustomView";
-            m_CustomInfoview.m_Group = 99; // High group number to prevent vanilla collisions
+            m_CustomInfoview.m_Group = 99;
             m_CustomInfoview.m_Priority = 1;
-            
-            Game.Prefabs.BuildingStatusInfomodePrefab dummyInfomode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
-            dummyInfomode.name = "TrafficSpyDummyMode";
-            
+    
+            // Buildings Mode
+            Game.Prefabs.BuildingStatusInfomodePrefab buildingMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
+            buildingMode.name = "TrafficSpyBuildingMode";
+    
+            /*var netMode = ScriptableObject.CreateInstance<Game.Prefabs.NetStatusInfomodePrefab>();
+            netMode.name = "TrafficSpyNetMode";
+
+            // FIX: GradientInfomodeBasePrefab uses MinColor and MaxColor
+            UnityEngine.Color darkGray = new UnityEngine.Color(0.15f, 0.15f, 0.15f, 1.0f);
+            netMode.m_MinColor = darkGray;
+            netMode.m_MaxColor = darkGray;*/
+
             m_CustomInfoview.m_Infomodes = new Game.Prefabs.InfomodeInfo[] { 
-                new Game.Prefabs.InfomodeInfo() { m_Mode = dummyInfomode, m_Priority = 1 } 
+                new Game.Prefabs.InfomodeInfo() { m_Mode = buildingMode, m_Priority = 1 },
+                //new Game.Prefabs.InfomodeInfo() { m_Mode = netMode, m_Priority = 2 }
             };
 
             prefabSystem.AddPrefab(m_CustomInfoview);
@@ -655,7 +675,7 @@ namespace TrafficSpy.Systems
         {
             CurrentRenderList.Clear();
             if (allAnalysisResults == null) return;
-            ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Game.Objects.Transform>(true);
+            ComponentLookup<Game.Objects.Transform> transformLookup = SystemAPI.GetComponentLookup<Game.Objects.Transform>(true);
 
             foreach (var item in allAnalysisResults)
             {
@@ -925,7 +945,7 @@ namespace TrafficSpy.Systems
         {
             int cntNone = 0, cntShopping = 0, cntLeisure = 0, cntGoingHome = 0, cntGoingToWork = 0, cntMovingIn = 0, cntMovingAway = 0, cntSchool = 0, cntTransporting = 0, cntReturning = 0, cntTourism = 0, cntOther = 0, cntServices = 0;
 
-            ComponentLookup<Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
+            ComponentLookup<Game.Objects.Transform> transformLookup = SystemAPI.GetComponentLookup<Transform>(true);
 
             foreach (var item in allAnalysisResults)
             {
