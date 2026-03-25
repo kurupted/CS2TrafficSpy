@@ -307,18 +307,16 @@ namespace TrafficSpy.Systems
             }));
 
             AddBinding(new TriggerBinding<int, bool>("TrafficSpy", "setLineVisible", (entityIndex, show) => {
+                // Light-weight toggle without ECS structural changes
                 using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
                 foreach (var e in entities)
                 {
                     if (e.Index == entityIndex)
                     {
-                        if (show) 
-                            HiddenCustomRoutes.Remove(e);
-                        else 
-                            HiddenCustomRoutes.Add(e);
+                        if (show) HiddenCustomRoutes.Remove(e);
+                        else HiddenCustomRoutes.Add(e);
             
-                        // Immediately update the UI to reflect the toggle without waiting
-                        UpdateTransitLinesData(); 
+                        UpdateTransitLinesData(); // Refresh UI strings
                         break;
                     }
                 }

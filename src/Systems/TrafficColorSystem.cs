@@ -1,90 +1,76 @@
-﻿using Colossal.Collections;
-using Game;
+﻿using Game;
+using Game.Buildings;
 using Game.Common;
 using Game.Objects;
 using Game.Rendering;
+using Game.Routes;
 using Game.Tools;
-using HarmonyLib;
-using System.Reflection;
+using TrafficSpy.Systems;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 
 namespace TrafficSpy.Systems
 {
+    // We update after ObjectColorSystem so we can override the game's default coloring
+    [UpdateAfter(typeof(Game.Rendering.ObjectColorSystem))]
     public partial class TrafficColorSystem : GameSystemBase
     {
-        private static TrafficColorSystem _instance;
-        private TrafficUISystem _trafficUISystem;
-        
-        private const string HarmonyID = "TrafficSpy.TrafficColorSystem";
-
-        [BurstCompile]
-        private struct UpdateColorsJobDefault : IJobChunk
-        {
-            public ComponentTypeHandle<Color> ComponentTypeHandleColor;
-
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
-            {
-                NativeArray<Color> colors = chunk.GetNativeArray(ref ComponentTypeHandleColor);
-                for (int i = 0; i < colors.Length; i++)
-                {
-                    Color color = colors[i];
-                    color.m_Index = 0;
-                    color.m_Value = 0;
-                    colors[i] = color;
-                }
-            }
-        }
+        private EntityQuery m_TargetQuery;
+        private TrafficUISystem m_UISystem;
 
         protected override void OnCreate()
         {
             base.OnCreate();
-            _instance = this;
-            _trafficUISystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
-
-            // Intercept the vanilla color system
-            MethodInfo originalMethod = typeof(ObjectColorSystem).GetMethod("OnUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
-            MethodInfo prefixMethod = typeof(TrafficColorSystem).GetMethod(nameof(OnUpdatePrefix), BindingFlags.Static | BindingFlags.NonPublic);
+            m_UISystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
             
-            if (originalMethod != null && prefixMethod != null)
+            // Look for any object that is a stop or a station that has a color component
+            m_TargetQuery = GetEntityQuery(new EntityQueryDesc
             {
-                new Harmony(HarmonyID).Patch(originalMethod, new HarmonyMethod(prefixMethod));
-            }
+                All = new[] { ComponentType.ReadWrite<Game.Objects.Color>() },
+                Any = new[] { ComponentType.ReadOnly<TransportStop>(), ComponentType.ReadOnly<TransportStation>() },
+                None = new[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+            });
         }
 
-        protected override void OnUpdate() { }
-
-        private static bool OnUpdatePrefix()
+        protected override void OnUpdate()
         {
-            return _instance.OnUpdateImpl();
-        }
+            // Only apply the gray-out effect if the custom transit panel is open
+            if (!m_UISystem.IsTransitPanelActive) return;
 
-        private bool OnUpdateImpl()
-        {
-            // If the transit panel is CLOSED, return true to let vanilla handle colors normally
-            bool isTransitViewActive = _trafficUISystem != null && _trafficUISystem.IsTransitPanelActive;
-            if (!isTransitViewActive) return true;
-
-            // If the transit panel is OPEN, wipe all colors from the map
-            EntityQuery queryDefault = SystemAPI.QueryBuilder()
-                .WithAllRW<Color>()
-                .WithAll<Object>()
-                .WithNone<Hidden, Deleted>()
-                .Build();
-
-            UpdateColorsJobDefault jobDefault = new UpdateColorsJobDefault()
+            var job = new GrayTransitStructuresJob
             {
-                ComponentTypeHandleColor = SystemAPI.GetComponentTypeHandle<Color>(false)
+                ColorType = GetComponentTypeHandle<Game.Objects.Color>(false)
             };
+            
+            Dependency = job.ScheduleParallel(m_TargetQuery, Dependency);
+        }
 
-            JobHandle defaultHandle = JobChunkExtensions.ScheduleParallel(jobDefault, queryDefault, this.Dependency);
-            this.Dependency = defaultHandle;
+        [BurstCompile]
+        struct GrayTransitStructuresJob : IJobChunk
+        {
+            public ComponentTypeHandle<Game.Objects.Color> ColorType;
 
-            // Return false to BLOCK the vanilla ObjectColorSystem from running
-            return false; 
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            {
+                NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorType);
+                
+                for (int i = 0; i < colors.Length; i++)
+                {
+                    Game.Objects.Color color = colors[i];
+                    
+                    // Setting m_Index to 0 uses the game's default palette
+                    color.m_Index = 0; 
+                    
+                    // Value 128 is roughly 50% brightness (Gray)
+                    color.m_Value = 128; 
+                    
+                    colors[i] = color;
+                }
+            }
         }
     }
 }
