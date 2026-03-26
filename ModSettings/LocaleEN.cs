@@ -40,6 +40,11 @@ namespace TrafficSpy.ModSettings
                 { m_Setting.GetBindingKeyLocaleID(Mod.kToggleActionName), "Activation Key" },
 
                 { m_Setting.GetBindingMapLocaleID(), ModAssemblyInfo.Title },
+                
+                { "Infoviews.NAME[TrafficSpyCustomView]", "Better Transit View" },
+                { "Infoviews.DESC[TrafficSpyCustomView]", "Custom transit analysis view." },
+                { "Infoviews.INFOMODE[TrafficSpyStations]", "Show Stations" },
+                { "Infoviews.INFOMODE[TrafficSpyDepots]", "Show Depots" }
             };
         }
 

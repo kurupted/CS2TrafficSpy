@@ -5,7 +5,6 @@ import { bindValue, trigger, useValue } from "cs2/api";
 // 1. Define the binding for Zone Colors
 const showTransitPanel$ = bindValue<boolean>("TrafficSpy", "showTransitPanel", false);
 const transitLinesData$ = bindValue<string>("TrafficSpy", "transitLinesData", "[]");
-const useZoneColors$ = bindValue<boolean>("TrafficSpy", "useZoneColors", false);
 
 type TransitType = 'bus' | 'train' | 'subway' | 'tram' | 'airplane' | 'ship' | 'none';
 
@@ -38,6 +37,9 @@ const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () 
 export const TransitPanel = () => {
     const isVisible = useValue(showTransitPanel$);
     const rawData = useValue(transitLinesData$);
+    
+    const [activeTab, setActiveTab] = useState<TransitType>('bus');
+    const [activeLines, setActiveLines] = useState<Set<number>>(new Set());
 
     let lines: TransitLine[] = [];
     try {
@@ -48,22 +50,6 @@ export const TransitPanel = () => {
         console.error("TrafficSpy UI: Failed to parse transit data", e);
     }
 
-    // Safety: If data isn't ready, show a loading state instead of crashing
-    if (!isVisible) return null;
-    if (lines.length === 0) {
-        return (
-            <div>
-                <div>Loading Transit Data...</div>
-            </div>
-        );
-    }
-    
-    const useZoneColors = useValue(useZoneColors$);
-    const [activeTab, setActiveTab] = useState<TransitType>('bus');
-    const [showDepots, setShowDepots] = useState(true);
-    const [showStations, setShowStations] = useState(true);
-    const [activeLines, setActiveLines] = useState<Set<number>>(new Set());
-
     useEffect(() => {
         if (isVisible && lines.length > 0 && activeLines.size === 0) {
             const visibleIds = lines.filter(l => l.visible).map(l => l.id);
@@ -72,6 +58,18 @@ export const TransitPanel = () => {
     }, [isVisible, lines]);
 
     if (!isVisible) return null;
+
+    // Safety: If data isn't ready, show a loading state instead of crashing
+    if (lines.length === 0) {
+        return (
+            <div style={{
+                position: 'absolute', left: '60rem', top: '60rem', width: '320rem',
+                backgroundColor: 'rgba(25, 30, 35, 0.95)', padding: '20rem', color: 'white'
+            }}>
+                Loading Transit Data...
+            </div>
+        );
+    }
 
     const currentLines = lines.filter(l => l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
     const allVisible = currentLines.length > 0 && currentLines.every(l => activeLines.has(l.id));
@@ -102,24 +100,20 @@ export const TransitPanel = () => {
 
     return (
         <div style={{
-            position: 'absolute', left: '60rem', top: '60rem', width: '320rem',
-            backgroundColor: 'rgba(25, 30, 35, 0.95)', backdropFilter: 'blur(10px)',
-            border: '1rem solid rgba(255, 255, 255, 0.1)', borderRadius: '8rem',
-            color: 'white', display: 'flex', flexDirection: 'column',
-            maxHeight: '80vh', fontFamily: 'sans-serif',
-            boxShadow: '0 4rem 12rem rgba(0,0,0,0.5)', zIndex: 1000, pointerEvents: 'auto'
+            position: 'absolute',
+            top: '235rem', // Adjust this number to sit perfectly below the vanilla legend
+            left: '10rem', // Aligns with the left side of the screen
+            width: '500rem',
+            maxHeight: '1200rem',
+            backgroundColor: 'var(--panelColorNormal)', // Matches native UI
+            borderRadius: '4rem',
+            padding: '12rem',
+            color: 'white',
+            pointerEvents: 'auto', // Ensures you can click inside it
+            boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
         }}>
             <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
-
-                {/* 3. Updated Zone Colors Checkbox Fix */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '12rem' }}>
-                    <CustomCheckbox
-                        checked={useZoneColors}
-                        onChange={() => trigger('TrafficSpy', 'setUseZoneColors', !useZoneColors)}
-                    />
-                    <span>Zones</span>
-                </div>
 
                 <button
                     onClick={() => trigger("TrafficSpy", "toggleTransitCustom", false)}
@@ -141,16 +135,7 @@ export const TransitPanel = () => {
                     </button>
                 ))}
             </div>
-
-            <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', gap: '20rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer' }}>
-                    <CustomCheckbox checked={showDepots} onChange={() => setShowDepots(!showDepots)} /> Show Depots
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer' }}>
-                    <CustomCheckbox checked={showStations} onChange={() => setShowStations(!showStations)} /> Show Stations
-                </label>
-            </div>
-
+            
             {/* Toggle All Row */}
             <div style={{ padding: '10rem 15rem', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '13rem', fontWeight: 'bold', color: '#aaa' }}>{activeTab.toUpperCase()} LINES</span>

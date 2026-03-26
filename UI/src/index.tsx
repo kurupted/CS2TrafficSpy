@@ -1,34 +1,27 @@
-import { ModRegistrar, ModuleRegistry } from "cs2/modding";
-import TrafficButton from "./TrafficButton";
-import { SelectedInfoPanelTogglesComponent } from "./SelectedInfoPanelTogglesComponent";
-import { VanillaComponentResolver } from "./VanillaComponentResolver";
-import { TransitPanel } from "./TransitPanel"; // 1. Import the new panel
+import { ModRegistrar } from "cs2/modding";
+import { TransitPanel } from "./TransitPanel";
+import { TrafficButton } from "./TrafficButton";
 
-const register: ModRegistrar = (moduleRegistry: ModuleRegistry) => {
+export default ((moduleRegistry) => {
 
-    // 1. Setup Resolver
-    VanillaComponentResolver.setRegistry(moduleRegistry);
+    (window as any).moduleRegistry = moduleRegistry;
+    
+    moduleRegistry.append('GameTopLeft', TrafficButton);
 
-    // 2. Add Toolbar Button
-    moduleRegistry.append("GameTopLeft", TrafficButton);
+    /*moduleRegistry.extend(
+        "game-ui/game/components/infoviews/infoview-panel/infoview-panel.tsx",
+        "InfoviewPanel",
+        (VanillaComponent: any) => {
+            return (props: any) => (
+                <>
+                    <VanillaComponent {...props} />
+                    <TransitPanel />
+                </>
+            );
+        }
+    );*/
 
-    // 3. Mount the Floating Transit Panel
-    moduleRegistry.append("Game", TransitPanel); // <--- Add this line
-
-    // 4. Extend Info Panel
-    const infoPanelPath = "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx";
-    const infoPanelExport = "selectedInfoSectionComponents";
-
-    try {
-        moduleRegistry.extend(
-            infoPanelPath,
-            infoPanelExport,
-            SelectedInfoPanelTogglesComponent
-        );
-        console.log("[TrafficSpy] UI Registered Successfully");
-    } catch (e) {
-        console.error("[TrafficSpy] Failed to register UI extensions", e);
-    }
-}
-
-export default register;
+    // 2. Safely append to the main Game screen instead of extending a hidden panel
+    moduleRegistry.append('Game', TransitPanel);
+    
+}) as ModRegistrar;

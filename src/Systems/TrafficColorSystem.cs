@@ -1,16 +1,15 @@
 ﻿using Game;
 using Game.Buildings;
-using Game.Citizens; // Fixes ResidentialProperty symbol
 using Game.Common;
 using Game.Net;
 using Game.Objects;
 using Game.Rendering;
 using Game.Routes;
-using Game.Tools; // Fixes Temp component symbol
+using Game.Tools;
 using TrafficSpy.Systems;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
-using Unity.Collections; // Fixes Allocator/NativeArray symbols
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 
@@ -23,30 +22,36 @@ namespace TrafficSpy.Systems
         private EntityQuery m_BackgroundQuery;
         private TrafficUISystem m_UISystem;
 
+        // src/Systems/TrafficColorSystem.cs
+
         protected override void OnCreate()
         {
             base.OnCreate();
             m_UISystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
 
-            // Query for stops and stations
             m_TransitStructuresQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadWrite<Game.Objects.Color>() },
-                Any = new[] { ComponentType.ReadOnly<TransportStop>(), ComponentType.ReadOnly<TransportStation>() },
-                None = new[] { ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() }
+                // Use full namespaces to avoid ambiguity
+                Any = new[] { 
+                    ComponentType.ReadOnly<Game.Routes.TransportStop>(), 
+                    ComponentType.ReadOnly<Game.Buildings.TransportStation>(),
+                    ComponentType.ReadOnly<Game.Buildings.TransportDepot>()
+                },
+                None = new[] { ComponentType.ReadOnly<Game.Common.Deleted>(), ComponentType.ReadOnly<Game.Tools.Temp>() }
             });
 
-            // Query for city background (Buildings/Roads) excluding transit structures
             m_BackgroundQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadWrite<Game.Objects.Color>() },
-                Any = new[] { ComponentType.ReadOnly<Building>(), ComponentType.ReadOnly<Edge>() },
+                Any = new[] { ComponentType.ReadOnly<Building>(), ComponentType.ReadOnly<Game.Net.Edge>() },
                 None = new[]
                 {
-                    ComponentType.ReadOnly<TransportStop>(),
-                    ComponentType.ReadOnly<TransportStation>(),
-                    ComponentType.ReadOnly<Deleted>(),
-                    ComponentType.ReadOnly<Temp>()
+                    ComponentType.ReadOnly<Game.Routes.TransportStop>(),
+                    ComponentType.ReadOnly<Game.Buildings.TransportStation>(),
+                    ComponentType.ReadOnly<Game.Buildings.TransportDepot>(),
+                    ComponentType.ReadOnly<Game.Common.Deleted>(),
+                    ComponentType.ReadOnly<Game.Tools.Temp>()
                 }
             });
         }
@@ -55,69 +60,67 @@ namespace TrafficSpy.Systems
         {
             if (!m_UISystem.IsTransitPanelActive) return;
 
-            // Job for Transit structures (Stops/Stations) - Bright White
-            var transitJob = new ColorJob
+            // Transit Job: Assigns correct index based on entity type
+            var transitJob = new TransitHighlightJob
             {
-                EntityType = SystemAPI.GetEntityTypeHandle(),
                 ColorType = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false),
-                Mode = 0, 
-                UseZoneColors = false
+                StationType = SystemAPI.GetComponentTypeHandle<TransportStation>(true),
+                StopType = SystemAPI.GetComponentTypeHandle<TransportStop>(true),
+                DepotType = SystemAPI.GetComponentTypeHandle<TransportDepot>(true)
             };
 
-            // Job for Background city (Buildings/Roads) - Dark or Zone colors
-            var bgJob = new ColorJob
+            // Background Job: Dims everything else
+            var bgJob = new BackgroundDimJob
             {
-                EntityType = SystemAPI.GetEntityTypeHandle(),
-                ColorType = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false),
-                Mode = 1,
-                UseZoneColors = m_UISystem.UseZoneColors,
-                ResidentialLookup = SystemAPI.GetComponentLookup<ResidentialProperty>(true),
-                CommercialLookup = SystemAPI.GetComponentLookup<CommercialProperty>(true),
-                IndustrialLookup = SystemAPI.GetComponentLookup<IndustrialProperty>(true)
+                ColorType = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false)
             };
 
             JobHandle transitHandle = transitJob.ScheduleParallel(m_TransitStructuresQuery, Dependency);
             JobHandle bgHandle = bgJob.ScheduleParallel(m_BackgroundQuery, Dependency);
+
             Dependency = JobHandle.CombineDependencies(transitHandle, bgHandle);
         }
 
         [BurstCompile]
-        struct ColorJob : IJobChunk
+        struct TransitHighlightJob : IJobChunk
         {
-            [ReadOnly] public EntityTypeHandle EntityType;
             public ComponentTypeHandle<Game.Objects.Color> ColorType;
-            public int Mode; // 0 = Station/Stop, 1 = Background/City
-            public bool UseZoneColors;
-
-            [ReadOnly] public ComponentLookup<ResidentialProperty> ResidentialLookup;
-            [ReadOnly] public ComponentLookup<CommercialProperty> CommercialLookup;
-            [ReadOnly] public ComponentLookup<IndustrialProperty> IndustrialLookup;
+            [ReadOnly] public ComponentTypeHandle<TransportStation> StationType;
+            [ReadOnly] public ComponentTypeHandle<TransportStop> StopType;
+            [ReadOnly] public ComponentTypeHandle<TransportDepot> DepotType;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
-                NativeArray<Entity> entities = chunk.GetNativeArray(EntityType);
                 NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorType);
+                
+                // Determine what this chunk contains
+                bool isStationOrStop = chunk.Has(ref StationType) || chunk.Has(ref StopType);
+                bool isDepot = chunk.Has(ref DepotType);
+
+                // Map to the correct Infomode index defined in SetupCustomInfoview
+                byte targetIndex = 0;
+                if (isStationOrStop) targetIndex = 1; // Maps to "TrafficSpyStations"
+                else if (isDepot) targetIndex = 2;    // Maps to "TrafficSpyDepots"
 
                 for (int i = 0; i < colors.Length; i++)
                 {
-                    Entity e = entities[i];
-                    if (Mode == 0)
-                    {
-                        colors[i] = new Game.Objects.Color { m_Index = 0, m_Value = 255 };
-                    }
-                    else
-                    {
-                        byte colorValue = 20; // Very dark background
-                        byte colorIndex = 0;
+                    colors[i] = new Game.Objects.Color { m_Index = targetIndex, m_Value = 255 };
+                }
+            }
+        }
 
-                        if (UseZoneColors)
-                        {
-                            if (ResidentialLookup.HasComponent(e)) { colorIndex = 1; colorValue = 50; }
-                            else if (CommercialLookup.HasComponent(e)) { colorIndex = 2; colorValue = 50; }
-                            else if (IndustrialLookup.HasComponent(e)) { colorIndex = 3; colorValue = 50; }
-                        }
-                        colors[i] = new Game.Objects.Color { m_Index = colorIndex, m_Value = colorValue };
-                    }
+        [BurstCompile]
+        struct BackgroundDimJob : IJobChunk
+        {
+            public ComponentTypeHandle<Game.Objects.Color> ColorType;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            {
+                NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorType);
+                for (int i = 0; i < colors.Length; i++)
+                {
+                    // Dark blueprint background
+                    colors[i] = new Game.Objects.Color { m_Index = 0, m_Value = 25 };
                 }
             }
         }

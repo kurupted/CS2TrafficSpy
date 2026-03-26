@@ -27,7 +27,7 @@ export const TrafficButton = () => {
                 {/* Test Button B: Custom (Blank Canvas) */}
                 <Tooltip tooltip="Transit (Custom Canvas)">
                     <Button
-                        src="coui://uil/Standard/PublicTransportBus.svg"
+                        src="coui://uil/Standard/BusShelter.svg"
                         variant="floating"
                         onSelect={() => trigger("TrafficSpy", "toggleTransitCustom", true)}
                     />

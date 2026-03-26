@@ -53,6 +53,12 @@ namespace TrafficSpy.Systems
         public bool isMovingIn;
         public bool isTourist;
     }
+    
+    public enum TrafficSpyStatusType
+    {
+        Stations = 101,
+        Depots = 102
+    }
 
     [UpdateAfter(typeof(ToolSystem))]
     public partial class TrafficUISystem : InfoSectionBase
@@ -130,9 +136,6 @@ namespace TrafficSpy.Systems
         }
         private List<StopOption> m_AssociatedStops = new List<StopOption>();
         private EntityQuery m_AllStopsQuery;
-        
-        private ValueBinding<bool> useZoneColorsBinding;
-        public bool UseZoneColors { get; private set; } = false;
         
         protected override void OnCreate()
         {
@@ -302,14 +305,6 @@ namespace TrafficSpy.Systems
             this.transitLinesDataBinding = new ValueBinding<string>("TrafficSpy", "transitLinesData", "[]");
             AddBinding(this.showTransitPanelBinding);
             AddBinding(this.transitLinesDataBinding);
-            
-            this.useZoneColorsBinding = new ValueBinding<bool>("TrafficSpy", "useZoneColors", false);
-            AddBinding(this.useZoneColorsBinding);
-
-            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setUseZoneColors", (bool active) => {
-                this.UseZoneColors = active;
-                this.useZoneColorsBinding.Update(active);
-            }));
             
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "toggleTransitCustom", (active) => {
@@ -507,35 +502,43 @@ namespace TrafficSpy.Systems
             this.transitLinesDataBinding.Update(result.ToString());
         }
         
+        // src/Systems/TrafficUISystem.cs
+
         private void SetupCustomInfoview()
-        {
-            var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+{
+    var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
 
-            m_CustomInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
-            m_CustomInfoview.name = "TrafficSpyCustomView";
-            m_CustomInfoview.m_Group = 99;
-            m_CustomInfoview.m_Priority = 1;
-    
-            // Buildings Mode
-            Game.Prefabs.BuildingStatusInfomodePrefab buildingMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
-            buildingMode.name = "TrafficSpyBuildingMode";
-    
-            /*var netMode = ScriptableObject.CreateInstance<Game.Prefabs.NetStatusInfomodePrefab>();
-            netMode.name = "TrafficSpyNetMode";
+    m_CustomInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
+    m_CustomInfoview.name = "TrafficSpyTransitView";
+    m_CustomInfoview.m_Group = 10; // 10 = Transportation group (attaches to native legend)
+    m_CustomInfoview.m_Priority = 1;
 
-            // FIX: GradientInfomodeBasePrefab uses MinColor and MaxColor
-            UnityEngine.Color darkGray = new UnityEngine.Color(0.15f, 0.15f, 0.15f, 1.0f);
-            netMode.m_MinColor = darkGray;
-            netMode.m_MaxColor = darkGray;*/
+    // --- 1. STATIONS TOGGLE ---
+    var stationMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
+    stationMode.name = "TrafficSpyStations"; // Unique name for localization
+    stationMode.m_Type = (Game.Prefabs.BuildingStatusType)TrafficSpyStatusType.Stations; // THE CASTING TRICK
+    stationMode.m_LegendType = Game.Prefabs.GradientLegendType.Gradient; // Forces the UI to draw a toggle
+    stationMode.m_Low = UnityEngine.Color.white;
+    stationMode.m_Medium = UnityEngine.Color.white;
+    stationMode.m_High = UnityEngine.Color.white;
 
-            m_CustomInfoview.m_Infomodes = new Game.Prefabs.InfomodeInfo[] { 
-                new Game.Prefabs.InfomodeInfo() { m_Mode = buildingMode, m_Priority = 1 },
-                //new Game.Prefabs.InfomodeInfo() { m_Mode = netMode, m_Priority = 2 }
-            };
+    // --- 2. DEPOTS TOGGLE ---
+    var depotMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
+    depotMode.name = "TrafficSpyDepots"; // Unique name for localization
+    depotMode.m_Type = (Game.Prefabs.BuildingStatusType)TrafficSpyStatusType.Depots; // THE CASTING TRICK
+    depotMode.m_LegendType = Game.Prefabs.GradientLegendType.Gradient;
+    depotMode.m_Low = UnityEngine.Color.white;
+    depotMode.m_Medium = UnityEngine.Color.white;
+    depotMode.m_High = UnityEngine.Color.white;
 
-            prefabSystem.AddPrefab(m_CustomInfoview);
-            m_CustomInfoviewEntity = prefabSystem.GetEntity(m_CustomInfoview);
-        }
+    m_CustomInfoview.m_Infomodes = new Game.Prefabs.InfomodeInfo[] { 
+        new Game.Prefabs.InfomodeInfo() { m_Mode = stationMode, m_Priority = 1 },
+        new Game.Prefabs.InfomodeInfo() { m_Mode = depotMode, m_Priority = 2 }
+    };
+
+    prefabSystem.AddPrefab(m_CustomInfoview);
+    m_CustomInfoviewEntity = prefabSystem.GetEntity(m_CustomInfoview);
+}
         
         private void ActivateTransitMode(string mode)
         {

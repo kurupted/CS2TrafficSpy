@@ -1,4 +1,5 @@
-﻿using Game.Net;
+﻿using System;
+using Game.Net;
 using Game.Prefabs;
 using Game.Rendering;
 using Game.Routes;
@@ -34,8 +35,12 @@ namespace TrafficSpy.Jobs
             BufferAccessor<RouteSegment> segmentAccess = chunk.GetBufferAccessor(ref SegmentBufferType);
 
             // Scale thickness based on zoom (thicker when zoomed out)
-            float baseWidth = 6.0f;
-            float thickness = baseWidth; // * math.lerp(1f, 4f, ZoomLevel);
+            float minZoom = 1600f;
+            float maxZoom = 10000f;
+            float normalizedZoom = math.clamp((ZoomLevel - minZoom) / (maxZoom - minZoom), 0f, 1f);
+            float baseWidth = 5.0f;
+            float maxWidth = baseWidth * 10f; // 18.0f
+            float thickness = math.lerp(baseWidth, maxWidth, normalizedZoom);
 
             for (int i = 0; i < chunk.Count; i++)
             {
