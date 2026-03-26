@@ -103,8 +103,8 @@ export const TransitPanel = () => {
             position: 'absolute',
             top: '235rem', // Adjust this number to sit perfectly below the vanilla legend
             left: '10rem', // Aligns with the left side of the screen
-            width: '500rem',
-            maxHeight: '1200rem',
+            width: '450rem',
+            maxHeight: '900rem',
             backgroundColor: 'var(--panelColorNormal)', // Matches native UI
             borderRadius: '4rem',
             padding: '12rem',

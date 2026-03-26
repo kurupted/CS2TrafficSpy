@@ -64,9 +64,10 @@ namespace TrafficSpy.Systems
             var transitJob = new TransitHighlightJob
             {
                 ColorType = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false),
-                StationType = SystemAPI.GetComponentTypeHandle<TransportStation>(true),
-                StopType = SystemAPI.GetComponentTypeHandle<TransportStop>(true),
-                DepotType = SystemAPI.GetComponentTypeHandle<TransportDepot>(true)
+                EntityType = SystemAPI.GetEntityTypeHandle(),
+                StationLookup = SystemAPI.GetComponentLookup<Game.Buildings.TransportStation>(true),
+                DepotLookup = SystemAPI.GetComponentLookup<Game.Buildings.TransportDepot>(true),
+                StopLookup = SystemAPI.GetComponentLookup<Game.Routes.TransportStop>(true)
             };
 
             // Background Job: Dims everything else
@@ -81,30 +82,30 @@ namespace TrafficSpy.Systems
             Dependency = JobHandle.CombineDependencies(transitHandle, bgHandle);
         }
 
-        [BurstCompile]
         struct TransitHighlightJob : IJobChunk
         {
             public ComponentTypeHandle<Game.Objects.Color> ColorType;
-            [ReadOnly] public ComponentTypeHandle<TransportStation> StationType;
-            [ReadOnly] public ComponentTypeHandle<TransportStop> StopType;
-            [ReadOnly] public ComponentTypeHandle<TransportDepot> DepotType;
+            [ReadOnly] public EntityTypeHandle EntityType;
+            [ReadOnly] public ComponentLookup<Game.Buildings.TransportStation> StationLookup;
+            [ReadOnly] public ComponentLookup<Game.Buildings.TransportDepot> DepotLookup;
+            [ReadOnly] public ComponentLookup<Game.Routes.TransportStop> StopLookup;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorType);
-                
-                // Determine what this chunk contains
-                bool isStationOrStop = chunk.Has(ref StationType) || chunk.Has(ref StopType);
-                bool isDepot = chunk.Has(ref DepotType);
-
-                // Map to the correct Infomode index defined in SetupCustomInfoview
-                byte targetIndex = 0;
-                if (isStationOrStop) targetIndex = 1; // Maps to "TrafficSpyStations"
-                else if (isDepot) targetIndex = 2;    // Maps to "TrafficSpyDepots"
+                NativeArray<Entity> entities = chunk.GetNativeArray(EntityType);
 
                 for (int i = 0; i < colors.Length; i++)
                 {
-                    colors[i] = new Game.Objects.Color { m_Index = targetIndex, m_Value = 255 };
+                    Entity e = entities[i];
+            
+                    // MAGIC FIX: Use 1-based indices to match the Infomode toggles
+                    if (StationLookup.HasComponent(e) || StopLookup.HasComponent(e)) {
+                        colors[i] = new Game.Objects.Color { m_Index = 1, m_Value = 255 }; // Stations
+                    }
+                    else if (DepotLookup.HasComponent(e)) {
+                        colors[i] = new Game.Objects.Color { m_Index = 2, m_Value = 255 }; // Depots
+                    }
                 }
             }
         }
