@@ -455,29 +455,25 @@ namespace TrafficSpy.Systems
         result.Append("[");
 
         var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
-        var nameSystem = World.GetOrCreateSystemManaged<Game.UI.NameSystem>(); // ADDED: NameSystem is the most reliable way to get names
+        var nameSystem = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
         
         bool first = true;
 
         for (int i = 0; i < entities.Length; i++)
         {
             var entity = entities[i];
+
+            if (!EntityManager.HasComponent<Game.Routes.Color>(entity)) continue;
             
             var prefabRef = EntityManager.GetComponentData<Game.Prefabs.PrefabRef>(entity);
             var prefab = prefabSystem.GetPrefab<Game.Prefabs.TransportLinePrefab>(prefabRef.m_Prefab);
             if (prefab == null) continue;
-            string type = prefab.m_TransportType.ToString().ToLower();
             
+            string type = prefab.m_TransportType.ToString().ToLower();
             string displayType = "Route";
             if (!string.IsNullOrEmpty(type) && type != "none") displayType = char.ToUpper(type[0]) + type.Substring(1);
 
-            // CHANGED: Better Name Resolution
-            string name = "Unnamed Route";
-            
-            // 1. Try NameSystem first (Handles localization and custom names best)
-            name = nameSystem.GetRenderedLabelName(entity);
-            
-            // 2. Fallback to CustomName component manually if NameSystem returns a generic localization key
+            string name = nameSystem.GetRenderedLabelName(entity);
             if (string.IsNullOrEmpty(name) || name.StartsWith("Assets."))
             {
                 if (EntityManager.TryGetComponent<Game.Routes.RouteNumber>(entity, out var routeNum))
@@ -485,6 +481,7 @@ namespace TrafficSpy.Systems
                     int num = routeNum.m_Number;
                     name = num == 0 ? $"{displayType} {entity.Index}" : $"{displayType} {num}";
                 }
+                else name = "Unnamed Route";
             }
 
             var colorComp = EntityManager.GetComponentData<Game.Routes.Color>(entity); 
@@ -497,14 +494,19 @@ namespace TrafficSpy.Systems
             
             int usage = capacity > 0 ? UnityEngine.Mathf.RoundToInt(((float)cargo / capacity) * 100) : 0;
             string lengthStr = (length / 1000f).ToString("0.1") + "km";
-
+            
+            bool isCargo = false;
+            if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData))
+            {
+                isCargo = lineData.m_CargoTransport;
+            }
             bool isVisible = !HiddenCustomRoutes.Contains(entity);
 
             if (!first) result.Append(",");
             
             string safeName = name?.Replace("\"", "\\\"") ?? "Unnamed Route";
             
-            result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""usage"": {usage}, ""visible"": {isVisible.ToString().ToLower()} }}");
+            result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""usage"": {usage}, ""cargo"": {isCargo.ToString().ToLower()}, ""visible"": {isVisible.ToString().ToLower()} }}");
             
             first = false;
         }

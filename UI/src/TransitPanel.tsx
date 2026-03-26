@@ -69,7 +69,6 @@ export const TransitPanel = () => {
     if (!isVisible) return null;
     if (lines.length === 0) return (<div style={{ position: 'absolute', left: '60rem', top: '60rem', width: '320rem', backgroundColor: 'rgba(25, 30, 35, 0.95)', padding: '20rem', color: 'white' }}>Loading Transit Data...</div>);
 
-    // CHANGED: Filter logic to handle the new Cargo tab independently
     const currentLines = lines.filter(l => {
         if (activeTab === 'cargo') return l.cargo;
         return !l.cargo && (l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
@@ -96,14 +95,13 @@ export const TransitPanel = () => {
     };
 
     return (
-        <div style={{ position: 'absolute', top: '235rem', left: '10rem', width: '450rem', maxHeight: '740rem', backgroundColor: 'var(--panelColorNormal)', borderRadius: '4rem', padding: '12rem', color: 'white', pointerEvents: 'auto', boxShadow: '0 4px 8px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'absolute', top: '235rem', left: '10rem', width: '450rem', maxHeight: '725rem', backgroundColor: 'var(--panelColorNormal)', borderRadius: '4rem', padding: '12rem', color: 'white', pointerEvents: 'auto', boxShadow: '0 4px 8px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
                 <button onClick={() => trigger("TrafficSpy", "toggleTransitCustom", false)} style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '16rem' }}>✕</button>
             </div>
 
             <div style={{ display: 'flex', borderBottom: '1rem solid rgba(255,255,255,0.1)' }}>
-                {/* ADDED: Cargo tab */}
                 {['bus', 'train', 'subway', 'tram', 'ferry', 'cargo'].map((tab) => (
                     <button key={tab} onClick={() => setActiveTab(tab as TransitType)} style={{ flex: 1, padding: '10rem 0', cursor: 'pointer', textTransform: 'capitalize', fontSize: '13rem', background: activeTab === tab ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none', color: activeTab === tab ? 'white' : '#888', borderBottom: activeTab === tab ? '2rem solid #4287f5' : '2rem solid transparent' }}>
                         {tab}
@@ -127,10 +125,10 @@ export const TransitPanel = () => {
                             </div>
                             {/* CHANGED: Increased the gap drastically to separate the stats visually */}
                             <div style={{ fontSize: '12rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', gap: '16rem 24rem' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6rem' }}><VehicleIcon /> {line.vehicles}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6rem' }}><PassengerIcon /> {line.passengers}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6rem' }}><LengthIcon /> {line.length}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6rem' }}><UsageIcon /> {line.usage}%</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '10rem' }}><VehicleIcon /> {line.vehicles}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '10rem' }}><PassengerIcon /> {line.passengers}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '10rem' }}><LengthIcon /> {line.length}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '10rem' }}><UsageIcon /> {line.usage}%</span>
                             </div>
                         </div>
                         <div style={{ marginLeft: '15rem', flexShrink: 0 }}>
