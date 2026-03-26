@@ -52,6 +52,7 @@ namespace TrafficSpy.Jobs
                     TransportLineDataLookup.TryGetComponent(prefabRef.m_Prefab, out var lineData))
                 {
                     if (lineData.m_TransportType == TransportType.Airplane) continue;
+                    if (lineData.m_TransportType == TransportType.Ship) continue;
                 }
 
                 UnityEngine.Color renderColor = colors[i].m_Color;

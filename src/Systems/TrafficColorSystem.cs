@@ -1,127 +1,141 @@
-﻿using Game;
+﻿using Colossal.Entities;
+using Game;
 using Game.Buildings;
 using Game.Common;
-using Game.Net;
 using Game.Objects;
+using Game.Prefabs;
 using Game.Rendering;
-using Game.Routes;
 using Game.Tools;
-using TrafficSpy.Systems;
 using Unity.Burst;
-using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Jobs;
 
 namespace TrafficSpy.Systems
 {
-    [UpdateAfter(typeof(ObjectColorSystem))]
+    // Correct native system to update after
+    [UpdateAfter(typeof(ObjectColorSystem))] 
     public partial class TrafficColorSystem : GameSystemBase
     {
-        private EntityQuery m_TransitStructuresQuery;
-        private EntityQuery m_BackgroundQuery;
-        private TrafficUISystem m_UISystem;
-
-        // src/Systems/TrafficColorSystem.cs
+        private TrafficUISystem m_TrafficUISystem;
+        private EntityQuery m_TransitBuildingQuery;
+        private EntityQuery m_ActiveInfomodeQuery;
 
         protected override void OnCreate()
         {
             base.OnCreate();
-            m_UISystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
+            m_TrafficUISystem = World.GetOrCreateSystemManaged<TrafficUISystem>();
 
-            m_TransitStructuresQuery = GetEntityQuery(new EntityQueryDesc
+            // Query for Stations and Depots with the Color component
+            m_TransitBuildingQuery = GetEntityQuery(new EntityQueryDesc
             {
-                All = new[] { ComponentType.ReadWrite<Game.Objects.Color>() },
-                // Use full namespaces to avoid ambiguity
-                Any = new[] { 
-                    ComponentType.ReadOnly<Game.Routes.TransportStop>(), 
+                All = new ComponentType[] {
+                    ComponentType.ReadWrite<Game.Objects.Color>()
+                },
+                Any = new ComponentType[] {
                     ComponentType.ReadOnly<Game.Buildings.TransportStation>(),
                     ComponentType.ReadOnly<Game.Buildings.TransportDepot>()
                 },
-                None = new[] { ComponentType.ReadOnly<Game.Common.Deleted>(), ComponentType.ReadOnly<Game.Tools.Temp>() }
+                None = new ComponentType[] {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
             });
 
-            m_BackgroundQuery = GetEntityQuery(new EntityQueryDesc
+            // The exact query BuildingUse uses to find active infomodes
+            m_ActiveInfomodeQuery = GetEntityQuery(new EntityQueryDesc
             {
-                All = new[] { ComponentType.ReadWrite<Game.Objects.Color>() },
-                Any = new[] { ComponentType.ReadOnly<Building>(), ComponentType.ReadOnly<Game.Net.Edge>() },
-                None = new[]
-                {
-                    ComponentType.ReadOnly<Game.Routes.TransportStop>(),
-                    ComponentType.ReadOnly<Game.Buildings.TransportStation>(),
-                    ComponentType.ReadOnly<Game.Buildings.TransportDepot>(),
-                    ComponentType.ReadOnly<Game.Common.Deleted>(),
-                    ComponentType.ReadOnly<Game.Tools.Temp>()
+                All = new ComponentType[] {
+                    ComponentType.ReadOnly<InfoviewBuildingStatusData>(),
+                    ComponentType.ReadOnly<InfomodeActive>()
                 }
             });
         }
 
         protected override void OnUpdate()
         {
-            if (!m_UISystem.IsTransitPanelActive) return;
+            if (!m_TrafficUISystem.IsTransitPanelActive) return;
 
-            // Transit Job: Assigns correct index based on entity type
-            var transitJob = new TransitHighlightJob
+            byte stationIndex = 0;
+            byte depotIndex = 0;
+            bool foundStation = false;
+            bool foundDepot = false;
+
+            // 1. Find the dynamic indices mapped to 101 and 102
+            var statusDatas = m_ActiveInfomodeQuery.ToComponentDataArray<InfoviewBuildingStatusData>(Allocator.Temp);
+            var activeDatas = m_ActiveInfomodeQuery.ToComponentDataArray<InfomodeActive>(Allocator.Temp);
+
+            for (int i = 0; i < statusDatas.Length; i++)
             {
-                ColorType = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false),
-                EntityType = SystemAPI.GetEntityTypeHandle(),
-                StationLookup = SystemAPI.GetComponentLookup<Game.Buildings.TransportStation>(true),
-                DepotLookup = SystemAPI.GetComponentLookup<Game.Buildings.TransportDepot>(true),
-                StopLookup = SystemAPI.GetComponentLookup<Game.Routes.TransportStop>(true)
-            };
+                // Cast the enum to an int to safely compare it with 101 and 102
+                int currentType = (int)statusDatas[i].m_Type;
 
-            // Background Job: Dims everything else
-            var bgJob = new BackgroundDimJob
-            {
-                ColorType = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false)
-            };
-
-            JobHandle transitHandle = transitJob.ScheduleParallel(m_TransitStructuresQuery, Dependency);
-            JobHandle bgHandle = bgJob.ScheduleParallel(m_BackgroundQuery, Dependency);
-
-            Dependency = JobHandle.CombineDependencies(transitHandle, bgHandle);
-        }
-
-        struct TransitHighlightJob : IJobChunk
-        {
-            public ComponentTypeHandle<Game.Objects.Color> ColorType;
-            [ReadOnly] public EntityTypeHandle EntityType;
-            [ReadOnly] public ComponentLookup<Game.Buildings.TransportStation> StationLookup;
-            [ReadOnly] public ComponentLookup<Game.Buildings.TransportDepot> DepotLookup;
-            [ReadOnly] public ComponentLookup<Game.Routes.TransportStop> StopLookup;
-
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
-            {
-                NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorType);
-                NativeArray<Entity> entities = chunk.GetNativeArray(EntityType);
-
-                for (int i = 0; i < colors.Length; i++)
+                if (currentType == 101) 
                 {
-                    Entity e = entities[i];
-            
-                    // MAGIC FIX: Use 1-based indices to match the Infomode toggles
-                    if (StationLookup.HasComponent(e) || StopLookup.HasComponent(e)) {
-                        colors[i] = new Game.Objects.Color { m_Index = 1, m_Value = 255 }; // Stations
-                    }
-                    else if (DepotLookup.HasComponent(e)) {
-                        colors[i] = new Game.Objects.Color { m_Index = 2, m_Value = 255 }; // Depots
-                    }
+                    stationIndex = (byte)activeDatas[i].m_Index;
+                    foundStation = true;
+                }
+                else if (currentType == 102)
+                {
+                    depotIndex = (byte)activeDatas[i].m_Index;
+                    foundDepot = true;
                 }
             }
+
+            statusDatas.Dispose();
+            activeDatas.Dispose();
+
+            if (!foundStation && !foundDepot) return;
+
+            // 2. Schedule the Job to apply the indices
+            var colorJob = new ColorTransitBuildingsJob
+            {
+                ColorTypeHandle = SystemAPI.GetComponentTypeHandle<Game.Objects.Color>(false),
+                StationTypeHandle = SystemAPI.GetComponentTypeHandle<Game.Buildings.TransportStation>(true),
+                DepotTypeHandle = SystemAPI.GetComponentTypeHandle<Game.Buildings.TransportDepot>(true),
+                StationIndex = stationIndex,
+                DepotIndex = depotIndex,
+                HasStationMode = foundStation,
+                HasDepotMode = foundDepot
+            };
+
+            Dependency = colorJob.ScheduleParallel(m_TransitBuildingQuery, Dependency);
         }
 
         [BurstCompile]
-        struct BackgroundDimJob : IJobChunk
+        private struct ColorTransitBuildingsJob : IJobChunk
         {
-            public ComponentTypeHandle<Game.Objects.Color> ColorType;
+            public ComponentTypeHandle<Game.Objects.Color> ColorTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<Game.Buildings.TransportStation> StationTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<Game.Buildings.TransportDepot> DepotTypeHandle;
 
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            public byte StationIndex;
+            public byte DepotIndex;
+            public bool HasStationMode;
+            public bool HasDepotMode;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
             {
-                NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorType);
+                NativeArray<Game.Objects.Color> colors = chunk.GetNativeArray(ref ColorTypeHandle);
+                
+                bool isDepot = chunk.Has(ref DepotTypeHandle);
+                bool isStation = chunk.Has(ref StationTypeHandle);
+
+                byte targetIndex;
+                if (isDepot && HasDepotMode) targetIndex = DepotIndex;
+                else if (isStation && HasStationMode) targetIndex = StationIndex;
+                else return; 
+
                 for (int i = 0; i < colors.Length; i++)
                 {
-                    // Dark blueprint background
-                    colors[i] = new Game.Objects.Color { m_Index = 0, m_Value = 25 };
+                    var colorComponent = colors[i];
+                    
+                    // Apply the correct palette index
+                    colorComponent.m_Index = targetIndex; 
+                    
+                    // 255 pushes it to the m_High color defined in your Infomode prefab
+                    colorComponent.m_Value = 255; 
+                    
+                    colors[i] = colorComponent;
                 }
             }
         }
