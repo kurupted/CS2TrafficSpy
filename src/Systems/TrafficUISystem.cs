@@ -56,8 +56,7 @@ namespace TrafficSpy.Systems
     
     public enum TrafficSpyStatusType
     {
-        Stations = 101,
-        Depots = 102
+        Stations = 101
     }
 
     [UpdateAfter(typeof(ToolSystem))]
@@ -113,8 +112,9 @@ namespace TrafficSpy.Systems
         
         private ValueBinding<bool> showTransitPanelBinding;
         private ValueBinding<string> transitLinesDataBinding;
+        public Entity StationModeEntity { get; private set; } = Entity.Null;
+        private bool m_TransitLinesDirty = false;
         
-        // --- Dual Infoview Variables ---
         private Entity m_VanillaInfoviewEntity = Entity.Null; // Caches the vanilla search so we don't query every click
         private Game.Prefabs.InfoviewPrefab m_CustomInfoview;
         private Entity m_CustomInfoviewEntity = Entity.Null;
@@ -136,6 +136,10 @@ namespace TrafficSpy.Systems
         }
         private List<StopOption> m_AssociatedStops = new List<StopOption>();
         private EntityQuery m_AllStopsQuery;
+        public static bool ShowStopsAndStations = true; 
+        private ValueBinding<bool> showStopsAndStationsBinding;
+        public static bool ShowInfoviewBackground = true; 
+        private ValueBinding<bool> showInfoviewBackgroundBinding;
         
         protected override void OnCreate()
         {
@@ -313,7 +317,6 @@ namespace TrafficSpy.Systems
             }));
 
             AddBinding(new TriggerBinding<int, bool>("TrafficSpy", "setLineVisible", (entityIndex, show) => {
-                // Light-weight toggle without ECS structural changes
                 using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
                 foreach (var e in entities)
                 {
@@ -321,9 +324,43 @@ namespace TrafficSpy.Systems
                     {
                         if (show) HiddenCustomRoutes.Remove(e);
                         else HiddenCustomRoutes.Add(e);
-            
-                        UpdateTransitLinesData(); // Refresh UI strings
+
+                        m_TransitLinesDirty = true; // Trip the flag instead of rebuilding JSON immediately
                         break;
+                    }
+                }
+            }));
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setAllLinesVisible", (show) => {
+                using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+                foreach (var e in entities)
+                {
+                    if (show) HiddenCustomRoutes.Remove(e);
+                    else HiddenCustomRoutes.Add(e);
+                }
+                m_TransitLinesDirty = true;
+            }));
+            
+            this.showStopsAndStationsBinding = new ValueBinding<bool>("TrafficSpy", "showStopsAndStations", true);
+            AddBinding(this.showStopsAndStationsBinding);
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowStopsAndStations", (show) => {
+                ShowStopsAndStations = show;
+                this.showStopsAndStationsBinding.Update(show);
+            }));
+            
+            this.showInfoviewBackgroundBinding = new ValueBinding<bool>("TrafficSpy", "showInfoviewBackground", true);
+            AddBinding(this.showInfoviewBackgroundBinding);
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setShowInfoviewBackground", (show) => {
+                ShowInfoviewBackground = show;
+                this.showInfoviewBackgroundBinding.Update(show);
+    
+                if (this.IsTransitPanelActive) {
+                    if (show && m_CustomInfoviewEntity != Entity.Null) {
+                        m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
+                    } else {
+                        m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
                     }
                 }
             }));
@@ -386,10 +423,19 @@ namespace TrafficSpy.Systems
             if (this.IsTransitPanelActive)
             {
                 m_TransitUpdateFrame++;
-                // Update the data every 60 frames (~1 second) to save performance
-                if (m_TransitUpdateFrame % 60 == 0) 
+                // Update data every 60 frames OR instantly if the dirty flag was tripped by a click
+                if (m_TransitUpdateFrame % 60 == 0 || m_TransitLinesDirty) 
                 {
                     UpdateTransitLinesData();
+                    m_TransitLinesDirty = false;
+                }
+            }
+            
+            if (ShowInfoviewBackground && m_CustomInfoviewEntity != Entity.Null)
+            {
+                if (toolSystem.activeInfoview == null || toolSystem.activeInfoview.name != "TrafficSpyTransitView")
+                {
+                    m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
                 }
             }
             
@@ -446,140 +492,160 @@ namespace TrafficSpy.Systems
         
         
 
-    private void UpdateTransitLinesData()
-    {
-        if (!this.IsTransitPanelActive) return;
-
-        using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
-        var result = new System.Text.StringBuilder();
-        result.Append("[");
-
-        var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
-        var nameSystem = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
-        
-        bool first = true;
-
-        for (int i = 0; i < entities.Length; i++)
+        private void UpdateTransitLinesData()
         {
-            var entity = entities[i];
+            if (!this.IsTransitPanelActive) return;
 
-            if (!EntityManager.HasComponent<Game.Routes.Color>(entity)) continue;
-            
-            var prefabRef = EntityManager.GetComponentData<Game.Prefabs.PrefabRef>(entity);
-            var prefab = prefabSystem.GetPrefab<Game.Prefabs.TransportLinePrefab>(prefabRef.m_Prefab);
-            if (prefab == null) continue;
-            
-            string type = prefab.m_TransportType.ToString().ToLower();
-            string displayType = "Route";
-            if (!string.IsNullOrEmpty(type) && type != "none") displayType = char.ToUpper(type[0]) + type.Substring(1);
-
-            string name = nameSystem.GetRenderedLabelName(entity);
-            if (string.IsNullOrEmpty(name) || name.StartsWith("Assets."))
-            {
-                if (EntityManager.TryGetComponent<Game.Routes.RouteNumber>(entity, out var routeNum))
-                {
-                    int num = routeNum.m_Number;
-                    name = num == 0 ? $"{displayType} {entity.Index}" : $"{displayType} {num}";
-                }
-                else name = "Unnamed Route";
-            }
-
-            var colorComp = EntityManager.GetComponentData<Game.Routes.Color>(entity); 
-            string colorHex = string.Format("#{0:X2}{1:X2}{2:X2}", colorComp.m_Color.r, colorComp.m_Color.g, colorComp.m_Color.b);
-            
-            int cargo = 0;
-            int capacity = 0;
-            int vehicles = TransportUIUtils.GetRouteVehiclesCount(EntityManager, entity, ref cargo, ref capacity);
-            float length = TransportUIUtils.GetRouteLength(EntityManager, entity);
-            
-            int usage = capacity > 0 ? UnityEngine.Mathf.RoundToInt(((float)cargo / capacity) * 100) : 0;
-            string lengthStr = (length / 1000f).ToString("0.1") + "km";
-            
-            bool isCargo = false;
-            if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData))
-            {
-                isCargo = lineData.m_CargoTransport;
-            }
-            bool isVisible = !HiddenCustomRoutes.Contains(entity);
-
-            if (!first) result.Append(",");
-            
-            string safeName = name?.Replace("\"", "\\\"") ?? "Unnamed Route";
-            
-            result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""usage"": {usage}, ""cargo"": {isCargo.ToString().ToLower()}, ""visible"": {isVisible.ToString().ToLower()} }}");
-            
-            first = false;
-        }
-        
-        result.Append("]");
-        this.transitLinesDataBinding.Update(result.ToString());
-    }
-        
-
-        private void SetupCustomInfoview()
-        {
+            using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+            var result = new System.Text.StringBuilder("[");
             var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+            var nameSystem = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
+            bool first = true;
 
-            m_CustomInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
-            m_CustomInfoview.name = "TrafficSpyTransitView";
-            m_CustomInfoview.m_Group = -1; // 10 = Transportation group (attaches to native legend)
-            m_CustomInfoview.m_Priority = 1;
-
-            // --- 1. STATIONS TOGGLE ---
-            var stationMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
-            stationMode.name = "TrafficSpyStations";
-            stationMode.m_Type = (Game.Prefabs.BuildingStatusType)TrafficSpyStatusType.Stations;
-            stationMode.m_LegendType = Game.Prefabs.GradientLegendType.Gradient;
-            stationMode.m_Low = UnityEngine.Color.black;
-            stationMode.m_Medium = new UnityEngine.Color(0.2f, 0.6f, 1.0f); 
-            stationMode.m_High = new UnityEngine.Color(0.2f, 0.6f, 1.0f); 
-
-            var depotMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
-            depotMode.name = "TrafficSpyDepots"; 
-            depotMode.m_Type = (Game.Prefabs.BuildingStatusType)TrafficSpyStatusType.Depots;
-            depotMode.m_LegendType = Game.Prefabs.GradientLegendType.Gradient;
-            depotMode.m_Low = UnityEngine.Color.black;
-            depotMode.m_Medium = new UnityEngine.Color(1.0f, 0.5f, 0.1f); 
-            depotMode.m_High = new UnityEngine.Color(1.0f, 0.5f, 0.1f);
-
-            m_CustomInfoview.m_Infomodes = new Game.Prefabs.InfomodeInfo[] { 
-                new Game.Prefabs.InfomodeInfo() { m_Mode = stationMode, m_Priority = 1 },
-                new Game.Prefabs.InfomodeInfo() { m_Mode = depotMode, m_Priority = 2 }
-            };
-
-            prefabSystem.AddPrefab(m_CustomInfoview);
-            m_CustomInfoviewEntity = prefabSystem.GetEntity(m_CustomInfoview);
-        }
-        
-        private void ActivateTransitMode(string mode)
-        {
-            m_ActiveTransitMode = mode;
-            this.showTransitPanelBinding.Update(true);
-            UpdateTransitLinesData(); 
-
-            if (mode == "custom" && m_CustomInfoviewEntity != Entity.Null)
+            for (int i = 0; i < entities.Length; i++)
             {
-                m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
+                var entity = entities[i];
+                if (!EntityManager.HasComponent<Game.Routes.Color>(entity)) continue;
+                
+                var prefabRef = EntityManager.GetComponentData<Game.Prefabs.PrefabRef>(entity);
+                var prefab = prefabSystem.GetPrefab<Game.Prefabs.TransportLinePrefab>(prefabRef.m_Prefab);
+                if (prefab == null) continue;
+                
+                string type = prefab.m_TransportType.ToString().ToLower();
+
+                // STRICT WHITELIST: Hide Oil, Power, Water, etc.
+                if (type != "bus" && type != "train" && type != "tram" && type != "subway" && type != "ferry" && type != "ship" && type != "airplane")
+                {
+                    HiddenCustomRoutes.Add(entity); // RenderJob will skip it
+                    continue; // UI will skip it
+                }
+
+                bool isVisible = !HiddenCustomRoutes.Contains(entity);
+
+                string displayType = "Route";
+                if (!string.IsNullOrEmpty(type) && type != "none") displayType = char.ToUpper(type[0]) + type.Substring(1);
+
+                string name = nameSystem.GetRenderedLabelName(entity);
+                if (string.IsNullOrEmpty(name) || name.StartsWith("Assets."))
+                {
+                    if (EntityManager.TryGetComponent<Game.Routes.RouteNumber>(entity, out var routeNum))
+                    {
+                        int num = routeNum.m_Number;
+                        name = num == 0 ? $"{displayType} {entity.Index}" : $"{displayType} {num}";
+                    }
+                    else name = "Unnamed Route";
+                }
+
+                var colorComp = EntityManager.GetComponentData<Game.Routes.Color>(entity); 
+                string colorHex = string.Format("#{0:X2}{1:X2}{2:X2}", colorComp.m_Color.r, colorComp.m_Color.g, colorComp.m_Color.b);
+                
+                int cargo = 0;
+                int capacity = 0;
+                int vehicles = TransportUIUtils.GetRouteVehiclesCount(EntityManager, entity, ref cargo, ref capacity);
+                float length = TransportUIUtils.GetRouteLength(EntityManager, entity);
+                int usage = capacity > 0 ? UnityEngine.Mathf.RoundToInt(((float)cargo / capacity) * 100) : 0;
+                string lengthStr = (length / 1000f).ToString("0.1") + "km";
+                
+                bool isCargo = false;
+                if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData))
+                {
+                    isCargo = lineData.m_CargoTransport;
+                }
+
+                if (!first) result.Append(",");
+                string safeName = name?.Replace("\"", "\\\"") ?? "Unnamed Route";
+                result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""lengthRaw"": {length}, ""usage"": {usage}, ""cargo"": {isCargo.ToString().ToLower()}, ""visible"": {isVisible.ToString().ToLower()} }}");
+                
+                first = false;
             }
+            
+            result.Append("]");
+            this.transitLinesDataBinding.Update(result.ToString());
         }
 
         private void DeactivateTransitMode()
         {
             m_ActiveTransitMode = "none";
             this.showTransitPanelBinding.Update(false);
-            
             m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
+            HiddenCustomRoutes.Clear();
+        }
+                    
+
+         private void SetupCustomInfoview()
+        {
+            var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+            var infoviewInitSystem = World.GetOrCreateSystemManaged<Game.Prefabs.InfoviewInitializeSystem>();
+
+            m_CustomInfoview = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.InfoviewPrefab>();
+            m_CustomInfoview.name = "TrafficSpyTransitView";
+            m_CustomInfoview.m_Group = -1; 
+            m_CustomInfoview.m_Priority = 1;
+
+            var stationMode = UnityEngine.ScriptableObject.CreateInstance<Game.Prefabs.BuildingStatusInfomodePrefab>();
+            stationMode.name = "TrafficSpyStations";
+            stationMode.m_Type = (Game.Prefabs.BuildingStatusType)TrafficSpyStatusType.Stations;
+            // Removed m_LegendType assignment
+            stationMode.m_Low = new UnityEngine.Color(0.2f, 0.6f, 1.0f);
+            stationMode.m_Medium = new UnityEngine.Color(0.2f, 0.6f, 1.0f); 
+            stationMode.m_High = new UnityEngine.Color(0.2f, 0.6f, 1.0f); 
+
+            prefabSystem.AddPrefab(stationMode);
+
+            var combinedModes = new System.Collections.Generic.List<Game.Prefabs.InfomodeInfo>();
+
+            // Copy terrain darkening
+            if (infoviewInitSystem != null && infoviewInitSystem.infoviews != null)
+            {
+                foreach (var vanillaView in infoviewInitSystem.infoviews)
+                {
+                    if (vanillaView.name == "PublicTransport")
+                    {
+                        foreach (var modeInfo in vanillaView.m_Infomodes)
+                        {
+                            if (modeInfo.m_Mode is Game.Prefabs.BuildingStatusInfomodePrefab) continue;
+                            combinedModes.Add(modeInfo);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            combinedModes.Add(new Game.Prefabs.InfomodeInfo() { m_Mode = stationMode, m_Priority = 100 });
+
+            m_CustomInfoview.m_Infomodes = combinedModes.ToArray();
+            prefabSystem.AddPrefab(m_CustomInfoview);
+            m_CustomInfoviewEntity = prefabSystem.GetEntity(m_CustomInfoview);
+        }
+            
+        private void ActivateTransitMode(string mode)
+        {
+            m_ActiveTransitMode = mode;
+            this.showTransitPanelBinding.Update(true);
+            
+            // NEW: Automatically start with all Cargo routes explicitly turned OFF
+            HiddenCustomRoutes.Clear();
+            using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+            var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+            foreach(var e in entities) {
+                if (!EntityManager.HasComponent<Game.Prefabs.PrefabRef>(e)) continue;
+                var prefabRef = EntityManager.GetComponentData<Game.Prefabs.PrefabRef>(e);
+                if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData)) {
+                    if (lineData.m_CargoTransport) {
+                        HiddenCustomRoutes.Add(e);
+                    }
+                }
+            }
+
+            UpdateTransitLinesData(); 
+
+            if (mode == "custom" && m_CustomInfoviewEntity != Entity.Null)
+            {
+                // Only turn it on if the user has the checkbox ticked
+                if (ShowInfoviewBackground) m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
+            }
         }
 
-        private void BackupAndHideAllRoutes()
-        {
-            // Method kept for reference, but skipped above to avoid ECS syncing freeze
-        }
-
-        private void RestoreRoutes()
-        {
-            // Method kept for reference, but skipped above to avoid ECS syncing freeze
-        }
         
         private void OnToolChanged(ToolBaseSystem newTool)
         {

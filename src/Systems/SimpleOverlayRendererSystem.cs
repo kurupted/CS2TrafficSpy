@@ -63,7 +63,10 @@ namespace TrafficSpy.Systems
                 PrefabRefLookup = SystemAPI.GetComponentLookup<PrefabRef>(true),
                 TransportLineDataLookup = SystemAPI.GetComponentLookup<TransportLineData>(true),
                 HiddenRoutes = hiddenSet,
-                // FIX: Use .zoom as per your decompiler snippet
+                WaypointBufferType = SystemAPI.GetBufferTypeHandle<Game.Routes.RouteWaypoint>(true),
+                TransformLookup = SystemAPI.GetComponentLookup<Game.Objects.Transform>(true),
+                DrawStops = TrafficUISystem.ShowStopsAndStations,
+                ConnectedLookup = SystemAPI.GetComponentLookup<Game.Routes.Connected>(true),
                 ZoomLevel = m_CameraUpdateSystem.zoom 
             };
 

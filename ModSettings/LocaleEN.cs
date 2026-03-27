@@ -43,8 +43,7 @@ namespace TrafficSpy.ModSettings
                 
                 { "Infoviews.NAME[TrafficSpyCustomView]", "Better Transit View" },
                 { "Infoviews.DESC[TrafficSpyCustomView]", "Custom transit analysis view." },
-                { "Infoviews.INFOMODE[TrafficSpyStations]", "Show Stations" },
-                { "Infoviews.INFOMODE[TrafficSpyDepots]", "Show Depots" }
+                { "Infoviews.INFOMODE[TrafficSpyStations]", "Show Stations" }
             };
         }
 
