@@ -431,14 +431,6 @@ namespace TrafficSpy.Systems
                 }
             }
             
-            if (ShowInfoviewBackground && m_CustomInfoviewEntity != Entity.Null)
-            {
-                if (toolSystem.activeInfoview == null || toolSystem.activeInfoview.name != "TrafficSpyTransitView")
-                {
-                    m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
-                }
-            }
-            
             base.OnUpdate();
             
             // Auto-Reactivate Tool
