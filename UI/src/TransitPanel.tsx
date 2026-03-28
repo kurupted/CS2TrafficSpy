@@ -29,13 +29,42 @@ const LengthIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', heig
 const UsageIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/></svg>);
 const CargoIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 6.04 7.5 12 10.85l5.96-3.35L12 4.15zM5 15.91l6 3.38v-6.71L5 9.21v6.7zM19 15.91v-6.7l-6 3.37v6.71l6-3.38z"/></svg>);
 
+// Added: Dynamic Icon for Transport Types in Cargo view
+const TransportTypeIcon = ({ type }: { type: TransitType }) => {
+    let path = "";
+    switch(type) {
+        case 'train':
+        case 'subway':
+            path = "M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-7H6V6h5v4zm4 0h-2V6h2v4zm2.5 7c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z";
+            break;
+        case 'ship':
+        case 'ferry':
+            path = "M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2zM3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.15.52-.06.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z";
+            break;
+        case 'airplane':
+            path = "M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z";
+            break;
+        case 'bus':
+        case 'tram':
+            path = "M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z";
+            break;
+        default:
+            path = "M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 6.04 7.5 12 10.85l5.96-3.35L12 4.15zM5 15.91l6 3.38v-6.71L5 9.21v6.7zM19 15.91v-6.7l-6 3.37v6.71l6-3.38z"; // Cargo Box
+    }
+    return (
+        <svg viewBox="0 0 24 24" style={{ width: '18rem', height: '18rem' }} fill="#bbb">
+            <path d={path} />
+        </svg>
+    );
+};
+
 const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
     <div onClick={onChange} style={{ width: '18rem', height: '18rem', border: '1rem solid rgba(255,255,255,0.3)', borderRadius: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: checked ? '#4287f5' : 'rgba(0,0,0,0.5)', flexShrink: 0 }}>
         {checked && <span style={{ color: 'white', fontSize: '14rem', lineHeight: '18rem' }}>✓</span>}
     </div>
 );
 
-// NEW: Custom, Crash-Proof React Dropdown
+// Custom, Crash-Proof React Dropdown
 const CustomDropdown = ({ value, options, onChange }: { value: string, options: {value: string, label: string}[], onChange: (val: string) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -65,10 +94,7 @@ const CustomDropdown = ({ value, options, onChange }: { value: string, options: 
 
             {isOpen && (
                 <>
-                    {/* Invisible overlay to close dropdown when clicking anywhere else on screen */}
                     <div onClick={() => setIsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
-
-                    {/* The actual dropdown menu */}
                     <div style={{
                         position: 'absolute',
                         top: '100%',
@@ -118,7 +144,8 @@ export const TransitPanel = () => {
 
     const [activeTab, setActiveTab] = useState<TransitType>('bus');
     const [activeLines, setActiveLines] = useState<Set<number>>(new Set());
-
+    const [hasInitialized, setHasInitialized] = useState(false);
+    
     // Sorting States
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDesc, setSortDesc] = useState<boolean>(false);
@@ -136,10 +163,17 @@ export const TransitPanel = () => {
     try { if (rawData && rawData !== "[]") lines = JSON.parse(rawData); } catch (e) {}
 
     useEffect(() => {
-        if (isVisible && lines.length > 0 && activeLines.size === 0) {
+        if (isVisible && lines.length > 0 && !hasInitialized) {
             setActiveLines(new Set(lines.filter(l => l.visible).map(l => l.id)));
+            setHasInitialized(true);
         }
-    }, [isVisible, lines]);
+
+        // Reset initialization when the panel closes so it refreshes next time
+        if (!isVisible && hasInitialized) {
+            setHasInitialized(false);
+            setActiveLines(new Set());
+        }
+    }, [isVisible, lines, hasInitialized]);
 
     if (!isVisible) return null;
     if (lines.length === 0) return (<div style={{ position: 'absolute', left: '60rem', top: '60rem', width: '320rem', backgroundColor: 'rgba(25, 30, 35, 0.95)', padding: '20rem', color: 'white' }}>Loading Transit Data...</div>);
@@ -149,7 +183,6 @@ export const TransitPanel = () => {
         return !l.cargo && (l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
     });
 
-    // CRASH-PROOF Sorting Logic
     const sortedLines = [...currentLines].sort((a, b) => {
         let valA: any;
         let valB: any;
@@ -191,33 +224,36 @@ export const TransitPanel = () => {
     };
 
     const toggleMasterAll = () => {
-        const isAnythingOff = lines.some(l => !activeLines.has(l.id)) || !showStopsAndStations;
-        const targetState = isAnythingOff;
+        // If ANY line is off, the master toggle turns them all ON. Else, turns all OFF.
+        const targetState = lines.some(l => !activeLines.has(l.id));
 
         const next = new Set<number>();
-        lines.forEach(l => {
-            if (targetState) next.add(l.id);
-        });
+        if (targetState) {
+            lines.forEach(l => next.add(l.id));
+        }
         setActiveLines(next);
 
+        // Tell the C# backend to update the visibility
         trigger("TrafficSpy", "setAllLinesVisible", targetState);
+        // Optional: Keep this if you also want the master button to toggle the Nodes checkbox
         trigger("TrafficSpy", "setShowStopsAndStations", targetState);
     };
 
     return (
         <div style={{ position: 'absolute', top: '55rem', left: '10rem', width: '450rem', maxHeight: '800rem', backgroundColor: 'var(--panelColorNormal)', borderRadius: '4rem', padding: '12rem', color: 'white', pointerEvents: 'auto', boxShadow: '0 4px 8px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
 
-            <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '10rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
-                        <CustomCheckbox checked={showInfoviewBackground} onChange={() => trigger("TrafficSpy", "setShowInfoviewBackground", !showInfoviewBackground)} />
-                        Color Map
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
-                        <CustomCheckbox checked={showStopsAndStations} onChange={() => trigger("TrafficSpy", "setShowStopsAndStations", !showStopsAndStations)} />
+                    {/* Fixed labels acting as the clickable triggers */}
+                    <div onClick={() => trigger("TrafficSpy", "setShowInfoviewBackground", !showInfoviewBackground)} style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
+                        <CustomCheckbox checked={showInfoviewBackground} onChange={() => {}} />
+                        Gray Map
+                    </div>
+                    <div onClick={() => trigger("TrafficSpy", "setShowStopsAndStations", !showStopsAndStations)} style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
+                        <CustomCheckbox checked={showStopsAndStations} onChange={() => {}} />
                         Nodes
-                    </label>
+                    </div>
                     <button onClick={toggleMasterAll} style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1rem solid rgba(255,255,255,0.2)', color: 'white', padding: '4rem 8rem', borderRadius: '4rem', cursor: 'pointer', fontSize: '11rem', textTransform: 'uppercase' }}>
                         Toggle All
                     </button>
@@ -242,7 +278,7 @@ export const TransitPanel = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15rem' }}>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '12rem', color: '#888' }}>
-                        Sort:
+                        Sort: &nbsp;
                         <CustomDropdown
                             value={sortField}
                             options={sortOptions.map(opt => ({ value: opt, label: sortLabels[opt] }))}
@@ -253,42 +289,63 @@ export const TransitPanel = () => {
                         </button>
                     </div>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer' }}>Toggle Tab <CustomCheckbox checked={allVisibleInTab} onChange={toggleTabAll} /></label>
+                {/* Fixed Toggle Tab label acting as clickable trigger */}
+                <div onClick={toggleTabAll} style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer', color: '#fff' }}>
+                    Toggle Tab <CustomCheckbox checked={allVisibleInTab} onChange={() => {}} />
+                </div>
             </div>
 
             <div style={{ padding: '10rem', overflowY: 'auto', flex: 1 }}>
                 {sortedLines.length === 0 ? (
                     <div style={{ padding: '20rem', textAlign: 'center', color: '#666', fontSize: '13rem' }}>No lines found.</div>
                 ) : sortedLines.map(line => (
-                    <div key={line.id} style={{ display: 'flex', alignItems: 'center', padding: '10rem', marginBottom: '8rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6rem', borderLeft: `4rem solid ${line.color}` }}>
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '16rem', marginBottom: '8rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                {line.name}
-                            </div>
-                            <div style={{ fontSize: '14rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', rowGap: '16rem', columnGap: '24rem' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><VehicleIcon /> {line.vehicles}</span>
+                    <div key={line.id} onClick={() => toggleLine(line.id)} style={{ display: 'flex', alignItems: 'center', padding: '10rem', marginBottom: '8rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6rem', borderLeft: `4rem solid ${line.color}`, cursor: 'pointer' }}>
 
-                                {/* Automatically converts 500,000 into 500t for cargo lines */}
-                                {line.cargo ? (
-                                    <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }} title="Cargo Transported">
-                                        <CargoIcon /> {((line.passengers || 0) / 1000).toFixed(0)}t
+                {/* Type Icon is dynamically added in the Cargo Tab */}
+                {activeTab === 'cargo' && (
+                    <div style={{ marginRight: '10rem', display: 'flex', alignItems: 'center' }} title={`Type: ${line.type}`}>
+                        <TransportTypeIcon type={line.type} />
+                    </div>
+                )}
+
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '16rem', marginBottom: '8rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                        {line.name}
+                    </div>
+
+                    {/* Stats Wrapper with Fixed Widths & Added Gaps For Units */}
+                    <div style={{ fontSize: '14rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', rowGap: '8rem' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '70rem' }} title="Vehicles">
+                                    <VehicleIcon /> {line.vehicles}
+                                </span>
+
+                        {line.cargo ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '90rem' }} title="Cargo Transported">
+                                        <CargoIcon /> {((line.passengers || 0) / 1000).toFixed(0)} t
                                     </span>
-                                ) : (
-                                    <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }} title="Passengers">
+                        ) : (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '90rem' }} title="Passengers">
                                         <PassengerIcon /> {line.passengers || 0}
                                     </span>
-                                )}
+                        )}
 
-                                <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><LengthIcon /> {line.length}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><UsageIcon /> {line.usage}%</span>
-                            </div>
-                        </div>
-                        <div style={{ marginLeft: '15rem', flexShrink: 0 }}>
-                            <CustomCheckbox checked={activeLines.has(line.id)} onChange={() => toggleLine(line.id)} />
-                        </div>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '90rem' }} title="Length">
+                                    <LengthIcon /> {typeof line.length === 'string' ? line.length.replace(/([0-9.]+)([a-zA-Z]+)/g, '$1 $2') : line.length}
+                                </span>
+
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '70rem' }} title="Usage">
+                                    <UsageIcon /> {line.usage}%
+                                </span>
                     </div>
-                ))}
+                </div>
+
+                {/* Dummy onChange protects bubbling conflicts but relies on row's click trigger natively */}
+                <div style={{ marginLeft: '15rem', flexShrink: 0 }}>
+                    <CustomCheckbox checked={activeLines.has(line.id)} onChange={() => {}} />
+                </div>
             </div>
+            ))}
         </div>
-    );
+</div>
+);
 };

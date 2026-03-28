@@ -2,12 +2,14 @@ import { trigger } from "cs2/api";
 import { useValue } from "cs2/api";
 import { Button, Tooltip, Portal } from "cs2/ui";
 import { toolActive } from "./bindings";
+import { transitOpen } from "./bindings";
 
 export const TrafficButton = () => {
     console.log("[TrafficSpy] TrafficButton rendering...");
 
     try {
         const active = useValue(toolActive);
+        const transitPanelOpen = useValue(transitOpen);
 
         return (
             <>
@@ -24,12 +26,12 @@ export const TrafficButton = () => {
                     />
                 </Tooltip>
 
-                {/* Test Button B: Custom (Blank Canvas) */}
-                <Tooltip tooltip="Transit (Custom Canvas)">
+                <Tooltip tooltip="Transit Overview">
                     <Button
                         src="coui://uil/Standard/BusShelter.svg"
+                        selected={transitPanelOpen}
                         variant="floating"
-                        onSelect={() => trigger("TrafficSpy", "toggleTransitCustom", true)}
+                        onSelect={() => trigger("TrafficSpy", "toggleTransitCustom", !transitPanelOpen)}
                     />
                 </Tooltip>
 

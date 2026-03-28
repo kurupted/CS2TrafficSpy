@@ -1,27 +1,29 @@
 import { ModRegistrar } from "cs2/modding";
 import { TransitPanel } from "./TransitPanel";
 import { TrafficButton } from "./TrafficButton";
+import { SelectedInfoPanelTogglesComponent } from "./SelectedInfoPanelTogglesComponent";
+import { VanillaComponentResolver } from "./VanillaComponentResolver";
 
 export default ((moduleRegistry) => {
+    // 1. Setup Resolver (Critical for tool UI)
+    VanillaComponentResolver.setRegistry(moduleRegistry);
 
-    (window as any).moduleRegistry = moduleRegistry;
-    
+    // 2. Add Buttons & Panels
     moduleRegistry.append('GameTopLeft', TrafficButton);
-
-    /*moduleRegistry.extend(
-        "game-ui/game/components/infoviews/infoview-panel/infoview-panel.tsx",
-        "InfoviewPanel",
-        (VanillaComponent: any) => {
-            return (props: any) => (
-                <>
-                    <VanillaComponent {...props} />
-                    <TransitPanel />
-                </>
-            );
-        }
-    );*/
-
-    // 2. Safely append to the main Game screen instead of extending a hidden panel
     moduleRegistry.append('Game', TransitPanel);
-    
+
+    // 3. Re-extend the Info Panel (Fixes Issue #1)
+    const infoPanelPath = "game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx";
+    const infoPanelExport = "selectedInfoSectionComponents";
+
+    try {
+        moduleRegistry.extend(
+            infoPanelPath,
+            infoPanelExport,
+            SelectedInfoPanelTogglesComponent
+        );
+    } catch (e) {
+        console.error("[TrafficSpy] Failed to register Info Panel extensions", e);
+    }
+
 }) as ModRegistrar;
