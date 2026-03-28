@@ -17,7 +17,7 @@ interface TransitLine {
     vehicles: number;
     passengers: number;
     length: string;
-    lengthRaw: number; // For mathematical sorting
+    lengthRaw?: number;
     usage: number;
     cargo: boolean;
     visible: boolean;
@@ -27,12 +27,88 @@ const VehicleIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', hei
 const PassengerIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>);
 const LengthIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M21 7H3c-1.1 0-2 .9-2 2v6c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm0 8H3V9h2v3h2V9h2v3h2V9h2v3h2V9h2v6z"/></svg>);
 const UsageIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/></svg>);
+const CargoIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 6.04 7.5 12 10.85l5.96-3.35L12 4.15zM5 15.91l6 3.38v-6.71L5 9.21v6.7zM19 15.91v-6.7l-6 3.37v6.71l6-3.38z"/></svg>);
 
 const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
     <div onClick={onChange} style={{ width: '18rem', height: '18rem', border: '1rem solid rgba(255,255,255,0.3)', borderRadius: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: checked ? '#4287f5' : 'rgba(0,0,0,0.5)', flexShrink: 0 }}>
         {checked && <span style={{ color: 'white', fontSize: '14rem', lineHeight: '18rem' }}>✓</span>}
     </div>
 );
+
+// NEW: Custom, Crash-Proof React Dropdown
+const CustomDropdown = ({ value, options, onChange }: { value: string, options: {value: string, label: string}[], onChange: (val: string) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    background: 'rgba(255,255,255,0.1)',
+                    color: '#fff',
+                    border: '1rem solid rgba(255,255,255,0.2)',
+                    borderRadius: '4rem',
+                    padding: '4rem 8rem',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6rem',
+                    fontSize: '12rem',
+                    minWidth: '100rem',
+                    justifyContent: 'space-between'
+                }}
+            >
+                {options.find(o => o.value === value)?.label || "Select..."}
+                <span style={{ fontSize: '8rem', opacity: 0.7 }}>▼</span>
+            </button>
+
+            {isOpen && (
+                <>
+                    {/* Invisible overlay to close dropdown when clicking anywhere else on screen */}
+                    <div onClick={() => setIsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
+
+                    {/* The actual dropdown menu */}
+                    <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        marginTop: '4rem',
+                        backgroundColor: 'rgba(25, 30, 35, 0.98)',
+                        border: '1rem solid rgba(255,255,255,0.2)',
+                        borderRadius: '4rem',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                        zIndex: 1000,
+                        minWidth: '130rem',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}>
+                        {options.map(opt => (
+                            <div
+                                key={opt.value}
+                                onClick={() => { onChange(opt.value); setIsOpen(false); }}
+                                style={{
+                                    padding: '6rem 10rem',
+                                    cursor: 'pointer',
+                                    fontSize: '12rem',
+                                    color: opt.value === value ? '#4287f5' : '#ccc',
+                                    backgroundColor: opt.value === value ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                    borderBottom: '1rem solid rgba(255,255,255,0.05)',
+                                    transition: 'background-color 0.1s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = opt.value === value ? 'rgba(255,255,255,0.08)' : 'transparent'}
+                            >
+                                {opt.label}
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
 
 export const TransitPanel = () => {
     const isVisible = useValue(showTransitPanel$);
@@ -46,6 +122,15 @@ export const TransitPanel = () => {
     // Sorting States
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDesc, setSortDesc] = useState<boolean>(false);
+
+    const sortOptions: SortField[] = ['name', 'usage', 'vehicles', 'passengers', 'length'];
+    const sortLabels: Record<SortField, string> = {
+        name: 'Name',
+        usage: 'Usage %',
+        vehicles: 'Vehicles',
+        passengers: 'Passengers/Cargo',
+        length: 'Distance'
+    };
 
     let lines: TransitLine[] = [];
     try { if (rawData && rawData !== "[]") lines = JSON.parse(rawData); } catch (e) {}
@@ -64,14 +149,21 @@ export const TransitPanel = () => {
         return !l.cargo && (l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
     });
 
-    // Sorting Logic
+    // CRASH-PROOF Sorting Logic
     const sortedLines = [...currentLines].sort((a, b) => {
-        let valA: any = a[sortField];
-        let valB: any = b[sortField];
+        let valA: any;
+        let valB: any;
 
-        // Ensure length uses numerical distance, and name ignores casing
-        if (sortField === 'length') { valA = a.lengthRaw; valB = b.lengthRaw; }
-        else if (sortField === 'name') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+        if (sortField === 'length') {
+            valA = typeof a.lengthRaw === 'number' ? a.lengthRaw : 0;
+            valB = typeof b.lengthRaw === 'number' ? b.lengthRaw : 0;
+        } else if (sortField === 'name') {
+            valA = a.name ? a.name.toString().toLowerCase() : "";
+            valB = b.name ? b.name.toString().toLowerCase() : "";
+        } else {
+            valA = typeof a[sortField] === 'number' ? a[sortField] : 0;
+            valB = typeof b[sortField] === 'number' ? b[sortField] : 0;
+        }
 
         if (valA < valB) return sortDesc ? 1 : -1;
         if (valA > valB) return sortDesc ? -1 : 1;
@@ -113,7 +205,7 @@ export const TransitPanel = () => {
     };
 
     return (
-        <div style={{ position: 'absolute', top: '50rem', left: '10rem', width: '450rem', maxHeight: '800rem', backgroundColor: 'var(--panelColorNormal)', borderRadius: '4rem', padding: '12rem', color: 'white', pointerEvents: 'auto', boxShadow: '0 4px 8px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'absolute', top: '55rem', left: '10rem', width: '450rem', maxHeight: '800rem', backgroundColor: 'var(--panelColorNormal)', borderRadius: '4rem', padding: '12rem', color: 'white', pointerEvents: 'auto', boxShadow: '0 4px 8px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
 
             <div style={{ padding: '15rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
@@ -129,7 +221,6 @@ export const TransitPanel = () => {
                     <button onClick={toggleMasterAll} style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1rem solid rgba(255,255,255,0.2)', color: 'white', padding: '4rem 8rem', borderRadius: '4rem', cursor: 'pointer', fontSize: '11rem', textTransform: 'uppercase' }}>
                         Toggle All
                     </button>
-                    {/* SVG Close Button */}
                     <button onClick={() => trigger("TrafficSpy", "toggleTransitCustom", false)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '5rem', padding: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg viewBox="0 0 24 24" style={{ width: '18rem', height: '18rem' }} fill="none" stroke="#aaa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -149,18 +240,16 @@ export const TransitPanel = () => {
 
             <div style={{ padding: '10rem 15rem', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15rem' }}>
-                    <span style={{ fontSize: '13rem', fontWeight: 'bold', color: '#aaa' }}>{activeTab.toUpperCase()} LINES</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5rem', fontSize: '12rem', color: '#888' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '12rem', color: '#888' }}>
                         Sort:
-                        <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)} style={{ background: 'transparent', color: '#fff', border: 'none', outline: 'none', cursor: 'pointer', padding: '0 2rem' }}>
-                            <option value="name" style={{ color: 'black' }}>Name</option>
-                            <option value="usage" style={{ color: 'black' }}>Usage %</option>
-                            <option value="vehicles" style={{ color: 'black' }}>Vehicles</option>
-                            <option value="passengers" style={{ color: 'black' }}>Passengers</option>
-                            <option value="length" style={{ color: 'black' }}>Distance</option>
-                        </select>
-                        <button onClick={() => setSortDesc(!sortDesc)} style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', padding: '0 5rem', fontSize: '14rem' }}>
-                            {sortDesc ? '↓' : '↑'}
+                        <CustomDropdown
+                            value={sortField}
+                            options={sortOptions.map(opt => ({ value: opt, label: sortLabels[opt] }))}
+                            onChange={(val) => setSortField(val as SortField)}
+                        />
+                        <button onClick={() => setSortDesc(!sortDesc)} style={{ background: 'rgba(255,255,255,0.05)', border: '1rem solid rgba(255,255,255,0.1)', borderRadius: '4rem', color: '#fff', cursor: 'pointer', padding: '4rem 8rem', fontSize: '12rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {sortDesc ? 'DESC ↓' : 'ASC ↑'}
                         </button>
                     </div>
                 </div>
@@ -170,15 +259,26 @@ export const TransitPanel = () => {
             <div style={{ padding: '10rem', overflowY: 'auto', flex: 1 }}>
                 {sortedLines.length === 0 ? (
                     <div style={{ padding: '20rem', textAlign: 'center', color: '#666', fontSize: '13rem' }}>No lines found.</div>
-                ) : currentLines.map(line => (
-                    <div key={line.id} style={{ display: 'flex', alignItems: 'center', padding: '10rem', marginBottom: '8rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6rem', borderLeft: `4rem solid ${line.color}`, overflowY:'scroll' }}>
+                ) : sortedLines.map(line => (
+                    <div key={line.id} style={{ display: 'flex', alignItems: 'center', padding: '10rem', marginBottom: '8rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6rem', borderLeft: `4rem solid ${line.color}` }}>
                         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                             <div style={{ fontWeight: 'bold', fontSize: '16rem', marginBottom: '8rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                                 {line.name}
                             </div>
                             <div style={{ fontSize: '14rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', rowGap: '16rem', columnGap: '24rem' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><VehicleIcon /> {line.vehicles}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><PassengerIcon /> {line.passengers}</span>
+
+                                {/* Automatically converts 500,000 into 500t for cargo lines */}
+                                {line.cargo ? (
+                                    <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }} title="Cargo Transported">
+                                        <CargoIcon /> {((line.passengers || 0) / 1000).toFixed(0)}t
+                                    </span>
+                                ) : (
+                                    <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }} title="Passengers">
+                                        <PassengerIcon /> {line.passengers || 0}
+                                    </span>
+                                )}
+
                                 <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><LengthIcon /> {line.length}</span>
                                 <span style={{ display: 'flex', alignItems: 'center', paddingRight: '10rem' }}><UsageIcon /> {line.usage}%</span>
                             </div>
