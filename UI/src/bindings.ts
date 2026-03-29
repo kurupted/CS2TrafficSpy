@@ -27,4 +27,4 @@ export const isTransitStopSelected = bindValue<boolean>("TrafficSpy", "isTransit
 export const hasParent = bindValue<boolean>("TrafficSpy", "hasParent", false);
 export const selectParent = () => trigger("TrafficSpy", "selectParent");
 
-export const transitOpen = bindValue<boolean>("TrafficSpy", "transitOpen", false);
+export const transitOpen = bindValue<boolean>("TrafficSpy", "showTransitPanel", false);

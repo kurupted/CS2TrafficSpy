@@ -46,6 +46,8 @@ This mod is safe to remove and doesn't add data to your save files.
     <Screenshot Value="Properties\Screenshots\50_oneside.png" />
     <Screenshot Value="Properties\Screenshots\60_transit.png" />
     <Screenshot Value="Properties\Screenshots\70_peds.png" />
+    <Screenshot Value="Properties\Screenshots\80_transit1.png" />
+    <Screenshot Value="Properties\Screenshots\80_transit2.png" />
 
 
     <!-- Tag.  Can be set multiple times. -->

@@ -7,7 +7,7 @@ const showStopsAndStations$ = bindValue<boolean>("TrafficSpy", "showStopsAndStat
 const showInfoviewBackground$ = bindValue<boolean>("TrafficSpy", "showInfoviewBackground", true);
 
 type TransitType = 'bus' | 'train' | 'subway' | 'tram' | 'ferry' | 'airplane' | 'ship' | 'cargo' | 'none';
-type SortField = 'name' | 'usage' | 'vehicles' | 'length' | 'passengers';
+type SortField = 'name' | 'usage' | 'vehicles' | 'length' | 'passengers' | 'stops';
 
 interface TransitLine {
     id: number;
@@ -21,6 +21,7 @@ interface TransitLine {
     usage: number;
     cargo: boolean;
     visible: boolean;
+    stops: number;
 }
 
 const VehicleIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/></svg>);
@@ -28,8 +29,8 @@ const PassengerIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', h
 const LengthIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M21 7H3c-1.1 0-2 .9-2 2v6c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm0 8H3V9h2v3h2V9h2v3h2V9h2v3h2V9h2v6z"/></svg>);
 const UsageIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/></svg>);
 const CargoIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 6.04 7.5 12 10.85l5.96-3.35L12 4.15zM5 15.91l6 3.38v-6.71L5 9.21v6.7zM19 15.91v-6.7l-6 3.37v6.71l6-3.38z"/></svg>);
+const StopIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>);
 
-// Added: Dynamic Icon for Transport Types in Cargo view
 const TransportTypeIcon = ({ type }: { type: TransitType }) => {
     let path = "";
     switch(type) {
@@ -150,13 +151,14 @@ export const TransitPanel = () => {
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDesc, setSortDesc] = useState<boolean>(false);
 
-    const sortOptions: SortField[] = ['name', 'usage', 'vehicles', 'passengers', 'length'];
+    const sortOptions: SortField[] = ['name', 'usage', 'vehicles', 'passengers', 'length', 'stops'];
     const sortLabels: Record<SortField, string> = {
         name: 'Name',
         usage: 'Usage %',
         vehicles: 'Vehicles',
         passengers: 'Passengers/Cargo',
-        length: 'Distance'
+        length: 'Distance',
+        stops: 'Stops'
     };
 
     let lines: TransitLine[] = [];
@@ -245,19 +247,18 @@ export const TransitPanel = () => {
             <div style={{ padding: '10rem', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, fontSize: '16rem', fontWeight: 'bold' }}>Transit Overview</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15rem' }}>
-                    {/* Fixed labels acting as the clickable triggers */}
                     <div onClick={() => trigger("TrafficSpy", "setShowInfoviewBackground", !showInfoviewBackground)} style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
                         <CustomCheckbox checked={showInfoviewBackground} onChange={() => {}} />
-                        Gray Map
+                        Gray Map &nbsp;
                     </div>
                     <div onClick={() => trigger("TrafficSpy", "setShowStopsAndStations", !showStopsAndStations)} style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
                         <CustomCheckbox checked={showStopsAndStations} onChange={() => {}} />
-                        Nodes
+                        Nodes &nbsp;
                     </div>
                     <button onClick={toggleMasterAll} style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1rem solid rgba(255,255,255,0.2)', color: 'white', padding: '4rem 8rem', borderRadius: '4rem', cursor: 'pointer', fontSize: '11rem', textTransform: 'uppercase' }}>
                         Toggle All
                     </button>
-                    <button onClick={() => trigger("TrafficSpy", "toggleTransitCustom", false)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '5rem', padding: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <button onClick={() => trigger("TrafficSpy", "toggleTransitCustom", false)} style={{ backgroundColor: ' rgba(0,0,0,0.5)', border: 'none', cursor: 'pointer', marginLeft: '5rem', padding: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg viewBox="0 0 24 24" style={{ width: '18rem', height: '18rem' }} fill="none" stroke="#aaa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
                             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -313,29 +314,34 @@ export const TransitPanel = () => {
                         {line.name}
                     </div>
 
-                    {/* Stats Wrapper with Fixed Widths & Added Gaps For Units */}
+                    
                     <div style={{ fontSize: '14rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', rowGap: '8rem' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '70rem' }} title="Vehicles">
-                                    <VehicleIcon /> {line.vehicles}
-                                </span>
+                        
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '80rem' }} title="Length">
+                            <LengthIcon /> {typeof line.length === 'string' ? line.length.replace(/([0-9.]+)([a-zA-Z]+)/g, '$1 $2') : line.length}
+                        </span>
+
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '60rem' }} title="Stops">
+                            <StopIcon /> {line.stops || 0}
+                        </span>
+                        
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '60rem' }} title="Vehicles">
+                            <VehicleIcon /> {line.vehicles}
+                        </span>
 
                         {line.cargo ? (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '90rem' }} title="Cargo Transported">
-                                        <CargoIcon /> {((line.passengers || 0) / 1000).toFixed(0)} t
-                                    </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '80rem' }} title="Cargo Transported">
+                                <CargoIcon /> {((line.passengers || 0) / 1000).toFixed(0)} t
+                            </span>
                         ) : (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '90rem' }} title="Passengers">
-                                        <PassengerIcon /> {line.passengers || 0}
-                                    </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '80rem' }} title="Passengers">
+                                <PassengerIcon /> {line.passengers || 0}
+                            </span>
                         )}
 
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '90rem' }} title="Length">
-                                    <LengthIcon /> {typeof line.length === 'string' ? line.length.replace(/([0-9.]+)([a-zA-Z]+)/g, '$1 $2') : line.length}
-                                </span>
-
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '70rem' }} title="Usage">
-                                    <UsageIcon /> {line.usage}%
-                                </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4rem', width: '60rem' }} title="Usage">
+                            <UsageIcon /> {line.usage}%
+                        </span>
                     </div>
                 </div>
 

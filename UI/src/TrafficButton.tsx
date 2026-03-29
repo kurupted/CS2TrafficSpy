@@ -3,6 +3,7 @@ import { useValue } from "cs2/api";
 import { Button, Tooltip, Portal } from "cs2/ui";
 import { toolActive } from "./bindings";
 import { transitOpen } from "./bindings";
+import TransitIcon from "./TransitIcon.svg";
 
 export const TrafficButton = () => {
     console.log("[TrafficSpy] TrafficButton rendering...");
@@ -13,14 +14,12 @@ export const TrafficButton = () => {
 
         return (
             <>
-                {/* 1. Original Traffic Spy Button */}
                 <Tooltip tooltip="Traffic Spy">
                     <Button
                         src="coui://uil/Standard/GenericVehicles.svg"
                         selected={active}
                         variant="floating"
                         onSelect={() => {
-                            console.log("[TrafficSpy] Button clicked, toggling from", active);
                             trigger("TrafficSpy", "setToolActive", !active);
                         }}
                     />
@@ -28,7 +27,7 @@ export const TrafficButton = () => {
 
                 <Tooltip tooltip="Transit Overview">
                     <Button
-                        src="coui://uil/Standard/BusShelter.svg"
+                        src={TransitIcon}
                         selected={transitPanelOpen}
                         variant="floating"
                         onSelect={() => trigger("TrafficSpy", "toggleTransitCustom", !transitPanelOpen)}

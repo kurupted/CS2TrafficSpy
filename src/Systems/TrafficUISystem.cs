@@ -366,8 +366,8 @@ namespace TrafficSpy.Systems
             }));
             
             string mockTransitData = @"[
-                { ""id"": 1, ""type"": ""bus"", ""name"": ""My Route A"", ""color"": ""#4287f5"", ""vehicles"": 3, ""passengers"": 123, ""length"": ""12km"", ""usage"": 85 },
-                { ""id"": 2, ""type"": ""train"", ""name"": ""Express Line"", ""color"": ""#e67e22"", ""vehicles"": 2, ""passengers"": 450, ""length"": ""45km"", ""usage"": 92 }
+                { ""id"": 1, ""type"": ""bus"", ""name"": ""My Route A"", ""color"": ""#4287f5"", ""vehicles"": 3, ""passengers"": 123, ""length"": ""12km"", ""usage"": 85, ""stops"": 10 },
+                { ""id"": 2, ""type"": ""train"", ""name"": ""Express Line"", ""color"": ""#e67e22"", ""vehicles"": 2, ""passengers"": 450, ""length"": ""45km"", ""usage"": 92, ""stops"": 10 }
             ]";
             this.transitLinesDataBinding.Update(mockTransitData);
 
@@ -422,6 +422,10 @@ namespace TrafficSpy.Systems
             
             if (this.IsTransitPanelActive)
             {
+                // NEW: Force vanilla routes to respect your UI while the panel is open.
+                // This instantly re-hides them if the vanilla route tool tries to show them.
+                SyncVanillaVisibilityToUI();
+                
                 m_TransitUpdateFrame++;
                 // Update data every 60 frames OR instantly if the dirty flag was tripped by a click
                 if (m_TransitUpdateFrame % 60 == 0 || m_TransitLinesDirty) 
@@ -505,7 +509,6 @@ namespace TrafficSpy.Systems
                 
                 string type = prefab.m_TransportType.ToString().ToLower();
 
-                // STRICT WHITELIST: Hide Oil, Power, Water, etc.
                 if (type != "bus" && type != "train" && type != "tram" && type != "subway" && type != "ferry" && type != "ship" && type != "airplane")
                 {
                     HiddenCustomRoutes.Add(entity); // RenderJob will skip it
@@ -538,6 +541,12 @@ namespace TrafficSpy.Systems
                 int usage = capacity > 0 ? UnityEngine.Mathf.RoundToInt(((float)cargo / capacity) * 100) : 0;
                 string lengthStr = (length / 1000f).ToString("0.1") + "km";
                 
+                int stops = 0;
+                if (EntityManager.TryGetBuffer(entity, true, out DynamicBuffer<Game.Routes.RouteWaypoint> waypoints))
+                {
+                    stops = waypoints.Length;
+                }
+
                 bool isCargo = false;
                 if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData))
                 {
@@ -546,7 +555,7 @@ namespace TrafficSpy.Systems
 
                 if (!first) result.Append(",");
                 string safeName = name?.Replace("\"", "\\\"") ?? "Unnamed Route";
-                result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""lengthRaw"": {length.ToString(System.Globalization.CultureInfo.InvariantCulture)}, ""usage"": {usage}, ""cargo"": {isCargo.ToString().ToLower()}, ""visible"": {isVisible.ToString().ToLower()} }}");
+                result.Append($@"{{""id"": {entity.Index}, ""type"": ""{type}"", ""name"": ""{safeName}"", ""color"": ""{colorHex}"", ""vehicles"": {vehicles}, ""passengers"": {cargo}, ""length"": ""{lengthStr}"", ""lengthRaw"": {length.ToString(System.Globalization.CultureInfo.InvariantCulture)}, ""usage"": {usage}, ""cargo"": {isCargo.ToString().ToLower()}, ""visible"": {isVisible.ToString().ToLower()}, ""stops"": {stops} }}");
                 
                 first = false;
             }
@@ -561,6 +570,7 @@ namespace TrafficSpy.Systems
             this.showTransitPanelBinding.Update(false);
             m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
             HiddenCustomRoutes.Clear();
+            SyncVanillaVisibilityToUI();
         }
                     
 
@@ -630,11 +640,54 @@ namespace TrafficSpy.Systems
             }
 
             UpdateTransitLinesData(); 
+            SyncVanillaVisibilityToUI();
 
             if (mode == "custom" && m_CustomInfoviewEntity != Entity.Null)
             {
                 // Only turn it on if the user has the checkbox ticked
                 if (ShowInfoviewBackground) m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
+            }
+        }
+        
+        
+        private void SyncVanillaVisibilityToUI()
+        {
+            if (m_TransitLinesQuery.IsEmptyIgnoreFilter) return;
+
+            using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+            bool needsUpdate = false;
+
+            // Pass 1: Quick check to see if ANY route is out of sync
+            foreach (var entity in entities)
+            {
+                bool isHiddenInUI = HiddenCustomRoutes.Contains(entity);
+                bool hasVanillaHidden = EntityManager.HasComponent<Game.Routes.HiddenRoute>(entity);
+
+                if (isHiddenInUI != hasVanillaHidden)
+                {
+                    needsUpdate = true;
+                    break;
+                }
+            }
+
+            // Pass 2: If everything matches, exit immediately (No ECB allocation = No lag)
+            if (!needsUpdate) return;
+
+            // Pass 3: Something is out of sync, safely apply the changes
+            var ecb = m_EndFrameBarrier.CreateCommandBuffer();
+            foreach (var entity in entities)
+            {
+                bool isHiddenInUI = HiddenCustomRoutes.Contains(entity);
+                bool hasVanillaHidden = EntityManager.HasComponent<Game.Routes.HiddenRoute>(entity);
+
+                if (isHiddenInUI && !hasVanillaHidden)
+                {
+                    ecb.AddComponent<Game.Routes.HiddenRoute>(entity);
+                }
+                else if (!isHiddenInUI && hasVanillaHidden)
+                {
+                    ecb.RemoveComponent<Game.Routes.HiddenRoute>(entity);
+                }
             }
         }
 
