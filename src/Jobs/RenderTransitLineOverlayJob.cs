@@ -168,7 +168,7 @@ namespace TrafficSpy.Jobs
                     uniqueColors.Add(color);
                     while (stopColors.TryGetNextValue(out color, ref it))
                     {
-                        // Deduplicate (so overlapping loops of the SAME line don't spawn duplicate slices)
+                        // De-duplicate (so overlapping loops of the SAME line don't spawn duplicate slices)
                         bool exists = false;
                         for(int c=0; c<uniqueColors.Length; c++) {
                             if (uniqueColors[c].r == color.r && uniqueColors[c].g == color.g && uniqueColors[c].b == color.b) {
@@ -196,10 +196,10 @@ namespace TrafficSpy.Jobs
                 {
                     // Overlapping lines -> Segmented Pie Chart Ring
                     int colorsCount = uniqueColors.Length;
-                    float ringCenterRadius = (outerRadius + innerRadius) * 0.5f;
+                    float ringCenterRadius = (outerRadius + innerRadius) * 0.4f;
                     float ringWidth = outerRadius - innerRadius;
                     
-                    int segmentsPerColor = 12; // Adjusts arc smoothness
+                    int segmentsPerColor = 10; // Adjusts arc smoothness
                     float anglePerColor = (math.PI * 2f) / colorsCount;
 
                     for (int c = 0; c < colorsCount; c++)
@@ -217,7 +217,7 @@ namespace TrafficSpy.Jobs
                             float3 p2 = pos + new float3(math.cos(a2), 0, math.sin(a2)) * ringCenterRadius;
 
                             // Draw the segmented arc line (Width expanded slightly to eliminate gaps)
-                            overlayBuffer.DrawLine(cColor, new Colossal.Mathematics.Line3.Segment(p1, p2), ringWidth * 1.2f); 
+                            overlayBuffer.DrawLine(cColor, new Colossal.Mathematics.Line3.Segment(p1, p2), ringWidth * 1.35f); 
                         }
                     }
                 }

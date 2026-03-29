@@ -73,6 +73,12 @@ const TransportTypeIcon = ({ type }: { type: TransitType }) => {
     );
 };
 
+const MoreIcon = () => (
+    <svg viewBox="0 0 24 24" style={{ width: '18rem', height: '18rem' }} fill="#bbb">
+        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+    </svg>
+);
+
 const CustomCheckbox = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
     <div onClick={onChange} style={{ width: '18rem', height: '18rem', border: '1rem solid rgba(255,255,255,0.3)', borderRadius: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: checked ? '#4287f5' : 'rgba(0,0,0,0.5)', flexShrink: 0 }}>
         {checked && <span style={{ color: 'white', fontSize: '14rem', lineHeight: '18rem' }}>✓</span>}
@@ -160,6 +166,7 @@ export const TransitPanel = () => {
     const [activeTab, setActiveTab] = useState<TransitType>('bus');
     const [activeLines, setActiveLines] = useState<Set<number>>(new Set());
     const [hasInitialized, setHasInitialized] = useState(false);
+    const [isOverflowOpen, setIsOverflowOpen] = useState(false);
     
     // Sorting States
     const [sortField, setSortField] = useState<SortField>('name');
@@ -191,6 +198,51 @@ export const TransitPanel = () => {
         }
     }, [isVisible, lines, hasInitialized]);
 
+    // ... existing useEffect ...
+    useEffect(() => {
+        if (isVisible && lines.length > 0 && !hasInitialized) {
+            setActiveLines(new Set(lines.filter(l => l.visible).map(l => l.id)));
+            setHasInitialized(true);
+        }
+
+        if (!isVisible && hasInitialized) {
+            setHasInitialized(false);
+            setActiveLines(new Set());
+        }
+    }, [isVisible, lines, hasInitialized]);
+
+    // Push vanilla Info Panel to the right when this UI is open
+    useEffect(() => {
+        if (!isVisible) return;
+
+        const styleId = 'trafficspy-vanilla-shifter';
+        let styleEl = document.getElementById(styleId) as HTMLStyleElement;
+
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = styleId;
+            // Target all selected-info-panels, but explicitly cancel the transform 
+            // on nested ones so they don't double-jump!
+            styleEl.innerHTML = `
+                div[class*="selected-info-panel_"] {
+                    transform: translateX(460rem) !important;
+                    transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1) !important;
+                }
+                
+                div[class*="selected-info-panel_"] div[class*="selected-info-panel_"] {
+                    transform: none !important;
+                }
+            `;
+            document.head.appendChild(styleEl);
+        }
+
+        return () => {
+            if (styleEl && styleEl.parentNode) {
+                styleEl.parentNode.removeChild(styleEl);
+            }
+        };
+    }, [isVisible]);
+
     if (!isVisible) return null;
     if (lines.length === 0) return (<div style={{ position: 'absolute', left: '60rem', top: '60rem', width: '320rem', backgroundColor: 'rgba(25, 30, 35, 0.95)', padding: '20rem', color: 'white' }}>Loading Transit Data...</div>);
 
@@ -198,25 +250,36 @@ export const TransitPanel = () => {
         if (activeTab === 'cargo') return l.cargo;
         return !l.cargo && (l.type === activeTab || (activeTab === 'bus' && l.type === 'none'));
     });
+    
+    const sortedLines = [...lines].filter(l => {
+        if (activeTab === 'cargo') return l.cargo;
+        return l.type === activeTab && !l.cargo;
+    }).sort((a, b) => {
+        let valA = a[sortField];
+        let valB = b[sortField];
 
-    const sortedLines = [...currentLines].sort((a, b) => {
-        let valA: any;
-        let valB: any;
-
+        // Ensure length uses a numeric comparison if available
         if (sortField === 'length') {
-            valA = typeof a.lengthRaw === 'number' ? a.lengthRaw : 0;
-            valB = typeof b.lengthRaw === 'number' ? b.lengthRaw : 0;
-        } else if (sortField === 'name') {
-            valA = a.name ? a.name.toString().toLowerCase() : "";
-            valB = b.name ? b.name.toString().toLowerCase() : "";
-        } else {
-            valA = typeof a[sortField] === 'number' ? a[sortField] : 0;
-            valB = typeof b[sortField] === 'number' ? b[sortField] : 0;
+            valA = a.lengthRaw || parseFloat(a.length as string) || 0;
+            valB = b.lengthRaw || parseFloat(b.length as string) || 0;
         }
 
-        if (valA < valB) return sortDesc ? 1 : -1;
-        if (valA > valB) return sortDesc ? -1 : 1;
-        return 0;
+        let comparison = 0;
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+        } else {
+            comparison = (valA as number) > (valB as number) ? 1 : ((valA as number) < (valB as number) ? -1 : 0);
+        }
+
+        // Apply ASC / DESC
+        if (sortDesc) comparison = -comparison;
+
+        // NEW: Secondary Tie-Breaker Sort (If values are identical, sort by ID)
+        if (comparison === 0) {
+            comparison = a.id - b.id; // We keep this always ascending so jumping never occurs
+        }
+
+        return comparison;
     });
 
     const allVisibleInTab = sortedLines.length > 0 && sortedLines.every(l => activeLines.has(l.id));
@@ -251,7 +314,6 @@ export const TransitPanel = () => {
 
         // Tell the C# backend to update the visibility
         trigger("TrafficSpy", "setAllLinesVisible", targetState);
-        // Optional: Keep this if you also want the master button to toggle the Nodes checkbox
         trigger("TrafficSpy", "setShowStopsAndStations", targetState);
     };
 
@@ -263,11 +325,11 @@ export const TransitPanel = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15rem' }}>
                     <div onClick={() => trigger("TrafficSpy", "setShowInfoviewBackground", !showInfoviewBackground)} style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
                         <CustomCheckbox checked={showInfoviewBackground} onChange={() => {}} />
-                        Gray Map &nbsp;
+                        &nbsp; Gray Map &nbsp;
                     </div>
                     <div onClick={() => trigger("TrafficSpy", "setShowStopsAndStations", !showStopsAndStations)} style={{ display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', cursor: 'pointer', color: '#ccc' }}>
                         <CustomCheckbox checked={showStopsAndStations} onChange={() => {}} />
-                        Nodes &nbsp;
+                        &nbsp; Stops &nbsp;
                     </div>
                     <button onClick={toggleMasterAll} style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1rem solid rgba(255,255,255,0.2)', color: 'white', padding: '4rem 8rem', borderRadius: '4rem', cursor: 'pointer', fontSize: '11rem', textTransform: 'uppercase' }}>
                         Toggle All
@@ -281,12 +343,55 @@ export const TransitPanel = () => {
                 </div>
             </div>
 
-            <div style={{ display: 'flex', borderBottom: '1rem solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', borderBottom: '1rem solid rgba(255,255,255,0.1)', position: 'relative' }}>
                 {['bus', 'train', 'subway', 'tram', 'ferry', 'cargo'].map((tab) => (
                     <button key={tab} onClick={() => setActiveTab(tab as TransitType)} style={{ flex: 1, padding: '10rem 0', cursor: 'pointer', fontSize: '13rem', background: activeTab === tab ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none', color: activeTab === tab ? 'white' : '#888', borderBottom: activeTab === tab ? '2rem solid #4287f5' : '2rem solid transparent' }}>
                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
+
+                {/* OVERFLOW BUTTON */}
+                <button
+                    onClick={() => setIsOverflowOpen(!isOverflowOpen)}
+                    style={{
+                        padding: '10rem 15rem', cursor: 'pointer', background: 'transparent', border: 'none',
+                        borderBottom: (activeTab === 'airplane' || activeTab === 'ship') ? '2rem solid #4287f5' : '2rem solid transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                >
+                    <MoreIcon />
+                </button>
+
+                {/* DROPDOWN MENU */}
+                {isOverflowOpen && (
+                    <>
+                        {/* Invisible click-away overlay */}
+                        <div onClick={() => setIsOverflowOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+
+                        <div style={{
+                            position: 'absolute', top: '100%', right: '0', backgroundColor: 'rgba(25, 30, 35, 0.98)',
+                            border: '1rem solid rgba(255,255,255,0.2)', borderRadius: '4rem', boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                            zIndex: 100, display: 'flex', flexDirection: 'column', minWidth: '100rem'
+                        }}>
+                            {['airplane', 'ship'].map(tab => (
+                                <div
+                                    key={tab}
+                                    onClick={() => { setActiveTab(tab as TransitType); setIsOverflowOpen(false); }}
+                                    style={{
+                                        padding: '10rem 15rem', cursor: 'pointer', fontSize: '13rem',
+                                        color: activeTab === tab ? '#4287f5' : '#ccc',
+                                        backgroundColor: activeTab === tab ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                        borderBottom: '1rem solid rgba(255,255,255,0.05)'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = activeTab === tab ? 'rgba(255,255,255,0.08)' : 'transparent'}
+                                >
+                                    {tab === 'airplane' ? 'Air' : 'Ship'}
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
 
             <div style={{ padding: '10rem 15rem', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -310,7 +415,7 @@ export const TransitPanel = () => {
                         style={{ marginLeft: '10rem', backgroundColor: '#4287f5', border: 'none', borderRadius: '4rem', color: 'white', padding: '4rem 10rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', fontWeight: 'bold' }}
                         title={`Equip ${activeTab} tool`}
                     >
-                        <ToolIcon /> Tool
+                        <ToolIcon /> &nbsp;Tool
                     </button>
 
                 </div>
@@ -336,7 +441,7 @@ export const TransitPanel = () => {
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ fontWeight: 'bold', fontSize: '16rem', marginBottom: '8rem', display: 'flex', alignItems: 'center', gap: '8rem' }}>
                         <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                            {line.name}
+                            {line.name} &nbsp;
                         </span>
                         <div
                             onClick={(e) => {

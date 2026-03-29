@@ -1,8 +1,9 @@
 ﻿DONE:
 
-- toogle infoview/panel back off if clicking topleft button when it's open
 
 - make subway routes show above ground somehow
+
+show miles
 
 
 TO DO

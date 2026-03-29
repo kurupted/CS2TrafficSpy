@@ -342,8 +342,17 @@ namespace TrafficSpy.Systems
 
             AddBinding(new TriggerBinding<bool>("TrafficSpy", "setAllLinesVisible", (show) => {
                 using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+                //var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                
                 foreach (var e in entities)
                 {
+                    // Skip Airplanes so the Master Toggle ignores them
+                    /*if (EntityManager.TryGetComponent<Game.Prefabs.PrefabRef>(e, out var prefabRef) &&
+                        EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData))
+                    {
+                        if (lineData.m_TransportType == Game.Prefabs.TransportType.Airplane) continue;
+                    }*/
+
                     if (show) HiddenCustomRoutes.Remove(e);
                     else HiddenCustomRoutes.Add(e);
                 }
@@ -684,7 +693,6 @@ namespace TrafficSpy.Systems
             m_ActiveTransitMode = mode;
             this.showTransitPanelBinding.Update(true);
             
-            // NEW: Automatically start with all Cargo routes explicitly turned OFF
             HiddenCustomRoutes.Clear();
             using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
             var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
@@ -692,20 +700,21 @@ namespace TrafficSpy.Systems
                 if (!EntityManager.HasComponent<Game.Prefabs.PrefabRef>(e)) continue;
                 var prefabRef = EntityManager.GetComponentData<Game.Prefabs.PrefabRef>(e);
                 if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(prefabRef.m_Prefab, out var lineData)) {
-                    if (lineData.m_CargoTransport) {
+                    // Hide Cargo AND Airplanes by default
+                    if (lineData.m_CargoTransport || lineData.m_TransportType == Game.Prefabs.TransportType.Airplane) {
                         HiddenCustomRoutes.Add(e);
                     }
                 }
             }
 
             UpdateTransitLinesData(); 
-            SyncVanillaVisibilityToUI();
 
             if (mode == "custom" && m_CustomInfoviewEntity != Entity.Null)
             {
-                // Only turn it on if the user has the checkbox ticked
                 if (ShowInfoviewBackground) m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
             }
+            
+            SyncVanillaVisibilityToUI();
         }
         
         
