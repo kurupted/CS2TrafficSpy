@@ -52,6 +52,10 @@ namespace TrafficSpy.Systems
 
             OverlayRenderSystem.Buffer buffer = m_OverlayRenderSystem.GetBuffer(out JobHandle deps);
 
+            // Containers to collect overlap data before drawing
+            var stopColors = new NativeParallelMultiHashMap<Entity, UnityEngine.Color>(1024, Allocator.TempJob);
+            var stopPositions = new NativeHashMap<Entity, float3>(1024, Allocator.TempJob);
+
             var transitJob = new RenderTransitLineOverlayJob
             {
                 overlayBuffer = buffer,
@@ -67,12 +71,34 @@ namespace TrafficSpy.Systems
                 TransformLookup = SystemAPI.GetComponentLookup<Game.Objects.Transform>(true),
                 DrawStops = TrafficUISystem.ShowStopsAndStations,
                 ConnectedLookup = SystemAPI.GetComponentLookup<Game.Routes.Connected>(true),
-                ZoomLevel = m_CameraUpdateSystem.zoom 
+                ZoomLevel = m_CameraUpdateSystem.zoom,
+                
+                // Pass containers to Pass 1
+                StopColors = stopColors,
+                StopPositions = stopPositions
             };
 
+            // Pass 1: Collect
             JobHandle transitHandle = transitJob.Schedule(m_TransitLinesQuery, JobHandle.CombineDependencies(Dependency, deps));
-            hiddenSet.Dispose(transitHandle);
-            Dependency = transitHandle;
+
+            var drawStopsJob = new DrawTransitStopsJob
+            {
+                overlayBuffer = buffer,
+                stopColors = stopColors,
+                stopPositions = stopPositions,
+                zoomLevel = m_CameraUpdateSystem.zoom,
+                drawStops = TrafficUISystem.ShowStopsAndStations
+            };
+
+            // Pass 2: Draw the merged nodes
+            JobHandle drawStopsHandle = drawStopsJob.Schedule(transitHandle);
+
+            // Cleanup
+            hiddenSet.Dispose(drawStopsHandle);
+            stopColors.Dispose(drawStopsHandle);
+            stopPositions.Dispose(drawStopsHandle);
+
+            Dependency = drawStopsHandle;
             m_OverlayRenderSystem.AddBufferWriter(Dependency);
         }
 

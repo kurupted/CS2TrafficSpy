@@ -31,6 +31,20 @@ const UsageIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', heigh
 const CargoIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 6.04 7.5 12 10.85l5.96-3.35L12 4.15zM5 15.91l6 3.38v-6.71L5 9.21v6.7zM19 15.91v-6.7l-6 3.37v6.71l6-3.38z"/></svg>);
 const StopIcon = () => (<svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="#bbb"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>);
 
+const ToolIcon = () => (
+    <svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+);
+
+const SearchIcon = () => (
+    <svg viewBox="0 0 24 24" style={{ width: '14rem', height: '14rem' }} fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+);
+
 const TransportTypeIcon = ({ type }: { type: TransitType }) => {
     let path = "";
     switch(type) {
@@ -85,7 +99,7 @@ const CustomDropdown = ({ value, options, onChange }: { value: string, options: 
                     alignItems: 'center',
                     gap: '6rem',
                     fontSize: '12rem',
-                    minWidth: '100rem',
+                    minWidth: '80rem',
                     justifyContent: 'space-between'
                 }}
             >
@@ -276,7 +290,7 @@ export const TransitPanel = () => {
             </div>
 
             <div style={{ padding: '10rem 15rem', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1rem solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8rem' }}>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '12rem', color: '#888' }}>
                         Sort: &nbsp;
@@ -289,6 +303,16 @@ export const TransitPanel = () => {
                             {sortDesc ? 'DESC ↓' : 'ASC ↑'}
                         </button>
                     </div>
+
+                    {/* NEW TOOL BUTTON */}
+                    <button
+                        onClick={() => trigger("TrafficSpy", "activateTransitTool", activeTab)}
+                        style={{ marginLeft: '10rem', backgroundColor: '#4287f5', border: 'none', borderRadius: '4rem', color: 'white', padding: '4rem 10rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6rem', fontSize: '12rem', fontWeight: 'bold' }}
+                        title={`Equip ${activeTab} tool`}
+                    >
+                        <ToolIcon /> Tool
+                    </button>
+
                 </div>
                 {/* Fixed Toggle Tab label acting as clickable trigger */}
                 <div onClick={toggleTabAll} style={{ display: 'flex', alignItems: 'center', gap: '8rem', fontSize: '13rem', cursor: 'pointer', color: '#fff' }}>
@@ -310,8 +334,22 @@ export const TransitPanel = () => {
                 )}
 
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '16rem', marginBottom: '8rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                        {line.name}
+                    <div style={{ fontWeight: 'bold', fontSize: '16rem', marginBottom: '8rem', display: 'flex', alignItems: 'center', gap: '8rem' }}>
+                        <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {line.name}
+                        </span>
+                        <div
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevents the row from toggling visibility
+                                trigger("TrafficSpy", "showVanillaLineInfo", line.id);
+                            }}
+                            title="Inspect Route"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem', borderRadius: '4rem', transition: 'background-color 0.1s', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.05)' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                        >
+                            <SearchIcon />
+                        </div>
                     </div>
 
                     

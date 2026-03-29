@@ -124,6 +124,7 @@ namespace TrafficSpy.Systems
         public bool IsTransitPanelActive => this.showTransitPanelBinding?.value ?? false;
         private EntityQuery m_TransitLinesQuery;
         private int m_TransitUpdateFrame = 0;
+        private EntityQuery m_TransportLinePrefabQuery;
         
         // --- Safe UI Communication Channels ---
         private string m_PendingTransitMode = "none";
@@ -140,6 +141,7 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> showStopsAndStationsBinding;
         public static bool ShowInfoviewBackground = true; 
         private ValueBinding<bool> showInfoviewBackgroundBinding;
+        
         
         protected override void OnCreate()
         {
@@ -305,6 +307,13 @@ namespace TrafficSpy.Systems
                 }
             });
             
+            m_TransportLinePrefabQuery = GetEntityQuery(new EntityQueryDesc {
+                All = new ComponentType[] {
+                    ComponentType.ReadOnly<Game.Prefabs.TransportLineData>(),
+                    ComponentType.ReadOnly<Game.Prefabs.PrefabData>()
+                }
+            });
+            
             this.showTransitPanelBinding = new ValueBinding<bool>("TrafficSpy", "showTransitPanel", false);
             this.transitLinesDataBinding = new ValueBinding<string>("TrafficSpy", "transitLinesData", "[]");
             AddBinding(this.showTransitPanelBinding);
@@ -361,6 +370,56 @@ namespace TrafficSpy.Systems
                         m_InfoviewsUISystem.SetActiveInfoview(m_CustomInfoviewEntity);
                     } else {
                         m_InfoviewsUISystem.SetActiveInfoview(Entity.Null);
+                    }
+                }
+            }));
+            
+            AddBinding(new TriggerBinding<string>("TrafficSpy", "activateTransitTool", (mode) => {
+                Game.Prefabs.TransportType targetType = Game.Prefabs.TransportType.Bus;
+                bool isCargo = false;
+    
+                switch(mode.ToLower()) {
+                    case "bus": targetType = Game.Prefabs.TransportType.Bus; break;
+                    case "train": targetType = Game.Prefabs.TransportType.Train; break;
+                    case "tram": targetType = Game.Prefabs.TransportType.Tram; break;
+                    case "subway": targetType = Game.Prefabs.TransportType.Subway; break;
+                    case "ferry": targetType = Game.Prefabs.TransportType.Ferry; break;
+                    case "ship": targetType = Game.Prefabs.TransportType.Ship; break;
+                    case "airplane": targetType = Game.Prefabs.TransportType.Airplane; break;
+                    case "cargo": targetType = Game.Prefabs.TransportType.Train; isCargo = true; break; 
+                }
+
+                var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                var toolSystem = World.GetOrCreateSystemManaged<Game.Tools.ToolSystem>();
+    
+                using var entities = m_TransportLinePrefabQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+                Game.Prefabs.PrefabBase selectedPrefab = null;
+
+                foreach(var e in entities) {
+                    if (EntityManager.TryGetComponent<Game.Prefabs.TransportLineData>(e, out var lineData)) {
+                        if (lineData.m_TransportType == targetType && lineData.m_CargoTransport == isCargo) {
+                            selectedPrefab = prefabSystem.GetPrefab<Game.Prefabs.PrefabBase>(e);
+                            break;
+                        }
+                    }
+                }
+
+                if (selectedPrefab != null) {
+                    // Safely ask the ToolSystem to equip the prefab and switch to its default tool
+                    toolSystem.ActivatePrefabTool(selectedPrefab);
+                }
+            }));
+            
+            // Opens the vanilla info panel for a specific route
+            AddBinding(new TriggerBinding<int>("TrafficSpy", "showVanillaLineInfo", (entityIndex) => {
+                using var entities = m_TransitLinesQuery.ToEntityArray(Unity.Collections.Allocator.Temp);
+                foreach (var e in entities)
+                {
+                    if (e.Index == entityIndex)
+                    {
+                        // Setting the selected entity automatically opens its vanilla info panel
+                        toolSystem.selected = e;
+                        break;
                     }
                 }
             }));
