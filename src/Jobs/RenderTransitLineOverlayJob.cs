@@ -63,10 +63,9 @@ namespace TrafficSpy.Jobs
                     TransportLineDataLookup.TryGetComponent(prefabRef.m_Prefab, out var lineData))
                 {
                     var t = lineData.m_TransportType;
-                    if (t == TransportType.Airplane) continue;
-                    
                     if (t != TransportType.Bus && t != TransportType.Train && t != TransportType.Tram && 
-                        t != TransportType.Subway && t != TransportType.Ship && t != TransportType.Ferry) {
+                        t != TransportType.Subway && t != TransportType.Ship && t != TransportType.Ferry &&
+                        t != TransportType.Airplane ) {
                         continue; 
                     }
                 }
@@ -217,7 +216,7 @@ namespace TrafficSpy.Jobs
                             float3 p2 = pos + new float3(math.cos(a2), 0, math.sin(a2)) * ringCenterRadius;
 
                             // Draw the segmented arc line (Width expanded slightly to eliminate gaps)
-                            overlayBuffer.DrawLine(cColor, new Colossal.Mathematics.Line3.Segment(p1, p2), ringWidth * 1.35f); 
+                            overlayBuffer.DrawLine(cColor, new Colossal.Mathematics.Line3.Segment(p1, p2), ringWidth * 1.5f); 
                         }
                     }
                 }
