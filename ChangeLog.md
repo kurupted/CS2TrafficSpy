@@ -1,3 +1,3 @@
-- Now captures vehicles that are close to the selected road segment and have switched to lane-specific pathing.
-- You can now analyze intersections (nodes).
-- Switched to custom outlines so that highlighted peds are visible on selected roads/transit.
+- Added a traffic jam monitor that appears after you click the main mod button.
+- The mod button now shows an indicator of the number of active traffic jams.
+- The TrafficSpy section embedded in the native info view of transit structures is now collapsable, and collapsed by default.

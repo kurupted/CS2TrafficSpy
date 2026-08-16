@@ -26,3 +26,8 @@ export const isTransitStopSelected = bindValue<boolean>("TrafficSpy", "isTransit
 
 export const hasParent = bindValue<boolean>("TrafficSpy", "hasParent", false);
 export const selectParent = () => trigger("TrafficSpy", "selectParent");
+
+export const trafficJamData = bindValue<string>("TrafficSpy", "trafficJamData", "[]");
+export const isRoadSelected = bindValue<boolean>("TrafficSpy", "isRoadSelected", false);
+export const focusEntityTrigger = (entity: { index: number; version: number }) => trigger("TrafficSpy", "focusEntity", entity as any);
+

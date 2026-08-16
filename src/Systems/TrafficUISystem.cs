@@ -9,8 +9,7 @@ using Game.Input;
 using Game.Net;
 using Game.Objects;
 using Game.Routes;
-//using Game.Prefabs; // for GrayWorld
-//using System.Reflection; // for GrayWorld
+using Game.Prefabs;
 using Game.Pathfind;
 using Game.Tools;
 using Game.UI;
@@ -18,6 +17,7 @@ using Game.UI.InGame;
 using Game.Vehicles;
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using TrafficSpy.Jobs;
 using Unity.Collections;
 using Unity.Entities;
@@ -58,6 +58,7 @@ namespace TrafficSpy.Systems
         private ToolSystem toolSystem;
         private DefaultToolSystem defaultToolSystem;
         private TrafficSpyToolSystem trafficSpyToolSystem;
+        private Game.Rendering.CameraUpdateSystem cameraUpdateSystem;
         private bool _isSpyModeActive = false;
 
         private ValueBinding<string> activityDataBinding;
@@ -71,6 +72,16 @@ namespace TrafficSpy.Systems
         private ValueBinding<bool> walkingOnlyBinding;
         private ValueBinding<bool> isTransitStopSelectedBinding;
         private ValueBinding<bool> hasParentBinding;
+        private ValueBinding<bool> isRoadSelectedBinding;
+
+        private ValueBinding<string> trafficJamDataBinding;
+        private ValueBinding<bool> monitorPanelActiveBinding;
+        private bool monitorPanelActive = false;
+        private float monitorTimer = 5.0f;
+        private EntityQuery m_BlockerVehicleQuery;
+        private EntityQuery m_NotificationIconQuery;
+        private EntityQuery m_TrafficConfigurationQuery;
+        private Game.UI.NameSystem nameSystem;
 
         private bool highlightAgents = false;
         private int displayMode = 0; // Default to Vehicles
@@ -125,6 +136,7 @@ namespace TrafficSpy.Systems
             this.toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             this.defaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
             this.trafficSpyToolSystem = World.GetOrCreateSystemManaged<TrafficSpyToolSystem>();
+            this.cameraUpdateSystem = World.GetOrCreateSystemManaged<Game.Rendering.CameraUpdateSystem>();
             
             // Listen for tool changes
             this.toolSystem.EventToolChanged += OnToolChanged;
@@ -147,7 +159,7 @@ namespace TrafficSpy.Systems
             {
                 All = new ComponentType[] 
                 {
-                    ComponentType.ReadOnly<Resident>(),
+                    ComponentType.ReadOnly<Game.Creatures.Resident>(),
                     ComponentType.ReadOnly<Creature>(),
                     ComponentType.ReadOnly<Target>(), 
                 },
@@ -171,6 +183,37 @@ namespace TrafficSpy.Systems
                 }
             });
 
+            this.m_BlockerVehicleQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Game.Vehicles.Vehicle>(),
+                    ComponentType.ReadOnly<Game.Vehicles.Blocker>()
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
+            });
+
+            this.m_NotificationIconQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Game.Notifications.Icon>(),
+                    ComponentType.ReadOnly<Game.Prefabs.PrefabRef>()
+                },
+                None = new ComponentType[]
+                {
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Temp>()
+                }
+            });
+
+            this.m_TrafficConfigurationQuery = GetEntityQuery(ComponentType.ReadOnly<TrafficConfigurationData>());
+            this.nameSystem = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
+
             this.activityDataBinding = new ValueBinding<string>("TrafficSpy", "activityData", "{}");
             this.toolActiveBinding = new ValueBinding<bool>("TrafficSpy", "toolActive", false);
             this.highlightAgentsBinding = new ValueBinding<bool>("TrafficSpy", "highlightAgents", false);
@@ -182,6 +225,10 @@ namespace TrafficSpy.Systems
             this.walkingOnlyBinding = new ValueBinding<bool>("TrafficSpy", "walkingOnly", true);
             this.isTransitStopSelectedBinding = new ValueBinding<bool>("TrafficSpy", "isTransitStopSelected", false);
             this.hasParentBinding = new ValueBinding<bool>("TrafficSpy", "hasParent", false);
+            this.isRoadSelectedBinding = new ValueBinding<bool>("TrafficSpy", "isRoadSelected", false);
+
+            this.trafficJamDataBinding = new ValueBinding<string>("TrafficSpy", "trafficJamData", "{}");
+            this.monitorPanelActiveBinding = new ValueBinding<bool>("TrafficSpy", "monitorPanelActive", false);
 
             AddBinding(this.activityDataBinding);
             AddBinding(this.toolActiveBinding);
@@ -194,6 +241,48 @@ namespace TrafficSpy.Systems
             AddBinding(this.walkingOnlyBinding);
             AddBinding(this.isTransitStopSelectedBinding);
             AddBinding(this.hasParentBinding);
+            AddBinding(this.isRoadSelectedBinding);
+
+            AddBinding(this.trafficJamDataBinding);
+            AddBinding(this.monitorPanelActiveBinding);
+
+            AddBinding(new TriggerBinding<bool>("TrafficSpy", "setMonitorPanelActive", (bool active) => {
+                this.monitorPanelActive = active;
+                this.monitorPanelActiveBinding.Update(active);
+                if (active)
+                {
+                    UpdateTrafficJamData();
+                }
+            }));
+
+            AddBinding(new TriggerBinding<Entity>("TrafficSpy", "focusEntity", (entity) => {
+                if (EntityManager.Exists(entity))
+                {
+                    if (this.cameraUpdateSystem != null && this.cameraUpdateSystem.activeCameraController != null)
+                    {
+                        if (EntityManager.HasComponent<Game.Objects.Transform>(entity))
+                        {
+                            var transform = EntityManager.GetComponentData<Game.Objects.Transform>(entity);
+                            this.cameraUpdateSystem.activeCameraController.pivot = transform.m_Position;
+                        }
+                        else if (EntityManager.HasComponent<Game.Notifications.Icon>(entity))
+                        {
+                            var icon = EntityManager.GetComponentData<Game.Notifications.Icon>(entity);
+                            this.cameraUpdateSystem.activeCameraController.pivot = icon.m_Location;
+                        }
+                        else if (EntityManager.HasComponent<Game.Net.Curve>(entity))
+                        {
+                            var curve = EntityManager.GetComponentData<Game.Net.Curve>(entity);
+                            this.cameraUpdateSystem.activeCameraController.pivot = Colossal.Mathematics.MathUtils.Position(curve.m_Bezier, 0.5f);
+                        }
+                        else if (EntityManager.HasComponent<Game.Net.Node>(entity))
+                        {
+                            var node = EntityManager.GetComponentData<Game.Net.Node>(entity);
+                            this.cameraUpdateSystem.activeCameraController.pivot = node.m_Position;
+                        }
+                    }
+                }
+            }));
 
             AddBinding(new TriggerBinding<Entity>("TrafficSpy", "selectStop", (entity) => {
                 this.toolSystem.selected = entity; 
@@ -316,6 +405,13 @@ namespace TrafficSpy.Systems
             }
             
             base.OnUpdate();
+
+            monitorTimer += UnityEngine.Time.deltaTime;
+            if (monitorTimer >= 5.0f)
+            {
+                monitorTimer = 0f;
+                UpdateTrafficJamData();
+            }
             
             // Auto-Reactivate Tool
             if (_isSpyModeActive)
@@ -334,10 +430,12 @@ namespace TrafficSpy.Systems
             if (ShouldBeVisible(selected))
             {
                 this.visible = true;
+                this.isRoadSelectedBinding.Update(true);
             }
             else
             {
                 this.visible = false;
+                this.isRoadSelectedBinding.Update(false);
                 ClearData();
                 return;
             }
@@ -864,7 +962,7 @@ namespace TrafficSpy.Systems
                     debugList = debugList,
                     
                     queueBufferHandle = SystemAPI.GetBufferTypeHandle<Game.Creatures.Queue>(true), 
-                    residentHandle = SystemAPI.GetComponentTypeHandle<Resident>(true),
+                    residentHandle = SystemAPI.GetComponentTypeHandle<Game.Creatures.Resident>(true),
                     
                     creatureHandle = SystemAPI.GetComponentTypeHandle<Creature>(true),
                     humanLaneHandle = SystemAPI.GetComponentTypeHandle<HumanCurrentLane>(true),
@@ -965,86 +1063,365 @@ namespace TrafficSpy.Systems
             ApplyFilter();
         }
 
-        /*private void ToggleGrayWorld(bool active)
+        private struct TrafficJamNotificationItem
         {
-            if (active)
+            public Entity IconEntity;
+            public Entity TargetEntity;
+            public string Name;
+        }
+
+        private string CleanLocationName(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "Traffic Bottleneck";
+
+            string cleaned = raw.Trim();
+
+            // 1. If it contains brackets e.g. "Assets.NAME[Two-Lane Road]" or "Assets.ASSET_NAME[Small Road_01]"
+            var bracketMatch = Regex.Match(cleaned, @"\[(.*?)\]");
+            if (bracketMatch.Success)
             {
-                // Create the Fake Infoview if it doesn't exist
-                if (fakeInfoviewEntity == Entity.Null)
+                cleaned = bracketMatch.Groups[1].Value;
+            }
+
+            // 2. Remove common localization prefixes if any remained
+            cleaned = Regex.Replace(cleaned, @"^(Assets|SelectedInfoPanel|Common|Notification|SubNet|Net)\.", "", RegexOptions.IgnoreCase);
+            cleaned = Regex.Replace(cleaned, @"^(NAME|ASSET_NAME|STREET_NAME|ROAD_NAME|SECTION_NAME)[:_ ]*", "", RegexOptions.IgnoreCase);
+
+            // 3. Replace underscores with spaces
+            cleaned = cleaned.Replace('_', ' ').Trim();
+
+            // 4. Strip trailing numbers
+            while (cleaned.Length > 0 && char.IsDigit(cleaned[cleaned.Length - 1]))
+            {
+                cleaned = cleaned.Substring(0, cleaned.Length - 1).TrimEnd();
+            }
+
+            // 5. Expand CamelCase (excluding after spaces and hyphens)
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < cleaned.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(cleaned[i]) && !char.IsUpper(cleaned[i - 1]) && cleaned[i - 1] != ' ' && cleaned[i - 1] != '-')
                 {
-                    var entities = infoviewQuery.ToEntityArray(Allocator.Temp);
-                    var prefabs = SystemAPI.GetComponentLookup<PrefabData>(true);
-                    var infos = SystemAPI.GetComponentLookup<InfoviewData>(true);
-                    
-                    Entity sourceTrafficView = Entity.Null;
-                    foreach (var e in entities)
+                    sb.Append(' ');
+                }
+                sb.Append(cleaned[i]);
+            }
+
+            cleaned = Regex.Replace(sb.ToString().Trim(), @"\s+", " ");
+            return string.IsNullOrEmpty(cleaned) ? "Traffic Bottleneck" : cleaned;
+        }
+
+        private string GetLocationName(Entity targetEntity, ComponentLookup<Game.Net.Aggregated> aggregatedLookup, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
+        {
+            if (targetEntity != Entity.Null && EntityManager.Exists(targetEntity))
+            {
+                if (this.nameSystem != null)
+                {
+                    if (aggregatedLookup.TryGetComponent(targetEntity, out var agg) && agg.m_Aggregate != Entity.Null)
                     {
-                        if (prefabs.TryGetComponent(e, out PrefabData pData))
+                        string roadName = this.nameSystem.GetRenderedLabelName(agg.m_Aggregate);
+                        if (!string.IsNullOrEmpty(roadName)) return CleanLocationName(roadName);
+                    }
+                    string entityName = this.nameSystem.GetRenderedLabelName(targetEntity);
+                    if (!string.IsNullOrEmpty(entityName)) return CleanLocationName(entityName);
+                }
+
+                if (prefabRefLookup.TryGetComponent(targetEntity, out var pRef))
+                {
+                    var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                    if (prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(pRef.m_Prefab, out var prefab))
+                    {
+                        if (!string.IsNullOrEmpty(prefab.name)) return CleanLocationName(prefab.name);
+                    }
+                }
+            }
+            return "Traffic Bottleneck";
+        }
+
+        private void UpdateTrafficJamData()
+        {
+            var prefabRefLookup = SystemAPI.GetComponentLookup<Game.Prefabs.PrefabRef>(true);
+            var ownerLookup = SystemAPI.GetComponentLookup<Game.Common.Owner>(true);
+            var targetLookup = SystemAPI.GetComponentLookup<Game.Common.Target>(true);
+            var aggregatedLookup = SystemAPI.GetComponentLookup<Game.Net.Aggregated>(true);
+
+            // 1. COLLECT ACTIVE TRAFFIC JAM NOTIFICATIONS
+            List<TrafficJamNotificationItem> jamNotifications = new List<TrafficJamNotificationItem>();
+            if (!m_NotificationIconQuery.IsEmptyIgnoreFilter)
+            {
+                Entity bottleneckPrefab = Entity.Null;
+                if (!m_TrafficConfigurationQuery.IsEmptyIgnoreFilter)
+                {
+                    var trafficConfig = m_TrafficConfigurationQuery.GetSingleton<TrafficConfigurationData>();
+                    bottleneckPrefab = trafficConfig.m_BottleneckNotification;
+                }
+
+                var notificationIcons = m_NotificationIconQuery.ToEntityArray(Allocator.Temp);
+                HashSet<Entity> seenTargets = new HashSet<Entity>();
+
+                for (int i = 0; i < notificationIcons.Length; i++)
+                {
+                    Entity iconEnt = notificationIcons[i];
+                    if (!prefabRefLookup.TryGetComponent(iconEnt, out Game.Prefabs.PrefabRef pRef)) continue;
+
+                    bool isBottleneck = false;
+                    if (bottleneckPrefab != Entity.Null && pRef.m_Prefab == bottleneckPrefab)
+                    {
+                        isBottleneck = true;
+                    }
+                    else
+                    {
+                        var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                        if (prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(pRef.m_Prefab, out var pBase))
                         {
-                            // Use the inherited m_PrefabSystem
-                            var prefabBase = m_PrefabSystem.GetPrefab<PrefabBase>(pData);
-                            if (prefabBase != null && prefabBase.name == "Traffic")
+                            if (pBase.name != null && (pBase.name.Contains("Bottleneck") || pBase.name.Contains("TrafficJam") || pBase.name.Contains("Traffic Jam")))
                             {
-                                sourceTrafficView = e;
-                                break;
+                                isBottleneck = true;
                             }
                         }
                     }
-                    
-                    if (sourceTrafficView != Entity.Null)
+
+                    if (!isBottleneck) continue;
+
+                    Entity targetEntity = Entity.Null;
+                    if (ownerLookup.TryGetComponent(iconEnt, out Game.Common.Owner owner)) targetEntity = owner.m_Owner;
+                    else if (targetLookup.TryGetComponent(iconEnt, out Game.Common.Target target)) targetEntity = target.m_Target;
+
+                    if (targetEntity != Entity.Null && seenTargets.Contains(targetEntity)) continue;
+                    if (targetEntity != Entity.Null) seenTargets.Add(targetEntity);
+
+                    string locationName = GetLocationName(targetEntity, aggregatedLookup, prefabRefLookup);
+                    jamNotifications.Add(new TrafficJamNotificationItem
                     {
-                        fakeInfoviewEntity = EntityManager.CreateEntity();
-                        
-                        // 1. Add Visual Settings (Gray World)
-                        EntityManager.AddComponentData(fakeInfoviewEntity, infos[sourceTrafficView]);
-                        
-                        // 2. [FIX] Add Prefab Data (Enables Selection/Raycasting)
-                        // This tells the ToolSystem "We are the Traffic View" so it allows selecting roads,
-                        // but since we exclude InfoviewNetStatusData, it won't draw the green/red overlay.
-                        EntityManager.AddComponentData(fakeInfoviewEntity, prefabs[sourceTrafficView]);
+                        IconEntity = iconEnt,
+                        TargetEntity = targetEntity,
+                        Name = locationName
+                    });
+                }
+                notificationIcons.Dispose();
+            }
+
+            // 2. COLLECT LEAD BLOCKERS
+            List<KeyValuePair<Entity, int>> sortedBlockers = new List<KeyValuePair<Entity, int>>();
+            Dictionary<Entity, Game.Vehicles.BlockerType> blockerTypes = new Dictionary<Entity, Game.Vehicles.BlockerType>();
+
+            if (!m_BlockerVehicleQuery.IsEmptyIgnoreFilter)
+            {
+                var blockerEntities = m_BlockerVehicleQuery.ToEntityArray(Allocator.Temp);
+                var blockerDataLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Blocker>(true);
+                var vehicleLookup = SystemAPI.GetComponentLookup<Game.Vehicles.Vehicle>(true);
+                Dictionary<Entity, int> blockerCounts = new Dictionary<Entity, int>();
+
+                for (int i = 0; i < blockerEntities.Length; i++)
+                {
+                    Entity vehicle = GetTowingVehicle(blockerEntities[i]);
+
+                    if (!blockerDataLookup.TryGetComponent(vehicle, out Game.Vehicles.Blocker blocker)) continue;
+
+                    Entity leadBlocker = GetTowingVehicle(blocker.m_Blocker);
+                    if (leadBlocker == Entity.Null) continue;
+
+                    Entity current = leadBlocker;
+                    int depth = 0;
+                    while (depth < 5 && vehicleLookup.HasComponent(current) && blockerDataLookup.TryGetComponent(current, out Game.Vehicles.Blocker nextBlocker))
+                    {
+                        if (nextBlocker.m_Blocker != Entity.Null && vehicleLookup.HasComponent(nextBlocker.m_Blocker))
+                        {
+                            current = GetTowingVehicle(nextBlocker.m_Blocker);
+                            depth++;
+                        }
+                        else break;
                     }
-                    entities.Dispose();
+
+                    if (vehicleLookup.HasComponent(current))
+                    {
+                        current = GetTowingVehicle(current);
+                        if (blockerCounts.ContainsKey(current)) blockerCounts[current]++;
+                        else
+                        {
+                            blockerCounts[current] = 1;
+                            blockerTypes[current] = blocker.m_Type;
+                        }
+                    }
+                    else if (vehicleLookup.HasComponent(leadBlocker))
+                    {
+                        leadBlocker = GetTowingVehicle(leadBlocker);
+                        if (blockerCounts.ContainsKey(leadBlocker)) blockerCounts[leadBlocker]++;
+                        else
+                        {
+                            blockerCounts[leadBlocker] = 1;
+                            blockerTypes[leadBlocker] = blocker.m_Type;
+                        }
+                    }
+                }
+                blockerEntities.Dispose();
+
+                sortedBlockers.AddRange(blockerCounts);
+                sortedBlockers.Sort((a, b) =>
+                {
+                    int cmp = b.Value.CompareTo(a.Value);
+                    if (cmp != 0) return cmp;
+                    return a.Key.Index.CompareTo(b.Key.Index);
+                });
+            }
+
+            // 3. SERIALIZE JSON PAYLOAD
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("{\"notifications\":[");
+            for (int i = 0; i < jamNotifications.Count; i++)
+            {
+                var notif = jamNotifications[i];
+                Entity entityToFocus = notif.TargetEntity != Entity.Null ? notif.TargetEntity : notif.IconEntity;
+                sb.Append($"{{\"index\":{entityToFocus.Index},\"version\":{entityToFocus.Version},\"iconIndex\":{notif.IconEntity.Index},\"iconVersion\":{notif.IconEntity.Version},\"name\":\"{EscapeJson(notif.Name)}\"}},");
+            }
+            if (jamNotifications.Count > 0 && sb[sb.Length - 1] == ',') sb.Length--;
+
+            sb.Append("],\"blockers\":[");
+            int count = 0;
+            for (int i = 0; i < sortedBlockers.Count && count < 15; i++)
+            {
+                Entity blockerVeh = sortedBlockers[i].Key;
+                int waiting = sortedBlockers[i].Value;
+                if (waiting < 1) continue;
+
+                string vehName = GetVehicleDisplayName(blockerVeh, prefabRefLookup);
+                string vehType = GetVehicleCategory(blockerVeh);
+
+                Game.Vehicles.BlockerType bType = blockerTypes.TryGetValue(blockerVeh, out var bt) ? bt : Game.Vehicles.BlockerType.Signal;
+
+                string reason = "signal";
+                bool isTransitVeh = EntityManager.HasComponent<Game.Vehicles.PublicTransport>(blockerVeh) || EntityManager.HasComponent<Game.Vehicles.Taxi>(blockerVeh);
+                bool isSignalBlock = (bType == Game.Vehicles.BlockerType.Signal || bType == Game.Vehicles.BlockerType.Limit || bType == Game.Vehicles.BlockerType.Continuing);
+
+                if (isTransitVeh && !isSignalBlock)
+                {
+                    reason = "boarding";
+                }
+                else if (isSignalBlock)
+                {
+                    reason = "signal";
+                }
+                else
+                {
+                    reason = "stopped";
                 }
 
-                // Activate it
-                if (fakeInfoviewEntity != Entity.Null)
-                {
-                    ForceSetActiveInfoview(fakeInfoviewEntity);
-                }
+                sb.Append($"{{\"index\":{blockerVeh.Index},\"version\":{blockerVeh.Version},\"name\":\"{EscapeJson(vehName)}\",\"type\":\"{vehType}\",\"waitingCount\":{waiting},\"reason\":\"{reason}\"}},");
+                count++;
             }
-            else
-            {
-                // Deactivate
-                ForceSetActiveInfoview(Entity.Null);
-                
-                if (fakeInfoviewEntity != Entity.Null)
-                {
-                    EntityManager.DestroyEntity(fakeInfoviewEntity);
-                    fakeInfoviewEntity = Entity.Null;
-                }
-            }
+            if (count > 0 && sb[sb.Length - 1] == ',') sb.Length--;
+            sb.Append("]}");
+
+            trafficJamDataBinding.Update(sb.ToString());
         }
 
-        // HELPER METHOD (Reflects into ToolSystem to set the read-only property)
-        private void ForceSetActiveInfoview(Entity entity)
+        private Entity GetTowingVehicle(Entity vehicle)
         {
-            // Try setting via Property (if private setter exists)
-            var prop = typeof(ToolSystem).GetProperty("activeInfoview");
-            var setter = prop?.GetSetMethod(true);
-            if (setter != null)
+            if (vehicle == Entity.Null) return Entity.Null;
+            if (EntityManager.HasComponent<Game.Common.Owner>(vehicle))
             {
-                setter.Invoke(toolSystem, new object[] { entity });
-            }
-            else
-            {
-                // Fallback: Set the backing field directly (usually 'm_ActiveInfoview')
-                var field = typeof(ToolSystem).GetField("m_ActiveInfoview", BindingFlags.Instance | BindingFlags.NonPublic);
-                if (field != null)
+                Entity owner = EntityManager.GetComponentData<Game.Common.Owner>(vehicle).m_Owner;
+                if (owner != Entity.Null && EntityManager.HasComponent<Game.Vehicles.Vehicle>(owner))
                 {
-                    field.SetValue(toolSystem, entity);
+                    return owner;
                 }
             }
-        }*/
+            return vehicle;
+        }
+
+        private bool IsTrailerVehicle(Entity vehicle, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
+        {
+            if (prefabRefLookup.TryGetComponent(vehicle, out Game.Prefabs.PrefabRef pRef))
+            {
+                var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                var prefab = prefabSystem.GetPrefab<Game.Prefabs.PrefabBase>(pRef);
+                if (prefab != null && !string.IsNullOrEmpty(prefab.name))
+                {
+                    if (prefab.name.ToLower().Contains("trailer")) return true;
+                }
+            }
+            return false;
+        }
+
+        private string GetVehicleRichName(Entity vehicle, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
+        {
+            return GetVehicleDisplayName(vehicle, prefabRefLookup);
+        }
+
+        private string GetVehicleDisplayName(Entity vehicle, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
+        {
+            if (prefabRefLookup.TryGetComponent(vehicle, out Game.Prefabs.PrefabRef pRef))
+            {
+                var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                var prefab = prefabSystem.GetPrefab<Game.Prefabs.PrefabBase>(pRef);
+                if (prefab != null && !string.IsNullOrEmpty(prefab.name))
+                {
+                    string cleaned = CleanPrefabName(prefab.name);
+                    if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle) && !cleaned.ToLower().Contains("maintenance"))
+                    {
+                        return "Road Maintenance " + cleaned;
+                    }
+                    if (EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle) && !cleaned.ToLower().Contains("maintenance"))
+                    {
+                        return "Park Maintenance " + cleaned;
+                    }
+                    return cleaned;
+                }
+            }
+
+            if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle)) return "Road Maintenance Vehicle";
+            if (EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle)) return "Park Maintenance Vehicle";
+            if (EntityManager.HasComponent<Game.Vehicles.MaintenanceVehicle>(vehicle)) return "Road Maintenance Vehicle";
+            if (EntityManager.HasComponent<Game.Vehicles.PoliceCar>(vehicle)) return "Police Car";
+            if (EntityManager.HasComponent<Game.Vehicles.FireEngine>(vehicle)) return "Fire Engine";
+            if (EntityManager.HasComponent<Game.Vehicles.Ambulance>(vehicle)) return "Ambulance";
+            if (EntityManager.HasComponent<Game.Vehicles.GarbageTruck>(vehicle)) return "Garbage Truck";
+            if (EntityManager.HasComponent<Game.Vehicles.PostVan>(vehicle)) return "Post Van";
+            if (EntityManager.HasComponent<Game.Vehicles.Hearse>(vehicle)) return "Hearse";
+            if (EntityManager.HasComponent<Game.Vehicles.Taxi>(vehicle)) return "Taxi";
+            if (EntityManager.HasComponent<Game.Vehicles.PublicTransport>(vehicle)) return "Bus";
+            if (EntityManager.HasComponent<Game.Vehicles.DeliveryTruck>(vehicle)) return "Delivery Van";
+            if (EntityManager.HasComponent<Game.Vehicles.PersonalCar>(vehicle)) return "City Car";
+            return "Vehicle";
+        }
+
+        private string CleanPrefabName(string rawName)
+        {
+            if (string.IsNullOrEmpty(rawName)) return "";
+            string name = rawName.Replace('_', ' ').Trim();
+            while (name.Length > 0 && char.IsDigit(name[name.Length - 1]))
+            {
+                name = name.Substring(0, name.Length - 1).TrimEnd();
+            }
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            for (int i = 0; i < name.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]) && name[i - 1] != ' ')
+                {
+                    sb.Append(' ');
+                }
+                sb.Append(name[i]);
+            }
+            return Regex.Replace(sb.ToString().Trim(), @"\s+", " ");
+        }
+
+        private string GetVehicleCategory(Entity vehicle)
+        {
+            if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle) || 
+                EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle) ||
+                EntityManager.HasComponent<Game.Vehicles.MaintenanceVehicle>(vehicle)) return "maintenance";
+            if (EntityManager.HasComponent<Game.Vehicles.Taxi>(vehicle)) return "taxi";
+            if (EntityManager.HasComponent<Game.Vehicles.PublicTransport>(vehicle)) return "bus";
+            if (EntityManager.HasComponent<Game.Vehicles.DeliveryTruck>(vehicle)) return "van";
+            if (EntityManager.HasComponent<Game.Vehicles.PersonalCar>(vehicle)) return "car";
+            return "car";
+        }
+
+        private string EscapeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", " ").Replace("\r", "");
+        }
     }
 
     [Unity.Burst.BurstCompile]
@@ -1054,7 +1431,7 @@ namespace TrafficSpy.Systems
         public NativeList<int> debugList; 
         
         [ReadOnly] public BufferTypeHandle<Game.Creatures.Queue> queueBufferHandle; 
-        [ReadOnly] public ComponentTypeHandle<Resident> residentHandle;
+        [ReadOnly] public ComponentTypeHandle<Game.Creatures.Resident> residentHandle;
         [ReadOnly] public ComponentTypeHandle<Target> targetHandle;
         [ReadOnly] public EntityTypeHandle entityHandle; 
         
@@ -1076,7 +1453,7 @@ namespace TrafficSpy.Systems
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
-            NativeArray<Resident> residents = chunk.GetNativeArray(ref residentHandle);
+            NativeArray<Game.Creatures.Resident> residents = chunk.GetNativeArray(ref residentHandle);
             NativeArray<Entity> entities = chunk.GetNativeArray(entityHandle); 
             
             NativeArray<Creature> creatures = chunk.GetNativeArray(ref creatureHandle);

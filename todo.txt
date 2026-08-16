@@ -5,6 +5,5 @@
 TO DO
 
 
-- gray world
 - stray route lines eg on road shoulders etc (sometimes this is cars being parked, but i've seen it on highways)
 

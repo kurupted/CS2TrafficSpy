@@ -113,6 +113,21 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
         const currentHasParent = useValue(hasParent) ?? false;
 
         const [activeFilter, setActiveFilter] = useState<string>("");
+        const [isTransitCollapsed, setIsTransitCollapsed] = useState<boolean>(() => {
+            try {
+                return localStorage.getItem("TrafficSpy_TransitCollapsed") === "true";
+            } catch {
+                return false;
+            }
+        });
+
+        const toggleTransitCollapse = () => {
+            setIsTransitCollapsed(prev => {
+                const next = !prev;
+                try { localStorage.setItem("TrafficSpy_TransitCollapsed", String(next)); } catch (e) {}
+                return next;
+            });
+        };
 
         const associatedStopsJson = useValue(associatedStops);
         const stops: StopOption[] = useMemo(() => {
@@ -150,84 +165,116 @@ export const SelectedInfoPanelTogglesComponent = (componentList: any): any => {
             { label: "Other", count: data.other || 0, key: "other" },
         ].sort((a, b) => b.count - a.count);
 
+        const shouldShowDetails = !isTransitStop || !isTransitCollapsed;
+
         return (
             <InfoSection
                 focusKey={VanillaComponentResolver.instance.FOCUS_DISABLED}
                 disableFocus={true}
                 className={InfoSectionTheme?.infoSection}
             >
-                {/* 0. PARENT BUTTON */}
-                {isTransitStop && currentHasParent && renderButtonRow("Navigation", [
-                    { label: "< Back to Parent Station / Road", active: false, onClick: () => selectParent() }
-                ])}
-
-                {/* 1. STOPS & PLATFORMS */}
-                {stops.length > 0 && renderButtonRow("Select Stop / Platform", [
-                    ...stops.map(stop => ({
-                        label: stop.name,
-                        active: false,
-                        onClick: () => selectStop({ index: stop.index, version: stop.version })
-                    })),
-                    ...(!isTransitStop && currentDisplayMode === 1 ? [{
-                        label: "Walking Only",
-                        active: currentWalkingOnly,
-                        onClick: () => setWalkingOnly(!currentWalkingOnly)
-                    }] : [])
-                ])}
-
-                {/* 2. MODE TOGGLES (Vehicles vs Peds vs Transit) */}
-                {isTransitStop ? (
-                    renderButtonRow("Traffic Type", [
-                        { label: "Transit Passengers", active: true, onClick: () => {} }
-                    ])
-                ) : (
-                    renderButtonRow("Traffic Type", [
-                        { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
-                        { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
-                    ])
+                {/* TRANSIT COLLAPSIBLE HEADER */}
+                {isTransitStop && (
+                    <div
+                        onClick={toggleTransitCollapse}
+                        style={{
+                            display: "flex",
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "4px 8px",
+                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                            borderRadius: "4px",
+                            marginBottom: "6px",
+                            cursor: "pointer",
+                            userSelect: "none"
+                        }}
+                    >
+                        <span style={{ fontWeight: 700, fontSize: "0.85em", color: "rgba(255, 235, 100, 1)" }}>
+                            TRAFFIC SPY (TRANSIT)
+                        </span>
+                        <span style={{ fontSize: "0.8em", color: "rgba(255, 255, 255, 0.7)" }}>
+                            {isTransitCollapsed ? "► EXPAND" : "▼ COLLAPSE"}
+                        </span>
+                    </div>
                 )}
 
-                {/* 3. DIRECTION TOGGLES */}
-                {!isTransitStop && renderButtonRow("Road Side / Direction", [
-                    { label: "Both", active: currentDirMode === 0, onClick: () => setDirectionMode(0) },
-                    { label: "Side A", active: currentDirMode === 1, onClick: () => setDirectionMode(1) },
-                    { label: "Side B", active: currentDirMode === 2, onClick: () => setDirectionMode(2) }
-                ])}
-
-                {/* 4. RANGE TOGGLES */}
-                { !isTransitStop && renderButtonRow("Max Range", [
-                    { label: "Lane Data Only", active: currentRangeMode === 0, onClick: () => setRangeMode(0) },
-                    { label: "1km (0.6mi)", active: currentRangeMode === 1, onClick: () => setRangeMode(1) },
-                    { label: "2km (1.2mi)", active: currentRangeMode === 2, onClick: () => setRangeMode(2) },
-                    { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
-                ])}
-
-                {/* 5. HIGHLIGHTS & ROUTE TOGGLES */}
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%', marginBottom: '10px' }}>
-                    <div style={{ flex: 1 }}>
-                        {renderButtonRow("Highlights", [
-                            { label: showHighlights ? "ON" : "OFF", active: showHighlights, onClick: () => sethighlightAgents(!showHighlights) }
+                {shouldShowDetails && (
+                    <>
+                        {/* 0. PARENT BUTTON */}
+                        {isTransitStop && currentHasParent && renderButtonRow("Navigation", [
+                            { label: "< Back to Parent Station / Road", active: false, onClick: () => selectParent() }
                         ])}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        {renderButtonRow("Route Lines", [
-                            { label: showPathLines ? "ON" : "OFF", active: showPathLines, onClick: () => setShowRoutes(!showPathLines) }
+
+                        {/* 1. STOPS & PLATFORMS */}
+                        {stops.length > 0 && renderButtonRow("Select Stop / Platform", [
+                            ...stops.map(stop => ({
+                                label: stop.name,
+                                active: false,
+                                onClick: () => selectStop({ index: stop.index, version: stop.version })
+                            })),
+                            ...(!isTransitStop && currentDisplayMode === 1 ? [{
+                                label: "Walking Only",
+                                active: currentWalkingOnly,
+                                onClick: () => setWalkingOnly(!currentWalkingOnly)
+                            }] : [])
                         ])}
-                    </div>
-                </div>
 
-                {/* 6. RESET FILTER / TOTAL ROW */}
-                <div onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }} style={{ cursor: "pointer", marginBottom: "5px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "5px" }}>
-                    <InfoRow
-                        left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}
-                        right={<span style={totalStyle}>{total.toString()}</span>}
-                        uppercase={true} disableFocus={true} subRow={false} className={InfoRowTheme?.infoRow}
-                    />
-                </div>
+                        {/* 2. MODE TOGGLES (Vehicles vs Peds vs Transit) */}
+                        {isTransitStop ? (
+                            renderButtonRow("Traffic Type", [
+                                { label: "Transit Passengers", active: true, onClick: () => {} }
+                            ])
+                        ) : (
+                            renderButtonRow("Traffic Type", [
+                                { label: "Vehicles", active: currentDisplayMode === 0, onClick: () => setDisplayMode(0) },
+                                { label: "Pedestrians", active: currentDisplayMode === 1, onClick: () => setDisplayMode(1) }
+                            ])
+                        )}
 
-                {/* 7. DATA ROWS */}
-                {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
-                {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
+                        {/* 3. DIRECTION TOGGLES */}
+                        {!isTransitStop && renderButtonRow("Road Side / Direction", [
+                            { label: "Both", active: currentDirMode === 0, onClick: () => setDirectionMode(0) },
+                            { label: "Side A", active: currentDirMode === 1, onClick: () => setDirectionMode(1) },
+                            { label: "Side B", active: currentDirMode === 2, onClick: () => setDirectionMode(2) }
+                        ])}
+
+                        {/* 4. RANGE TOGGLES */}
+                        { !isTransitStop && renderButtonRow("Max Range", [
+                            { label: "Lane Data Only", active: currentRangeMode === 0, onClick: () => setRangeMode(0) },
+                            { label: "1km (0.6mi)", active: currentRangeMode === 1, onClick: () => setRangeMode(1) },
+                            { label: "2km (1.2mi)", active: currentRangeMode === 2, onClick: () => setRangeMode(2) },
+                            { label: "∞", active: currentRangeMode === 3, onClick: () => setRangeMode(3) }
+                        ])}
+
+                        {/* 5. HIGHLIGHTS & ROUTE TOGGLES */}
+                        <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', width: '100%', marginBottom: '10px' }}>
+                            <div style={{ flex: 1 }}>
+                                {renderButtonRow("Highlights", [
+                                    { label: showHighlights ? "ON" : "OFF", active: showHighlights, onClick: () => sethighlightAgents(!showHighlights) }
+                                ])}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                {renderButtonRow("Route Lines", [
+                                    { label: showPathLines ? "ON" : "OFF", active: showPathLines, onClick: () => setShowRoutes(!showPathLines) }
+                                ])}
+                            </div>
+                        </div>
+
+                        {/* 6. RESET FILTER / TOTAL ROW */}
+                        <div onClick={() => { setActiveFilter(""); setTrafficFilter("RESET"); }} style={{ cursor: "pointer", marginBottom: "5px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "5px" }}>
+                            <InfoRow
+                                left={<span style={totalStyle}>{activeFilter === "" ? "> ALL ACTIVITY" : "RESET FILTER"}</span>}
+                                right={<span style={totalStyle}>{total.toString()}</span>}
+                                uppercase={true} disableFocus={true} subRow={false} className={InfoRowTheme?.infoRow}
+                            />
+                        </div>
+
+                        {/* 7. DATA ROWS */}
+                        {sortedRows.map((row) => row.count > 0 ? renderRow(row.label, row.count, row.key, activeFilter, setActiveFilter) : null)}
+                        {data.none > 0 ? renderRow("None / Unknown", data.none, "none", activeFilter, setActiveFilter) : null}
+                    </>
+                )}
 
             </InfoSection>
         );
