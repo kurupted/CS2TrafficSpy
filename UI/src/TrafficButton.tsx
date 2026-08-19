@@ -5,7 +5,7 @@ import { toolActive, isRoadSelected, trafficJamData } from "./bindings";
 import { TrafficMonitorPanel } from "./TrafficMonitorPanel";
 
 const TrafficButton = () => {
-    console.log("[TrafficSpy] TrafficButton rendering...");
+    //console.log("[TrafficSpy] TrafficButton rendering...");
 
     try {
         const active = useValue(toolActive);
@@ -56,7 +56,6 @@ const TrafficButton = () => {
                                 color: "#ffffff",
                                 fontSize: "11rem",
                                 fontWeight: 800,
-                                fontFamily: "var(--font-family-body, 'Inter', sans-serif)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",

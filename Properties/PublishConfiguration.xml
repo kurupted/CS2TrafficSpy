@@ -57,7 +57,7 @@ This mod is safe to remove and doesn't add data to your save files.
     <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/traffic-spy.1884568/" />
 
     <!-- Version of the mod.  Copied from assembly Version. -->
-    <ModVersion Value="3.1" />
+    <ModVersion Value="3.1.2" />
 
     <!-- Recommended version of the base game to use the mod. -->
     <GameVersion Value="1.6.*" />
@@ -71,9 +71,9 @@ This mod is safe to remove and doesn't add data to your save files.
 
     <!-- Change log.  Copied from ChangeLog.md file.  Supports minimal markdown subset. -->
     <ChangeLog>
-- Added a traffic jam monitor that appears after you click the main mod button.
-- The mod button now shows an indicator of the number of active traffic jams.
-- The TrafficSpy section embedded in the native info view of transit structures is now collapsable, and collapsed by default.
+- Bug fix.
+- Show street names for traffic jams.
+- Added a ship icon for the traffic jam monitor.
 </ChangeLog>
 
     <!-- External links.  Can be set multiple times. -->

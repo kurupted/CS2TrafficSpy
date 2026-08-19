@@ -410,7 +410,14 @@ namespace TrafficSpy.Systems
             if (monitorTimer >= 5.0f)
             {
                 monitorTimer = 0f;
-                UpdateTrafficJamData();
+                try
+                {
+                    UpdateTrafficJamData();
+                }
+                catch (System.Exception ex)
+                {
+                    Mod.log.Warn($"TrafficSpy: Error updating traffic jam data: {ex.Message}");
+                }
             }
             
             // Auto-Reactivate Tool
@@ -1070,72 +1077,313 @@ namespace TrafficSpy.Systems
             public string Name;
         }
 
-        private string CleanLocationName(string raw)
+        private bool IsGenericLaneName(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return "Traffic Bottleneck";
-
-            string cleaned = raw.Trim();
-
-            // 1. If it contains brackets e.g. "Assets.NAME[Two-Lane Road]" or "Assets.ASSET_NAME[Small Road_01]"
-            var bracketMatch = Regex.Match(cleaned, @"\[(.*?)\]");
-            if (bracketMatch.Success)
+            try
             {
-                cleaned = bracketMatch.Groups[1].Value;
-            }
-
-            // 2. Remove common localization prefixes if any remained
-            cleaned = Regex.Replace(cleaned, @"^(Assets|SelectedInfoPanel|Common|Notification|SubNet|Net)\.", "", RegexOptions.IgnoreCase);
-            cleaned = Regex.Replace(cleaned, @"^(NAME|ASSET_NAME|STREET_NAME|ROAD_NAME|SECTION_NAME)[:_ ]*", "", RegexOptions.IgnoreCase);
-
-            // 3. Replace underscores with spaces
-            cleaned = cleaned.Replace('_', ' ').Trim();
-
-            // 4. Strip trailing numbers
-            while (cleaned.Length > 0 && char.IsDigit(cleaned[cleaned.Length - 1]))
-            {
-                cleaned = cleaned.Substring(0, cleaned.Length - 1).TrimEnd();
-            }
-
-            // 5. Expand CamelCase (excluding after spaces and hyphens)
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < cleaned.Length; i++)
-            {
-                if (i > 0 && char.IsUpper(cleaned[i]) && !char.IsUpper(cleaned[i - 1]) && cleaned[i - 1] != ' ' && cleaned[i - 1] != '-')
+                if (string.IsNullOrWhiteSpace(raw)) return true;
+                string trimmed = raw.Trim();
+                string lower = trimmed.ToLower().Replace(" ", "").Replace("_", "").Replace("-", "");
+                if (lower == "carlane" || lower == "pedestrianlane" || lower == "tracklane" ||
+                    lower == "sublane" || lower == "drivinglane" || lower == "parkinglane" ||
+                    lower == "bicyclelane" || lower == "pathlane" || lower == "lane" ||
+                    lower == "trafficbottleneck" || lower == "bottleneck")
                 {
-                    sb.Append(' ');
+                    return true;
                 }
-                sb.Append(cleaned[i]);
-            }
 
-            cleaned = Regex.Replace(sb.ToString().Trim(), @"\s+", " ");
-            return string.IsNullOrEmpty(cleaned) ? "Traffic Bottleneck" : cleaned;
+                if (lower.Contains("carlane") || lower.Contains("sublane") || 
+                    lower.Contains("tracklane") || lower.Contains("drivinglane") || 
+                    lower.Contains("parkinglane") || lower.Contains("pedestrianlane"))
+                {
+                    return true;
+                }
+
+                if (Regex.IsMatch(trimmed, @"(?i)\blane\s*\d+\b") || Regex.IsMatch(lower, @"lane\d+"))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
-        private string GetLocationName(Entity targetEntity, ComponentLookup<Game.Net.Aggregated> aggregatedLookup, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
+        private string CleanStreetName(string raw)
         {
-            if (targetEntity != Entity.Null && EntityManager.Exists(targetEntity))
+            try
             {
-                if (this.nameSystem != null)
+                if (string.IsNullOrWhiteSpace(raw)) return "";
+
+                string cleaned = raw.Trim();
+
+                // 1. If it contains brackets e.g. "Assets.NAME[Two-Lane Road]" or "Assets.ASSET_NAME[Small Road_01]"
+                var bracketMatch = Regex.Match(cleaned, @"\[(.*?)\]");
+                if (bracketMatch.Success)
                 {
-                    if (aggregatedLookup.TryGetComponent(targetEntity, out var agg) && agg.m_Aggregate != Entity.Null)
-                    {
-                        string roadName = this.nameSystem.GetRenderedLabelName(agg.m_Aggregate);
-                        if (!string.IsNullOrEmpty(roadName)) return CleanLocationName(roadName);
-                    }
-                    string entityName = this.nameSystem.GetRenderedLabelName(targetEntity);
-                    if (!string.IsNullOrEmpty(entityName)) return CleanLocationName(entityName);
+                    cleaned = bracketMatch.Groups[1].Value;
                 }
 
-                if (prefabRefLookup.TryGetComponent(targetEntity, out var pRef))
+                // 2. Remove common localization prefixes
+                cleaned = Regex.Replace(cleaned, @"^(Assets|SelectedInfoPanel|Common|Notification|SubNet|Net)\.", "", RegexOptions.IgnoreCase);
+                cleaned = Regex.Replace(cleaned, @"^(NAME|ASSET_NAME|STREET_NAME|ROAD_NAME|SECTION_NAME)[:_ ]*", "", RegexOptions.IgnoreCase);
+
+                // 3. Replace underscores with spaces
+                cleaned = cleaned.Replace('_', ' ').Trim();
+
+                // 4. Expand CamelCase (excluding after spaces and hyphens)
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < cleaned.Length; i++)
+                {
+                    if (i > 0 && char.IsUpper(cleaned[i]) && !char.IsUpper(cleaned[i - 1]) && cleaned[i - 1] != ' ' && cleaned[i - 1] != '-')
+                    {
+                        sb.Append(' ');
+                    }
+                    sb.Append(cleaned[i]);
+                }
+
+                cleaned = Regex.Replace(sb.ToString().Trim(), @"\s+", " ");
+                return cleaned;
+            }
+            catch
+            {
+                return raw ?? "";
+            }
+        }
+
+        private string ResolveNetEntityName(
+            Entity netEntity,
+            ComponentLookup<Game.Common.Owner> ownerLookup,
+            ComponentLookup<Game.Net.Aggregated> aggregatedLookup,
+            ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup,
+            ComponentLookup<Game.Net.Edge> edgeLookup,
+            ComponentLookup<Game.Net.Node> nodeLookup,
+            BufferLookup<Game.Net.ConnectedEdge> connectedEdgeLookup)
+        {
+            if (netEntity == Entity.Null || !EntityManager.Exists(netEntity)) return "";
+
+            try
+            {
+                // Traverse hierarchy upwards (from Lane -> Edge / Node -> Aggregated Street)
+                Entity current = netEntity;
+                for (int depth = 0; depth < 6; depth++)
+                {
+                    if (current == Entity.Null || !EntityManager.Exists(current)) break;
+
+                    // 1. Check Aggregated Street on current entity (e.g. Edge has Aggregated pointing to Street Aggregate)
+                    if (aggregatedLookup.TryGetComponent(current, out var agg) && agg.m_Aggregate != Entity.Null && EntityManager.Exists(agg.m_Aggregate))
+                    {
+                        if (this.nameSystem != null)
+                        {
+                            string aggName = this.nameSystem.GetRenderedLabelName(agg.m_Aggregate);
+                            if (!string.IsNullOrEmpty(aggName) && !IsGenericLaneName(aggName)) return CleanStreetName(aggName);
+                        }
+                    }
+
+                    // 2. Check if current is Edge
+                    if (edgeLookup.HasComponent(current))
+                    {
+                        // Check if edge has rendered label (custom or system name)
+                        if (this.nameSystem != null)
+                        {
+                            string edgeName = this.nameSystem.GetRenderedLabelName(current);
+                            if (!string.IsNullOrEmpty(edgeName) && !IsGenericLaneName(edgeName)) return CleanStreetName(edgeName);
+                        }
+
+                        // Check edge's prefab (e.g. "Two-Lane Highway", "Medium Avenue", "Highway Ramp")
+                        if (prefabRefLookup.TryGetComponent(current, out var edgePRef))
+                        {
+                            var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                            if (prefabSystem != null && prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(edgePRef.m_Prefab, out var pBase) && pBase != null && !string.IsNullOrEmpty(pBase.name))
+                            {
+                                string pClean = CleanStreetName(pBase.name);
+                                if (!string.IsNullOrEmpty(pClean) && !IsGenericLaneName(pClean)) return pClean;
+                            }
+                        }
+                    }
+
+                    // 3. Check if current is Node (Intersection / Roundabout) -> check connected edges
+                    if (nodeLookup.HasComponent(current) && connectedEdgeLookup.TryGetBuffer(current, out var connEdges))
+                    {
+                        for (int e = 0; e < connEdges.Length; e++)
+                        {
+                            Entity edgeEnt = connEdges[e].m_Edge;
+                            if (edgeEnt == Entity.Null || !EntityManager.Exists(edgeEnt)) continue;
+
+                            if (aggregatedLookup.TryGetComponent(edgeEnt, out var edgeAgg) && edgeAgg.m_Aggregate != Entity.Null && this.nameSystem != null)
+                            {
+                                string roadName = this.nameSystem.GetRenderedLabelName(edgeAgg.m_Aggregate);
+                                if (!string.IsNullOrEmpty(roadName) && !IsGenericLaneName(roadName)) return CleanStreetName(roadName);
+                            }
+                            if (this.nameSystem != null)
+                            {
+                                string edgeName = this.nameSystem.GetRenderedLabelName(edgeEnt);
+                                if (!string.IsNullOrEmpty(edgeName) && !IsGenericLaneName(edgeName)) return CleanStreetName(edgeName);
+                            }
+                            if (prefabRefLookup.TryGetComponent(edgeEnt, out var edgePrefabRef))
+                            {
+                                var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                                if (prefabSystem != null && prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(edgePrefabRef.m_Prefab, out var pBase) && pBase != null && !string.IsNullOrEmpty(pBase.name))
+                                {
+                                    string pClean = CleanStreetName(pBase.name);
+                                    if (!string.IsNullOrEmpty(pClean) && !IsGenericLaneName(pClean)) return pClean;
+                                }
+                            }
+                        }
+                    }
+
+                    // Move up to Owner (e.g. Lane -> Edge), only if owner is a network entity
+                    if (ownerLookup.TryGetComponent(current, out var owner) && owner.m_Owner != Entity.Null && owner.m_Owner != current)
+                    {
+                        if (edgeLookup.HasComponent(owner.m_Owner) || nodeLookup.HasComponent(owner.m_Owner) || aggregatedLookup.HasComponent(owner.m_Owner) || EntityManager.HasComponent<Game.Net.Lane>(owner.m_Owner))
+                        {
+                            current = owner.m_Owner;
+                        }
+                        else break;
+                    }
+                    else break;
+                }
+
+                // If not resolved above, try direct rendered name on netEntity ONLY if not generic lane
+                if (this.nameSystem != null)
+                {
+                    string directName = this.nameSystem.GetRenderedLabelName(netEntity);
+                    if (!string.IsNullOrEmpty(directName) && !IsGenericLaneName(directName)) return CleanStreetName(directName);
+                }
+
+                // Final Fallback: Prefab on netEntity, stripped of lane keywords
+                if (prefabRefLookup.TryGetComponent(netEntity, out var netPRef))
                 {
                     var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
-                    if (prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(pRef.m_Prefab, out var prefab))
+                    if (prefabSystem != null && prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(netPRef.m_Prefab, out var pBase) && pBase != null && !string.IsNullOrEmpty(pBase.name))
                     {
-                        if (!string.IsNullOrEmpty(prefab.name)) return CleanLocationName(prefab.name);
+                        string pClean = CleanStreetName(pBase.name.Replace("CarLane", "").Replace("SubLane", "").Replace("Lane", "").Trim());
+                        if (!string.IsNullOrEmpty(pClean) && !IsGenericLaneName(pClean)) return pClean;
                     }
                 }
             }
-            return "Traffic Bottleneck";
+            catch
+            {
+                // Ignore resolution error
+            }
+
+            return "";
+        }
+
+        private string GetStreetNameForEntity(
+            Entity entity,
+            ComponentLookup<Game.Common.Owner> ownerLookup,
+            ComponentLookup<Game.Net.Aggregated> aggregatedLookup,
+            ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup,
+            ComponentLookup<Game.Net.Edge> edgeLookup,
+            ComponentLookup<Game.Net.Node> nodeLookup,
+            BufferLookup<Game.Net.ConnectedEdge> connectedEdgeLookup,
+            ComponentLookup<Game.Vehicles.CarCurrentLane> carLaneLookup,
+            ComponentLookup<Game.Vehicles.TrainCurrentLane> trainLaneLookup,
+            ComponentLookup<Game.Vehicles.WatercraftCurrentLane> watercraftLaneLookup,
+            ComponentLookup<Game.Vehicles.ParkedCar> parkedCarLookup,
+            BufferLookup<Game.Vehicles.CarNavigationLane> navLaneLookup,
+            ComponentLookup<Game.Pathfind.PathOwner> pathOwnerLookup,
+            BufferLookup<Game.Pathfind.PathElement> pathElementLookup)
+        {
+            try
+            {
+                if (entity == Entity.Null || !EntityManager.Exists(entity)) return "";
+
+                // Special handling for Watercraft
+                if (EntityManager.HasComponent<Game.Vehicles.Watercraft>(entity) || watercraftLaneLookup.HasComponent(entity))
+                {
+                    return "Waterway";
+                }
+
+                Entity leadVeh = GetTowingVehicle(entity);
+                Entity[] candidates = (leadVeh != entity && leadVeh != Entity.Null) ? new Entity[] { leadVeh, entity } : new Entity[] { entity };
+
+                for (int c = 0; c < candidates.Length; c++)
+                {
+                    Entity cand = candidates[c];
+
+                    // 1. Try Vehicle Current Lane
+                    if (carLaneLookup.TryGetComponent(cand, out var carLane) && carLane.m_Lane != Entity.Null)
+                    {
+                        string name = ResolveNetEntityName(carLane.m_Lane, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                        if (!string.IsNullOrEmpty(name)) return name;
+                    }
+                    if (trainLaneLookup.TryGetComponent(cand, out var trainLane))
+                    {
+                        Entity trainTarget = trainLane.m_Front.m_Lane != Entity.Null ? trainLane.m_Front.m_Lane : trainLane.m_Rear.m_Lane;
+                        if (trainTarget != Entity.Null)
+                        {
+                            string name = ResolveNetEntityName(trainTarget, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                            if (!string.IsNullOrEmpty(name)) return name;
+                        }
+                        return "Railway";
+                    }
+                    if (watercraftLaneLookup.TryGetComponent(cand, out var waterLane) && waterLane.m_Lane != Entity.Null)
+                    {
+                        string name = ResolveNetEntityName(waterLane.m_Lane, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                        if (!string.IsNullOrEmpty(name)) return name;
+                        return "Waterway";
+                    }
+                    if (parkedCarLookup.TryGetComponent(cand, out var parkedCar) && parkedCar.m_Lane != Entity.Null)
+                    {
+                        string name = ResolveNetEntityName(parkedCar.m_Lane, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                        if (!string.IsNullOrEmpty(name)) return name;
+                    }
+
+                    // 2. Try Navigation Lanes Buffer on Vehicle
+                    if (navLaneLookup.TryGetBuffer(cand, out var navLanes) && navLanes.Length > 0)
+                    {
+                        for (int n = 0; n < navLanes.Length && n < 3; n++)
+                        {
+                            if (navLanes[n].m_Lane != Entity.Null)
+                            {
+                                string name = ResolveNetEntityName(navLanes[n].m_Lane, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                                if (!string.IsNullOrEmpty(name)) return name;
+                            }
+                        }
+                    }
+
+                    // 3. Try Path Elements Buffer on Vehicle
+                    if (pathOwnerLookup.TryGetComponent(cand, out var pathOwner) && pathElementLookup.TryGetBuffer(cand, out var pathElements))
+                    {
+                        int startIdx = math.max(0, pathOwner.m_ElementIndex - 1);
+                        int endIdx = math.min(pathElements.Length, pathOwner.m_ElementIndex + 4);
+                        for (int p = startIdx; p < endIdx; p++)
+                        {
+                            Entity target = pathElements[p].m_Target;
+                            if (target != Entity.Null)
+                            {
+                                string name = ResolveNetEntityName(target, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                                if (!string.IsNullOrEmpty(name)) return name;
+                            }
+                        }
+                    }
+                }
+
+                // 4. Try Direct Resolution ONLY if entity is an actual network entity (edge, node, lane, aggregate)
+                bool isNetEntity = edgeLookup.HasComponent(entity) || 
+                                   nodeLookup.HasComponent(entity) || 
+                                   aggregatedLookup.HasComponent(entity) || 
+                                   EntityManager.HasComponent<Game.Net.Lane>(entity) || 
+                                   EntityManager.HasComponent<Game.Net.SubLane>(entity) || 
+                                   EntityManager.HasComponent<Game.Net.Curve>(entity);
+
+                if (isNetEntity)
+                {
+                    string direct = ResolveNetEntityName(entity, ownerLookup, aggregatedLookup, prefabRefLookup, edgeLookup, nodeLookup, connectedEdgeLookup);
+                    if (!string.IsNullOrEmpty(direct)) return direct;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Mod.log.Warn($"TrafficSpy: Error resolving street name for entity: {ex.Message}");
+            }
+
+            return "";
         }
 
         private void UpdateTrafficJamData()
@@ -1144,6 +1392,16 @@ namespace TrafficSpy.Systems
             var ownerLookup = SystemAPI.GetComponentLookup<Game.Common.Owner>(true);
             var targetLookup = SystemAPI.GetComponentLookup<Game.Common.Target>(true);
             var aggregatedLookup = SystemAPI.GetComponentLookup<Game.Net.Aggregated>(true);
+            var edgeLookup = SystemAPI.GetComponentLookup<Game.Net.Edge>(true);
+            var nodeLookup = SystemAPI.GetComponentLookup<Game.Net.Node>(true);
+            var connectedEdgeLookup = SystemAPI.GetBufferLookup<Game.Net.ConnectedEdge>(true);
+            var carLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.CarCurrentLane>(true);
+            var trainLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.TrainCurrentLane>(true);
+            var watercraftLaneLookup = SystemAPI.GetComponentLookup<Game.Vehicles.WatercraftCurrentLane>(true);
+            var parkedCarLookup = SystemAPI.GetComponentLookup<Game.Vehicles.ParkedCar>(true);
+            var navLaneLookup = SystemAPI.GetBufferLookup<Game.Vehicles.CarNavigationLane>(true);
+            var pathOwnerLookup = SystemAPI.GetComponentLookup<Game.Pathfind.PathOwner>(true);
+            var pathElementLookup = SystemAPI.GetBufferLookup<Game.Pathfind.PathElement>(true);
 
             // 1. COLLECT ACTIVE TRAFFIC JAM NOTIFICATIONS
             List<TrafficJamNotificationItem> jamNotifications = new List<TrafficJamNotificationItem>();
@@ -1190,7 +1448,27 @@ namespace TrafficSpy.Systems
                     if (targetEntity != Entity.Null && seenTargets.Contains(targetEntity)) continue;
                     if (targetEntity != Entity.Null) seenTargets.Add(targetEntity);
 
-                    string locationName = GetLocationName(targetEntity, aggregatedLookup, prefabRefLookup);
+                    string locationName = GetStreetNameForEntity(
+                        targetEntity != Entity.Null ? targetEntity : iconEnt,
+                        ownerLookup,
+                        aggregatedLookup,
+                        prefabRefLookup,
+                        edgeLookup,
+                        nodeLookup,
+                        connectedEdgeLookup,
+                        carLaneLookup,
+                        trainLaneLookup,
+                        watercraftLaneLookup,
+                        parkedCarLookup,
+                        navLaneLookup,
+                        pathOwnerLookup,
+                        pathElementLookup);
+
+                    if (string.IsNullOrEmpty(locationName))
+                    {
+                        locationName = "Traffic Bottleneck";
+                    }
+
                     jamNotifications.Add(new TrafficJamNotificationItem
                     {
                         IconEntity = iconEnt,
@@ -1284,8 +1562,30 @@ namespace TrafficSpy.Systems
                 int waiting = sortedBlockers[i].Value;
                 if (waiting < 1) continue;
 
-                string vehName = GetVehicleDisplayName(blockerVeh, prefabRefLookup);
                 string vehType = GetVehicleCategory(blockerVeh);
+                string streetName = GetStreetNameForEntity(
+                    blockerVeh,
+                    ownerLookup,
+                    aggregatedLookup,
+                    prefabRefLookup,
+                    edgeLookup,
+                    nodeLookup,
+                    connectedEdgeLookup,
+                    carLaneLookup,
+                    trainLaneLookup,
+                    watercraftLaneLookup,
+                    parkedCarLookup,
+                    navLaneLookup,
+                    pathOwnerLookup,
+                    pathElementLookup);
+
+                if (string.IsNullOrEmpty(streetName) || streetName.ToLower().Contains("unknown"))
+                {
+                    if (vehType == "ship") streetName = "Waterway";
+                    else streetName = "Highway / Road";
+                }
+
+                string vehName = GetVehicleDisplayName(blockerVeh, prefabRefLookup);
 
                 Game.Vehicles.BlockerType bType = blockerTypes.TryGetValue(blockerVeh, out var bt) ? bt : Game.Vehicles.BlockerType.Signal;
 
@@ -1306,7 +1606,7 @@ namespace TrafficSpy.Systems
                     reason = "stopped";
                 }
 
-                sb.Append($"{{\"index\":{blockerVeh.Index},\"version\":{blockerVeh.Version},\"name\":\"{EscapeJson(vehName)}\",\"type\":\"{vehType}\",\"waitingCount\":{waiting},\"reason\":\"{reason}\"}},");
+                sb.Append($"{{\"index\":{blockerVeh.Index},\"version\":{blockerVeh.Version},\"name\":\"{EscapeJson(vehName)}\",\"streetName\":\"{EscapeJson(streetName)}\",\"type\":\"{vehType}\",\"waitingCount\":{waiting},\"reason\":\"{reason}\"}},");
                 count++;
             }
             if (count > 0 && sb[sb.Length - 1] == ',') sb.Length--;
@@ -1317,11 +1617,19 @@ namespace TrafficSpy.Systems
 
         private Entity GetTowingVehicle(Entity vehicle)
         {
-            if (vehicle == Entity.Null) return Entity.Null;
+            if (vehicle == Entity.Null || !EntityManager.Exists(vehicle)) return Entity.Null;
+            if (EntityManager.HasComponent<Game.Vehicles.Controller>(vehicle))
+            {
+                Entity controller = EntityManager.GetComponentData<Game.Vehicles.Controller>(vehicle).m_Controller;
+                if (controller != Entity.Null && EntityManager.Exists(controller) && EntityManager.HasComponent<Game.Vehicles.Vehicle>(controller))
+                {
+                    return controller;
+                }
+            }
             if (EntityManager.HasComponent<Game.Common.Owner>(vehicle))
             {
                 Entity owner = EntityManager.GetComponentData<Game.Common.Owner>(vehicle).m_Owner;
-                if (owner != Entity.Null && EntityManager.HasComponent<Game.Vehicles.Vehicle>(owner))
+                if (owner != Entity.Null && EntityManager.Exists(owner) && EntityManager.HasComponent<Game.Vehicles.Vehicle>(owner))
                 {
                     return owner;
                 }
@@ -1331,14 +1639,20 @@ namespace TrafficSpy.Systems
 
         private bool IsTrailerVehicle(Entity vehicle, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
         {
-            if (prefabRefLookup.TryGetComponent(vehicle, out Game.Prefabs.PrefabRef pRef))
+            try
             {
-                var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
-                var prefab = prefabSystem.GetPrefab<Game.Prefabs.PrefabBase>(pRef);
-                if (prefab != null && !string.IsNullOrEmpty(prefab.name))
+                if (prefabRefLookup.TryGetComponent(vehicle, out Game.Prefabs.PrefabRef pRef))
                 {
-                    if (prefab.name.ToLower().Contains("trailer")) return true;
+                    var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                    if (prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(pRef.m_Prefab, out var prefab) && prefab != null && !string.IsNullOrEmpty(prefab.name))
+                    {
+                        if (prefab.name.ToLower().Contains("trailer")) return true;
+                    }
                 }
+            }
+            catch
+            {
+                // Ignore prefab lookup errors
             }
             return false;
         }
@@ -1350,25 +1664,37 @@ namespace TrafficSpy.Systems
 
         private string GetVehicleDisplayName(Entity vehicle, ComponentLookup<Game.Prefabs.PrefabRef> prefabRefLookup)
         {
-            if (prefabRefLookup.TryGetComponent(vehicle, out Game.Prefabs.PrefabRef pRef))
+            try
             {
-                var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
-                var prefab = prefabSystem.GetPrefab<Game.Prefabs.PrefabBase>(pRef);
-                if (prefab != null && !string.IsNullOrEmpty(prefab.name))
+                if (prefabRefLookup.TryGetComponent(vehicle, out Game.Prefabs.PrefabRef pRef))
                 {
-                    string cleaned = CleanPrefabName(prefab.name);
-                    if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle) && !cleaned.ToLower().Contains("maintenance"))
+                    var prefabSystem = World.GetOrCreateSystemManaged<Game.Prefabs.PrefabSystem>();
+                    if (prefabSystem.TryGetPrefab<Game.Prefabs.PrefabBase>(pRef.m_Prefab, out var prefab) && prefab != null && !string.IsNullOrEmpty(prefab.name))
                     {
-                        return "Road Maintenance " + cleaned;
+                        string cleaned = CleanPrefabName(prefab.name);
+                        if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle) && !cleaned.ToLower().Contains("maintenance"))
+                        {
+                            return "Road Maintenance " + cleaned;
+                        }
+                        if (EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle) && !cleaned.ToLower().Contains("maintenance"))
+                        {
+                            return "Park Maintenance " + cleaned;
+                        }
+                        return cleaned;
                     }
-                    if (EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle) && !cleaned.ToLower().Contains("maintenance"))
-                    {
-                        return "Park Maintenance " + cleaned;
-                    }
-                    return cleaned;
                 }
             }
+            catch
+            {
+                // Fallback to component-based naming if prefab lookup fails
+            }
 
+            if (EntityManager.HasComponent<Game.Vehicles.Watercraft>(vehicle))
+            {
+                if (EntityManager.HasComponent<Game.Vehicles.PublicTransport>(vehicle)) return "Ferry";
+                if (EntityManager.HasComponent<Game.Vehicles.CargoTransport>(vehicle)) return "Cargo Ship";
+                return "Ship";
+            }
             if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle)) return "Road Maintenance Vehicle";
             if (EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle)) return "Park Maintenance Vehicle";
             if (EntityManager.HasComponent<Game.Vehicles.MaintenanceVehicle>(vehicle)) return "Road Maintenance Vehicle";
@@ -1387,33 +1713,49 @@ namespace TrafficSpy.Systems
 
         private string CleanPrefabName(string rawName)
         {
-            if (string.IsNullOrEmpty(rawName)) return "";
-            string name = rawName.Replace('_', ' ').Trim();
-            while (name.Length > 0 && char.IsDigit(name[name.Length - 1]))
+            try
             {
-                name = name.Substring(0, name.Length - 1).TrimEnd();
-            }
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            for (int i = 0; i < name.Length; i++)
-            {
-                if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]) && name[i - 1] != ' ')
+                if (string.IsNullOrEmpty(rawName)) return "";
+                string name = rawName.Replace('_', ' ').Trim();
+                while (name.Length > 0 && char.IsDigit(name[name.Length - 1]))
                 {
-                    sb.Append(' ');
+                    name = name.Substring(0, name.Length - 1).TrimEnd();
                 }
-                sb.Append(name[i]);
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                for (int i = 0; i < name.Length; i++)
+                {
+                    if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]) && name[i - 1] != ' ')
+                    {
+                        sb.Append(' ');
+                    }
+                    sb.Append(name[i]);
+                }
+                return Regex.Replace(sb.ToString().Trim(), @"\s+", " ");
             }
-            return Regex.Replace(sb.ToString().Trim(), @"\s+", " ");
+            catch
+            {
+                return rawName ?? "";
+            }
         }
 
         private string GetVehicleCategory(Entity vehicle)
         {
-            if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle) || 
-                EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle) ||
-                EntityManager.HasComponent<Game.Vehicles.MaintenanceVehicle>(vehicle)) return "maintenance";
-            if (EntityManager.HasComponent<Game.Vehicles.Taxi>(vehicle)) return "taxi";
-            if (EntityManager.HasComponent<Game.Vehicles.PublicTransport>(vehicle)) return "bus";
-            if (EntityManager.HasComponent<Game.Vehicles.DeliveryTruck>(vehicle)) return "van";
-            if (EntityManager.HasComponent<Game.Vehicles.PersonalCar>(vehicle)) return "car";
+            try
+            {
+                if (vehicle == Entity.Null || !EntityManager.Exists(vehicle)) return "car";
+                if (EntityManager.HasComponent<Game.Vehicles.Watercraft>(vehicle)) return "ship";
+                if (EntityManager.HasComponent<Game.Vehicles.RoadMaintenanceVehicle>(vehicle) || 
+                    EntityManager.HasComponent<Game.Vehicles.ParkMaintenanceVehicle>(vehicle) ||
+                    EntityManager.HasComponent<Game.Vehicles.MaintenanceVehicle>(vehicle)) return "maintenance";
+                if (EntityManager.HasComponent<Game.Vehicles.Taxi>(vehicle)) return "taxi";
+                if (EntityManager.HasComponent<Game.Vehicles.PublicTransport>(vehicle)) return "bus";
+                if (EntityManager.HasComponent<Game.Vehicles.DeliveryTruck>(vehicle)) return "van";
+                if (EntityManager.HasComponent<Game.Vehicles.PersonalCar>(vehicle)) return "car";
+            }
+            catch
+            {
+                // Fallback to generic car category
+            }
             return "car";
         }
 

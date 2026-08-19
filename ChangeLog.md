@@ -1,3 +1,3 @@
-- Added a traffic jam monitor that appears after you click the main mod button.
-- The mod button now shows an indicator of the number of active traffic jams.
-- The TrafficSpy section embedded in the native info view of transit structures is now collapsable, and collapsed by default.
+- Bug fix.
+- Show street names for traffic jams.
+- Added a ship icon for the traffic jam monitor.

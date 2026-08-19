@@ -17,6 +17,7 @@ interface BlockerItem {
     index: number;
     version: number;
     name: string;
+    streetName?: string;
     type: string;
     waitingCount: number;
     reason: "signal" | "stopped" | "boarding";
@@ -27,7 +28,7 @@ interface TrafficMonitorPanelProps {
 }
 
 const TrafficJamAlertIcon: React.FC = () => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff4d4d" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ff4d4d" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" fill="rgba(255, 77, 77, 0.2)" />
         <line x1="12" y1="9" x2="12" y2="13" stroke="#ff4d4d" strokeWidth="2.5" />
         <line x1="12" y1="17" x2="12.01" y2="17" stroke="#ff4d4d" strokeWidth="3" />
@@ -35,7 +36,7 @@ const TrafficJamAlertIcon: React.FC = () => (
 );
 
 const BusIcon: React.FC = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#52b8ff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#52b8ff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="18" height="14" rx="3" />
         <path d="M4 10h16" />
         <circle cx="7.5" cy="14" r="1" fill="#52b8ff" />
@@ -46,7 +47,7 @@ const BusIcon: React.FC = () => (
 );
 
 const TaxiIcon: React.FC = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffdb58" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffdb58" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 3h6v2H9z" fill="#ffdb58" />
         <path d="M5 10l2-4h10l2 4v6H5z" />
         <circle cx="7.5" cy="16" r="1.2" fill="#ffdb58" />
@@ -55,7 +56,7 @@ const TaxiIcon: React.FC = () => (
 );
 
 const VanIcon: React.FC = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffaa55" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffaa55" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="6" width="13" height="9" rx="1.5" />
         <path d="M15 9h4l2 3v3h-6V9z" />
         <circle cx="6" cy="15" r="1.2" fill="#ffaa55" />
@@ -64,7 +65,7 @@ const VanIcon: React.FC = () => (
 );
 
 const CarIcon: React.FC = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#66cc99" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#66cc99" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M5 10l2-4h10l2 4v5H5z" />
         <circle cx="7.5" cy="15" r="1.2" fill="#66cc99" />
         <circle cx="16.5" cy="15" r="1.2" fill="#66cc99" />
@@ -110,12 +111,24 @@ const CloseIcon: React.FC = () => (
 );
 
 const MaintenanceIcon: React.FC = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffaa22" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffaa22" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="6" width="13" height="9" rx="1.5" />
         <path d="M15 9h4l2 3v3h-6V9z" />
         <circle cx="6" cy="15" r="1.2" fill="#ffaa22" />
         <circle cx="17" cy="15" r="1.2" fill="#ffaa22" />
         <path d="M6 10h4" />
+    </svg>
+);
+
+const ShipIcon: React.FC = () => (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38d9d3" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 13h16" />
+        <path d="M7 13V8a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v5" />
+        <path d="M12 7V4" />
+        <path d="M14 4h-4" />
+        <path d="M3 13l2.4 6.2a2 2 0 0 0 1.9 1.3h9.4a2 2 0 0 0 1.9-1.3l2.4-6.2H3z" />
+        <circle cx="9.5" cy="10.5" r="1" fill="#38d9d3" />
+        <circle cx="14.5" cy="10.5" r="1" fill="#38d9d3" />
     </svg>
 );
 
@@ -130,7 +143,7 @@ const HeaderBusIcon: React.FC = () => (
     </svg>
 );
 
-const cleanDisplayName = (name: string): string => {
+const cleanDisplayName = (name?: string): string => {
     if (!name) return "";
     let cleaned = name.trim();
     const bracketMatch = cleaned.match(/\[(.*?)\]/);
@@ -179,8 +192,19 @@ export const TrafficMonitorPanel: React.FC<TrafficMonitorPanelProps> = ({ onClos
     };
 
     const renderVehicleIcon = (type: string, name: string) => {
-        const lowerName = name.toLowerCase();
+        const lowerName = (name || "").toLowerCase();
         const lowerType = (type || "").toLowerCase();
+        if (
+            lowerType.includes("ship") ||
+            lowerType.includes("boat") ||
+            lowerType.includes("ferry") ||
+            lowerType.includes("watercraft") ||
+            lowerName.includes("ship") ||
+            lowerName.includes("boat") ||
+            lowerName.includes("ferry") ||
+            lowerName.includes("watercraft") ||
+            lowerName.includes("barge")
+        ) return <ShipIcon />;
         if (lowerType.includes("maintenance") || lowerName.includes("maintenance")) return <MaintenanceIcon />;
         if (lowerName.includes("bus") || lowerType.includes("bus")) return <BusIcon />;
         if (lowerName.includes("taxi") || lowerType.includes("taxi")) return <TaxiIcon />;
@@ -201,7 +225,6 @@ export const TrafficMonitorPanel: React.FC<TrafficMonitorPanelProps> = ({ onClos
             borderRadius: "8rem",
             boxShadow: "0 8rem 24rem rgba(0, 0, 0, 0.6)",
             color: "#ffffff",
-            fontFamily: "var(--font-family-body, 'Inter', sans-serif)",
             display: "flex",
             flexDirection: "column",
             zIndex: 9999,
@@ -300,12 +323,12 @@ export const TrafficMonitorPanel: React.FC<TrafficMonitorPanelProps> = ({ onClos
                                     border: "1px solid rgba(255, 77, 77, 0.22)"
                                 }}
                             >
-                                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10rem", flex: 1, overflow: "hidden" }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: "24rem" }}>
+                                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "14rem", flex: 1, minWidth: 0, overflow: "hidden" }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: "28rem", flexShrink: 0, paddingRight: "4rem" }}>
                                         <TrafficJamAlertIcon />
                                     </div>
                                     <span style={{
-                                        fontSize: "14rem",
+                                        fontSize: "13.5rem",
                                         fontWeight: 600,
                                         color: "#ffffff",
                                         whiteSpace: "nowrap",
@@ -327,7 +350,8 @@ export const TrafficMonitorPanel: React.FC<TrafficMonitorPanelProps> = ({ onClos
                                         border: "1px solid rgba(255, 82, 82, 0.4)",
                                         display: "flex",
                                         alignItems: "center",
-                                        justifyContent: "center"
+                                        justifyContent: "center",
+                                        flexShrink: 0
                                     }}
                                     title="Move camera to traffic jam"
                                 >
@@ -364,63 +388,88 @@ export const TrafficMonitorPanel: React.FC<TrafficMonitorPanelProps> = ({ onClos
                         No lead vehicle blockers detected.
                     </div>
                 ) : (
-                    blockers.map((item, idx) => (
-                        <div
-                            key={`blocker-${item.index}-${item.version}-${idx}`}
-                            style={{
-                                display: "flex",
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "8rem 10rem",
-                                borderRadius: "4rem",
-                                marginBottom: "3rem",
-                                backgroundColor: idx % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent"
-                            }}
-                        >
-                            <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10rem", flex: 1, overflow: "hidden" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: "24rem" }}>
-                                    {renderVehicleIcon(item.type, item.name)}
-                                </div>
-                                <span style={{
-                                    fontSize: "14rem",
-                                    fontWeight: 600,
-                                    color: "rgba(255, 255, 255, 0.95)",
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis"
-                                }}>
-                                    {cleanDisplayName(item.name)}
-                                </span>
-                            </div>
+                    blockers.map((item, idx) => {
+                        let mainStreet = cleanDisplayName(item.streetName) || "Highway / Road";
+                        if (item.type === "ship" || (item.name && item.name.toLowerCase().includes("ferry"))) {
+                            if (!item.streetName || item.streetName.toLowerCase().includes("unknown") || item.streetName.toLowerCase().includes("road") || item.streetName.toLowerCase().includes("highway")) {
+                                mainStreet = "Waterway";
+                            }
+                        }
+                        const subVehicleType = cleanDisplayName(item.name) || cleanDisplayName(item.type) || "Vehicle";
 
-                            <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10rem", marginLeft: "8rem" }}>
-                                <span style={{ fontSize: "14rem", fontWeight: 700, color: "white", minWidth: "22rem", textAlign: "right" }}>
-                                    {item.waitingCount}
-                                </span>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} title={item.reason === "boarding" ? "Boarding Passengers" : item.reason === "signal" ? "Traffic Signal Wait" : "Stopped / Maintenance / Unloading"}>
-                                    {item.reason === "boarding" ? <BoardingIcon /> : item.reason === "signal" ? <SignalIcon /> : <StoppedIcon />}
+                        return (
+                            <div
+                                key={`blocker-${item.index}-${item.version}-${idx}`}
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "8rem 10rem",
+                                    borderRadius: "4rem",
+                                    marginBottom: "3rem",
+                                    backgroundColor: idx % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent"
+                                }}
+                            >
+                                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "14rem", flex: 1, minWidth: 0, overflow: "hidden" }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: "28rem", flexShrink: 0, paddingRight: "4rem" }}>
+                                        {renderVehicleIcon(item.type, item.name)}
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+                                        <span style={{
+                                            fontSize: "13.5rem",
+                                            fontWeight: 600,
+                                            color: "rgba(255, 255, 255, 0.95)",
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            lineHeight: 1.2
+                                        }}>
+                                            {mainStreet}
+                                        </span>
+                                        <span style={{
+                                            fontSize: "11rem",
+                                            fontWeight: 500,
+                                            color: "rgba(255, 255, 255, 0.6)",
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            lineHeight: 1.2,
+                                            marginTop: "2rem"
+                                        }}>
+                                            {subVehicleType}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div
-                                    onClick={() => handleLocationClick(item.index, item.version)}
-                                    style={{
-                                        cursor: "pointer",
-                                        padding: "5rem",
-                                        marginLeft: "8rem",
-                                        borderRadius: "4rem",
-                                        backgroundColor: "rgba(82, 184, 255, 0.15)",
-                                        border: "1px solid rgba(82, 184, 255, 0.3)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center"
-                                    }}
-                                    title="Move camera to location"
-                                >
-                                    <LocationPinIcon />
+
+                                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10rem", marginLeft: "8rem", flexShrink: 0 }}>
+                                    <span style={{ fontSize: "14rem", fontWeight: 700, color: "white", minWidth: "22rem", textAlign: "right" }}>
+                                        {item.waitingCount}
+                                    </span>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} title={item.reason === "boarding" ? "Boarding Passengers" : item.reason === "signal" ? "Traffic Signal Wait" : "Stopped / Maintenance / Unloading"}>
+                                        {item.reason === "boarding" ? <BoardingIcon /> : item.reason === "signal" ? <SignalIcon /> : <StoppedIcon />}
+                                    </div>
+                                    <div
+                                        onClick={() => handleLocationClick(item.index, item.version)}
+                                        style={{
+                                            cursor: "pointer",
+                                            padding: "5rem",
+                                            marginLeft: "8rem",
+                                            borderRadius: "4rem",
+                                            backgroundColor: "rgba(82, 184, 255, 0.15)",
+                                            border: "1px solid rgba(82, 184, 255, 0.3)",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center"
+                                        }}
+                                        title="Move camera to location"
+                                    >
+                                        <LocationPinIcon />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>
